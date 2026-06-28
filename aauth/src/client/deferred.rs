@@ -7,7 +7,9 @@ use crate::client::SignedFetch;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::http::HttpRequest;
-use crate::types::{AAuthProtocolError, RequirementLevel};
+use crate::types::{
+    AAuthProtocolError, ClarificationChallenge, ClarificationResponse, RequirementLevel,
+};
 
 const DEFAULT_MAX_POLL_DURATION: u64 = 300;
 const DEFAULT_PREFER_WAIT: u64 = 45;
@@ -77,24 +79,25 @@ pub async fn poll_deferred(options: DeferredOptions) -> Result<DeferredResult> {
                     .unwrap_or("")
                     .contains("application/json")
                 {
-                    if let Ok(body) = response.json::<serde_json::Value>() {
-                        if let Some(question) = body.get("clarification").and_then(|v| v.as_str()) {
-                            let answer = on_clarification(question.to_string()).await;
-                            let _ = options.signed_fetch.as_ref()(HttpRequest {
-                                method: "POST".into(),
-                                url: poll_url.clone(),
-                                headers: HashMap::from([(
-                                    "content-type".to_string(),
-                                    "application/json".to_string(),
-                                )]),
-                                body: Some(
-                                    serde_json::json!({ "clarification_response": answer })
-                                        .to_string()
-                                        .into_bytes(),
-                                ),
-                            })
-                            .await?;
-                        }
+                    if let Ok(body) = response.json::<ClarificationChallenge>() {
+                        let answer = on_clarification(body.clarification).await;
+                        let payload = ClarificationResponse {
+                            clarification_response: answer,
+                        };
+                        let _ = options.signed_fetch.as_ref()(HttpRequest {
+                            method: "POST".into(),
+                            url: poll_url.clone(),
+                            headers: HashMap::from([(
+                                "content-type".to_string(),
+                                "application/json".to_string(),
+                            )]),
+                            body: Some(
+                                serde_json::to_string(&payload)
+                                    .map_err(|e| AAuthError::Message(e.to_string()))?
+                                    .into_bytes(),
+                            ),
+                        })
+                        .await?;
                     }
                 }
             }

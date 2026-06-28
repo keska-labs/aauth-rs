@@ -10,7 +10,7 @@ use aauth::metadata::CachedMetadataFetcher;
 use aauth::server::{
     verify_token, InteractionManager, InteractionManagerOptions, VerifyTokenOptions,
 };
-use aauth::types::RequirementLevel;
+use aauth::types::{AuthOkResponse, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
 use aauth::VerifiedToken;
 
 use support::{
@@ -86,7 +86,7 @@ async fn verify_token_agent_jwt() {
         CachedMetadataFetcher::new(server.client.clone() as Arc<dyn aauth::http::HttpClient>);
     let result = verify_token(VerifyTokenOptions {
         jwt: agent_jwt,
-        http_signature_thumbprint: keys.agent_ephemeral.thumbprint.clone(),
+        http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
         fetcher: Arc::new(fetcher),
     })
     .await
@@ -122,7 +122,7 @@ async fn verify_token_auth_jwt() {
         CachedMetadataFetcher::new(server.client.clone() as Arc<dyn aauth::http::HttpClient>);
     let result = verify_token(VerifyTokenOptions {
         jwt: auth_jwt,
-        http_signature_thumbprint: keys.agent_ephemeral.thumbprint.clone(),
+        http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
         fetcher: Arc::new(fetcher),
     })
     .await
@@ -154,7 +154,7 @@ async fn verify_token_key_binding_failed() {
         CachedMetadataFetcher::new(server.client.clone() as Arc<dyn aauth::http::HttpClient>);
     let err = verify_token(VerifyTokenOptions {
         jwt: agent_jwt,
-        http_signature_thumbprint: wrong.agent_ephemeral.thumbprint,
+        http_signature_thumbprint: wrong.agent_ephemeral.thumbprint().to_string(),
         fetcher: Arc::new(fetcher),
     })
     .await
@@ -190,9 +190,9 @@ async fn full_401_challenge_response_direct_grant() {
         .unwrap();
 
     assert_eq!(response.status, 200);
-    let body: serde_json::Value = response.json().unwrap();
-    assert_eq!(body["status"], "ok");
-    assert_eq!(body["user"], "user-123");
+    let body: AuthOkResponse = response.json().unwrap();
+    assert_eq!(body.status, "ok");
+    assert_eq!(body.user.as_deref(), Some("user-123"));
 }
 
 #[tokio::test]
@@ -276,11 +276,11 @@ async fn justification_and_hints_pass_through() {
         .unwrap();
 
     let body = captured.lock().unwrap().clone().expect("captured body");
-    assert!(body.get("resource_token").is_some());
-    assert_eq!(body["justification"], "read user files");
-    assert_eq!(body["login_hint"], "alice@acme.com");
-    assert_eq!(body["tenant"], "acme.com");
-    assert_eq!(body["domain_hint"], "acme.com");
+    assert!(!body.resource_token.is_empty());
+    assert_eq!(body.justification.as_deref(), Some("read user files"));
+    assert_eq!(body.login_hint.as_deref(), Some("alice@acme.com"));
+    assert_eq!(body.tenant.as_deref(), Some("acme.com"));
+    assert_eq!(body.domain_hint.as_deref(), Some("acme.com"));
 }
 
 #[tokio::test]
@@ -326,7 +326,10 @@ async fn deferred_interaction_grant() {
             );
             let _ = manager_cb.resolve(
                 &id,
-                serde_json::json!({ "auth_token": auth_jwt, "expires_in": 3600 }),
+                TokenResponseBody {
+                    auth_token: auth_jwt,
+                    expires_in: 3600,
+                },
             );
         }
     });
@@ -398,7 +401,7 @@ fn mock_config(
     keys: &support::TestKeys,
     deferred_mode: bool,
     interaction_manager: Option<Arc<InteractionManager>>,
-    on_token_request: Option<Arc<Mutex<Option<serde_json::Value>>>>,
+    on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
     pending_id_capture: Option<Arc<Mutex<Option<String>>>>,
 ) -> MockServerConfig {
     MockServerConfig {

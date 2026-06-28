@@ -6,7 +6,7 @@ use crate::client::SignedFetch;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::http::HttpRequest;
-use crate::types::{AAuthProtocolError, AuthServerMetadata, RequirementLevel, TokenResponseBody};
+use crate::types::{AAuthProtocolError, AuthServerMetadata, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
 
 const PREFER_WAIT: u64 = 45;
 
@@ -67,32 +67,19 @@ pub async fn exchange_token(options: TokenExchangeOptions) -> Result<TokenExchan
         metadata
     };
 
-    let mut body = serde_json::json!({
-        "resource_token": options.resource_token,
-    });
-    if let Some(v) = &options.justification {
-        body["justification"] = serde_json::json!(v);
-    }
-    if let Some(v) = &options.localhost_callback {
-        body["localhost_callback"] = serde_json::json!(v);
-    }
-    if let Some(v) = &options.login_hint {
-        body["login_hint"] = serde_json::json!(v);
-    }
-    if let Some(v) = &options.tenant {
-        body["tenant"] = serde_json::json!(v);
-    }
-    if let Some(v) = &options.domain_hint {
-        body["domain_hint"] = serde_json::json!(v);
-    }
-    if let Some(v) = &options.capabilities {
-        body["capabilities"] = serde_json::json!(v);
-    }
-    if let Some(v) = &options.prompt {
-        body["prompt"] = serde_json::json!(v);
-    }
+    let body = TokenExchangeRequest {
+        resource_token: options.resource_token,
+        justification: options.justification,
+        localhost_callback: options.localhost_callback,
+        login_hint: options.login_hint,
+        tenant: options.tenant,
+        domain_hint: options.domain_hint,
+        capabilities: options.capabilities,
+        prompt: options.prompt,
+    };
 
-    let token_body = body.to_string();
+    let token_body =
+        serde_json::to_string(&body).map_err(|e| AAuthError::Message(e.to_string()))?;
     let response = options.signed_fetch.as_ref()(HttpRequest {
         method: "POST".into(),
         url: metadata.token_endpoint.clone(),

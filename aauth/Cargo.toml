@@ -34,8 +34,15 @@ uuid.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
-uuid.workspace = true
 wiremock.workspace = true
+
+[[example]]
+name = "verify_agent_token"
+required-features = ["server"]
+
+[[example]]
+name = "client_direct_grant"
+required-features = ["client", "server"]
 
 [package.metadata.docs.rs]
 all-features = true

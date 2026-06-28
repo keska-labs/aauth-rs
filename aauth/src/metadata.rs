@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use serde_json::Value;
+use jsonwebtoken::jwk::JwkSet;
 
 use crate::error::Result;
 use crate::http::{HttpClient, HttpRequest};
@@ -32,9 +32,10 @@ fn last_fetch_map() -> &'static Mutex<HashMap<String, Instant>> {
     LAST_FETCH.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-static JWKS_CACHE: std::sync::OnceLock<Mutex<HashMap<String, Value>>> = std::sync::OnceLock::new();
+static JWKS_CACHE: std::sync::OnceLock<Mutex<HashMap<String, JwkSet>>> =
+    std::sync::OnceLock::new();
 
-fn jwks_cache() -> &'static Mutex<HashMap<String, Value>> {
+fn jwks_cache() -> &'static Mutex<HashMap<String, JwkSet>> {
     JWKS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -47,7 +48,41 @@ pub fn clear_metadata_cache() {
 #[async_trait]
 pub trait MetadataFetcher: Send + Sync {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String>;
-    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<Value>;
+    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet>;
+}
+
+/// Fixed JWKS for tests and examples without HTTP metadata discovery.
+#[derive(Clone)]
+pub struct StaticMetadataFetcher {
+    jwks_uri: String,
+    jwks: JwkSet,
+}
+
+impl StaticMetadataFetcher {
+    pub fn new(jwks_uri: impl Into<String>, jwks: JwkSet) -> Self {
+        Self {
+            jwks_uri: jwks_uri.into(),
+            jwks,
+        }
+    }
+}
+
+#[async_trait]
+impl MetadataFetcher for StaticMetadataFetcher {
+    async fn resolve_jwks_uri(&self, _iss: &str, _dwk: &str) -> Result<String> {
+        Ok(self.jwks_uri.clone())
+    }
+
+    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet> {
+        if jwks_uri == self.jwks_uri {
+            Ok(self.jwks.clone())
+        } else {
+            Err(crate::error::AAuthError::Token {
+                code: "metadata_fetch_failed".into(),
+                message: format!("unknown JWKS URI: {jwks_uri}"),
+            })
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -131,7 +166,7 @@ impl MetadataFetcher for CachedMetadataFetcher {
         Ok(metadata.jwks_uri)
     }
 
-    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<Value> {
+    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet> {
         if let Some(cached) = jwks_cache().lock().unwrap().get(jwks_uri) {
             return Ok(cached.clone());
         }
@@ -165,7 +200,7 @@ impl MetadataFetcher for CachedMetadataFetcher {
             });
         }
 
-        let jwks: Value = response
+        let jwks: JwkSet = response
             .json()
             .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
         jwks_cache()

@@ -12,6 +12,7 @@ pub mod headers;
 pub mod http;
 pub mod interaction_code;
 pub mod jwt;
+pub mod keys;
 pub mod metadata;
 pub mod types;
 
@@ -27,8 +28,21 @@ pub use headers::{
     parse_aauth_requirement, parse_capabilities_header, parse_mission_header,
 };
 pub use interaction_code::{canonicalize_code, generate_code};
-pub use jwt::{jwk_thumbprint, AgentClaims, AuthClaims, OkpJwk, VerifiedToken};
-pub use metadata::{clear_metadata_cache, CachedMetadataFetcher, MetadataFetcher};
+pub use jwt::{
+    jwk_set_from_okp, jwk_thumbprint, ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk,
+    OkpSigningJwk, ResourceClaims, VerifiedToken,
+};
+pub use keys::{
+    create_test_keys, mint_agent_jwt, mint_auth_jwt, static_agent_metadata_fetcher,
+    static_auth_metadata_fetcher, Ed25519KeyPair, TestKeys,
+};
+#[cfg(feature = "client")]
+pub use keys::{create_key_provider, StaticKeyMaterialProvider};
+#[cfg(feature = "server")]
+pub use keys::resource_sign_fn;
+pub use metadata::{
+    clear_metadata_cache, CachedMetadataFetcher, MetadataFetcher, StaticMetadataFetcher,
+};
 pub use types::*;
 
 #[cfg(feature = "client")]

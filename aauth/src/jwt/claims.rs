@@ -5,7 +5,7 @@ use crate::types::{JwtTyp, Mission};
 
 use super::decode::{decode_unverified, decode_verified, verified_validation};
 
-/// Ed25519 public JWK (`cnf.jwk`).
+/// Ed25519 public JWK (`cnf.jwk`, JWKS entries).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OkpJwk {
     pub kty: String,
@@ -13,6 +13,28 @@ pub struct OkpJwk {
     pub x: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kid: Option<String>,
+}
+
+/// Ed25519 private JWK for HTTP request signing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OkpSigningJwk {
+    pub kty: String,
+    pub crv: String,
+    pub x: String,
+    pub d: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kid: Option<String>,
+}
+
+impl OkpSigningJwk {
+    pub fn public_jwk(&self) -> OkpJwk {
+        OkpJwk {
+            kty: self.kty.clone(),
+            crv: self.crv.clone(),
+            x: self.x.clone(),
+            kid: self.kid.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +93,23 @@ impl AuthClaims {
         }
         Ok(())
     }
+}
+
+/// Resource token payload (`aa-resource+jwt`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceClaims {
+    pub iss: String,
+    pub dwk: String,
+    pub aud: String,
+    pub jti: String,
+    pub agent: String,
+    pub agent_jkt: String,
+    pub iat: u64,
+    pub exp: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mission: Option<Mission>,
 }
 
 /// Verified AAuth JWT, tagged by header `typ`.

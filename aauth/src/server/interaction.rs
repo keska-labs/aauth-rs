@@ -2,18 +2,16 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::Value;
-
 use crate::headers::{build_aauth_requirement, AAuthRequirementParams};
 use crate::interaction_code::generate_code;
-use crate::types::RequirementLevel;
+use crate::types::{RequirementLevel, TokenResponseBody};
 
 #[derive(Debug, Clone)]
-pub struct PendingRequest<T = Value> {
+pub struct PendingRequest {
     pub id: String,
     pub code: String,
     pub created_at: u64,
-    pub result: Arc<Mutex<Option<Result<T, String>>>>,
+    pub result: Arc<Mutex<Option<Result<TokenResponseBody, String>>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,7 +23,7 @@ pub struct InteractionManagerOptions {
 }
 
 pub struct InteractionManager {
-    pending: Mutex<HashMap<String, PendingRequest<Value>>>,
+    pending: Mutex<HashMap<String, PendingRequest>>,
     base_url: String,
     interaction_url: String,
     pending_path: String,
@@ -45,7 +43,7 @@ impl InteractionManager {
         }
     }
 
-    pub fn create_pending(&self) -> (HashMap<String, String>, PendingRequest<Value>) {
+    pub fn create_pending(&self) -> (HashMap<String, String>, PendingRequest) {
         let id: String = (0..16)
             .map(|_| format!("{:02x}", rand::random::<u8>()))
             .collect();
@@ -88,11 +86,11 @@ impl InteractionManager {
         (headers, pending)
     }
 
-    pub fn get_pending(&self, id: &str) -> Option<PendingRequest<Value>> {
+    pub fn get_pending(&self, id: &str) -> Option<PendingRequest> {
         self.pending.lock().unwrap().get(id).cloned()
     }
 
-    pub fn resolve(&self, id: &str, value: Value) -> Result<(), String> {
+    pub fn resolve(&self, id: &str, value: TokenResponseBody) -> Result<(), String> {
         let pending = self
             .pending
             .lock()

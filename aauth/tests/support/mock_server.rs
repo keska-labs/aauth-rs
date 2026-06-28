@@ -2,17 +2,19 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use aauth::error::Result;
-use aauth::headers::{build_aauth_requirement, parse_aauth_requirement, AAuthRequirementParams};
+use aauth::headers::{build_aauth_requirement, AAuthRequirementParams};
 use aauth::http::{HttpClient, HttpRequest, HttpResponse};
 use aauth::metadata::clear_metadata_cache;
 use aauth::server::{
     create_resource_token, verify_token, InteractionManager, InteractionManagerOptions,
     ResourceTokenOptions, VerifyTokenOptions,
 };
-use aauth::types::RequirementLevel;
+use aauth::types::{
+    AgentOkResponse, AuthOkResponse, AuthServerMetadata, JwksDocument, MetadataDocument,
+    RequirementLevel, TokenExchangeRequest, TokenResponseBody,
+};
 use aauth::VerifiedToken;
 use async_trait::async_trait;
-use serde_json::{json, Value};
 
 use super::keys::{create_auth_jwt, resource_sign_fn, TestKeys};
 
@@ -25,7 +27,7 @@ pub struct MockServerConfig {
     pub require_auth_token: bool,
     pub deferred_mode: bool,
     pub interaction_manager: Option<Arc<InteractionManager>>,
-    pub on_token_request: Option<Arc<Mutex<Option<Value>>>>,
+    pub on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
     pub pending_id_capture: Option<Arc<Mutex<Option<String>>>>,
 }
 
@@ -46,7 +48,7 @@ struct MockServerState {
     require_auth_token: bool,
     deferred_mode: bool,
     interaction_manager: Arc<Mutex<Option<Arc<InteractionManager>>>>,
-    on_token_request: Option<Arc<Mutex<Option<Value>>>>,
+    on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
     pending_id_capture: Option<Arc<Mutex<Option<String>>>>,
 }
 
@@ -126,10 +128,10 @@ impl MockServerState {
         if url == format!("{}/.well-known/aauth-person.json", self.auth_server_url) {
             return Ok(aauth::http::json_response(
                 200,
-                &json!({
-                    "token_endpoint": format!("{}/aauth/token", self.auth_server_url),
-                    "jwks_uri": format!("{}/jwks", self.auth_server_url),
-                }),
+                &AuthServerMetadata {
+                    token_endpoint: format!("{}/aauth/token", self.auth_server_url),
+                    jwks_uri: Some(format!("{}/jwks", self.auth_server_url)),
+                },
             ));
         }
 
@@ -144,21 +146,28 @@ impl MockServerState {
         if url == format!("{}/.well-known/aauth-agent.json", self.agent_url) {
             return Ok(aauth::http::json_response(
                 200,
-                &json!({ "jwks_uri": format!("{}/jwks", self.agent_url) }),
+                &MetadataDocument {
+                    jwks_uri: format!("{}/jwks", self.agent_url),
+                    extra: HashMap::new(),
+                },
             ));
         }
 
         if url == format!("{}/jwks", self.agent_url) {
             return Ok(aauth::http::json_response(
                 200,
-                &json!({ "keys": [self.keys.agent_root.pub_jwk] }),
+                &JwksDocument {
+                    keys: self.keys.agent_root.jwk_set(),
+                },
             ));
         }
 
         if url == format!("{}/jwks", self.auth_server_url) {
             return Ok(aauth::http::json_response(
                 200,
-                &json!({ "keys": [self.keys.auth_server.pub_jwk] }),
+                &JwksDocument {
+                    keys: self.keys.auth_server.jwk_set(),
+                },
             ));
         }
 
@@ -173,7 +182,7 @@ impl MockServerState {
 
         let verified = verify_token(VerifyTokenOptions {
             jwt,
-            http_signature_thumbprint: self.keys.agent_ephemeral.thumbprint.clone(),
+            http_signature_thumbprint: self.keys.agent_ephemeral.thumbprint().to_string(),
             fetcher: Arc::new(fetcher),
         })
         .await;
@@ -192,7 +201,10 @@ impl MockServerState {
         match verified {
             VerifiedToken::Auth(auth) => Ok(aauth::http::json_response(
                 200,
-                &json!({ "status": "ok", "user": auth.sub }),
+                &AuthOkResponse {
+                    status: "ok".into(),
+                    user: auth.sub,
+                },
             )),
             VerifiedToken::Agent(agent) if self.require_auth_token => {
                 let sign = resource_sign_fn(&self.keys);
@@ -201,7 +213,7 @@ impl MockServerState {
                         resource: self.resource_url.clone(),
                         auth_server: self.auth_server_url.clone(),
                         agent: agent.iss.clone(),
-                        agent_jkt: self.keys.agent_ephemeral.thumbprint.clone(),
+                        agent_jkt: self.keys.agent_ephemeral.thumbprint().to_string(),
                         scope: None,
                         mission: None,
                         lifetime: None,
@@ -227,7 +239,10 @@ impl MockServerState {
             }
             VerifiedToken::Agent(agent) => Ok(aauth::http::json_response(
                 200,
-                &json!({ "status": "ok", "agent": agent.iss }),
+                &AgentOkResponse {
+                    status: "ok".into(),
+                    agent: agent.iss,
+                },
             )),
         }
     }
@@ -249,16 +264,15 @@ impl MockServerState {
     }
 
     async fn handle_token_post(&self, request: HttpRequest) -> Result<HttpResponse> {
-        let body: Value = request
+        let body: Option<TokenExchangeRequest> = request
             .body
             .as_ref()
             .map(|b| serde_json::from_slice(b))
             .transpose()
-            .map_err(|e| aauth::AAuthError::Message(e.to_string()))?
-            .unwrap_or(json!({}));
+            .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
 
         if let Some(capture) = &self.on_token_request {
-            *capture.lock().unwrap() = Some(body.clone());
+            *capture.lock().unwrap() = body.clone();
         }
 
         if self.deferred_mode {
@@ -286,7 +300,10 @@ impl MockServerState {
 
         Ok(aauth::http::json_response(
             200,
-            &json!({ "auth_token": auth_jwt, "expires_in": 3600 }),
+            &TokenResponseBody {
+                auth_token: auth_jwt,
+                expires_in: 3600,
+            },
         ))
     }
 

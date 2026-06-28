@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use serde_json::Value;
+use serde::Serialize;
 
 use crate::error::{HttpError, Result};
 
@@ -162,7 +162,7 @@ impl HttpClient for MockHttpClient {
     }
 }
 
-pub fn json_response(status: u16, value: &Value) -> HttpResponse {
+pub fn json_response<T: Serialize>(status: u16, value: &T) -> HttpResponse {
     HttpResponse {
         status,
         headers: HashMap::from([("content-type".to_string(), "application/json".to_string())]),

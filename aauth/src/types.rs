@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
+use jsonwebtoken::jwk::JwkSet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::jwt::OkpSigningJwk;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParseStrError;
@@ -170,7 +173,8 @@ pub struct AuthServerMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JwksDocument {
-    pub keys: Vec<Value>,
+    #[serde(flatten)]
+    pub keys: JwkSet,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,6 +182,47 @@ pub struct MetadataDocument {
     pub jwks_uri: String,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOkResponse {
+    pub status: String,
+    pub agent: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthOkResponse {
+    pub status: String,
+    pub user: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenExchangeRequest {
+    pub resource_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub justification: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub localhost_callback: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClarificationChallenge {
+    pub clarification: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClarificationResponse {
+    pub clarification_response: String,
 }
 
 #[derive(Debug, Clone)]
@@ -202,7 +247,7 @@ pub enum SignatureKey {
 
 #[derive(Debug, Clone)]
 pub struct KeyMaterial {
-    pub signing_jwk: Value,
+    pub signing_jwk: OkpSigningJwk,
     pub signature_key: SignatureKey,
 }
 

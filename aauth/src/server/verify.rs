@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use jsonwebtoken::{decode_header, jwk::JwkSet, DecodingKey};
+use jsonwebtoken::{decode_header, DecodingKey};
 
 use crate::error::{AAuthError, Result, TokenError};
 use crate::jwt::{jwk_thumbprint, VerifiedToken};
@@ -63,10 +63,6 @@ pub async fn verify_token<F: MetadataFetcher>(
             error_code,
             format!("Failed to fetch JWKS from {jwks_uri}: {e}"),
         )
-    })?;
-
-    let jwks: JwkSet = serde_json::from_value(jwks).map_err(|e| {
-        TokenError::new(error_code, format!("invalid JWKS from {jwks_uri}: {e}"))
     })?;
 
     let header = decode_header(&options.jwt).map_err(|e| AAuthError::Message(e.to_string()))?;

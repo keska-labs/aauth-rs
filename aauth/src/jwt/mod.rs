@@ -2,14 +2,15 @@ mod claims;
 mod decode;
 
 pub use claims::{
-    ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, VerifiedToken,
+    ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
+    VerifiedToken,
 };
 pub use decode::{decode_unverified, decode_verified, verified_validation};
 
 use std::collections::BTreeMap;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use jsonwebtoken::decode_header;
+use jsonwebtoken::{decode_header, jwk::JwkSet};
 use sha2::{Digest, Sha256};
 
 use crate::error::{JwtError, Result};
@@ -56,6 +57,18 @@ fn canonical_jwk_for_thumbprint(jwk: &OkpJwk) -> Result<String> {
     }
 
     serde_json::to_string(&members).map_err(|e| JwtError::Decode(e.to_string()).into())
+}
+
+pub fn jwk_set_from_okp(keys: &[OkpJwk]) -> Result<JwkSet> {
+    let mut jwt_keys = Vec::with_capacity(keys.len());
+    for key in keys {
+        let jwk: jsonwebtoken::jwk::Jwk = serde_json::from_value(
+            serde_json::to_value(key).map_err(|e| JwtError::Decode(e.to_string()))?,
+        )
+        .map_err(|e| JwtError::Decode(e.to_string()))?;
+        jwt_keys.push(jwk);
+    }
+    Ok(JwkSet { keys: jwt_keys })
 }
 
 #[cfg(test)]

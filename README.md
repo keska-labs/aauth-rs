@@ -87,7 +87,23 @@ async fn main() -> aauth::Result<()> {
 }
 ```
 
-Key material is injected via `KeyMaterialProvider` (equivalent to the TypeScript `@aauth/local-keys` package, which is not included here).
+Key material is injected via `KeyMaterialProvider` (equivalent to the TypeScript `@aauth/local-keys` package, which is not included here). For development and tests, use the public [`aauth::keys`](aauth::keys) module — it provides Ed25519 key generation, JWT minting, and static metadata/key providers.
+
+## Examples
+
+```bash
+# Verify an agent JWT (server only)
+cargo run --example verify_agent_token --features server
+
+# Signed fetch against an in-process mock resource (client + server)
+cargo run --example client_direct_grant
+```
+
+Build all examples in CI:
+
+```bash
+cargo build --examples --all-features
+```
 
 ## Spec and reference
 

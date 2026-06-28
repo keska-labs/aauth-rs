@@ -6,11 +6,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::{Signer, SigningKey};
-use serde_json::Value;
 
 use crate::error::{AAuthError, Result};
 use crate::headers::{build_capabilities_header, build_mission_header};
 use crate::http::{HttpRequest, HttpResponse};
+use crate::jwt::OkpSigningJwk;
 use crate::types::{Capability, KeyMaterial, Mission, SignatureKey};
 
 pub type SignedFetch = Arc<
@@ -172,13 +172,9 @@ fn build_signature_base(request: &HttpRequest, signature_key: &str, created: u64
     )
 }
 
-fn signing_key_from_jwk(jwk: &Value) -> Result<SigningKey> {
-    let d = jwk
-        .get("d")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| AAuthError::Message("signing JWK missing private key".into()))?;
+fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<SigningKey> {
     let bytes = URL_SAFE_NO_PAD
-        .decode(d)
+        .decode(&jwk.d)
         .map_err(|e| AAuthError::Message(e.to_string()))?;
     let key_bytes: [u8; 32] = bytes
         .try_into()
