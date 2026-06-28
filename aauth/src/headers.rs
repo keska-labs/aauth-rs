@@ -13,7 +13,7 @@ pub fn parse_capabilities_header(header_value: &str) -> Vec<Capability> {
     header_value
         .split(',')
         .map(str::trim)
-        .filter_map(Capability::parse)
+        .filter_map(|value| value.parse().ok())
         .collect()
 }
 
@@ -30,10 +30,6 @@ pub fn parse_mission_header(header_value: &str) -> Result<Mission> {
     let s256 = extract_quoted_param(header_value, "s256")
         .ok_or_else(|| AAuthError::InvalidHeader("missing s256".into()))?;
     Ok(Mission { approver, s256 })
-}
-
-pub fn build_aauth_access(token: &str) -> String {
-    token.to_string()
 }
 
 #[derive(Debug, Clone, Default)]
@@ -94,7 +90,7 @@ pub fn parse_aauth_requirement(header_value: &str) -> Result<AAuthChallenge> {
             AAuthError::InvalidHeader("missing requirement= in AAuth-Requirement header".into())
         })?;
 
-    let requirement = RequirementLevel::parse(requirement_match).ok_or_else(|| {
+    let requirement = requirement_match.parse().map_err(|_| {
         AAuthError::InvalidHeader(format!("unknown requirement level: {requirement_match}"))
     })?;
 

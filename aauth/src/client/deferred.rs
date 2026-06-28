@@ -7,7 +7,7 @@ use crate::client::SignedFetch;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::http::HttpRequest;
-use crate::types::{AAuthProtocolError, RequirementLevel, TokenResponseBody};
+use crate::types::{AAuthProtocolError, RequirementLevel};
 
 const DEFAULT_MAX_POLL_DURATION: u64 = 300;
 const DEFAULT_PREFER_WAIT: u64 = 45;
@@ -155,19 +155,4 @@ fn parse_error_body(response: &crate::http::HttpResponse) -> Option<AAuthProtoco
         return None;
     }
     response.json().ok()
-}
-
-pub fn parse_token_response(body: &serde_json::Value) -> Result<crate::types::TokenResponseBody> {
-    let auth_token = body
-        .get("auth_token")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| AAuthError::Message("Token response missing auth_token".into()))?;
-    let expires_in = body
-        .get("expires_in")
-        .and_then(|v| v.as_u64())
-        .ok_or_else(|| AAuthError::Message("Token response missing expires_in".into()))?;
-    Ok(TokenResponseBody {
-        auth_token: auth_token.to_string(),
-        expires_in,
-    })
 }

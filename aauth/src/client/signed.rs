@@ -11,7 +11,6 @@ use serde_json::Value;
 use crate::error::{AAuthError, Result};
 use crate::headers::{build_capabilities_header, build_mission_header};
 use crate::http::{HttpRequest, HttpResponse};
-use crate::jwt::signature_key_jwt;
 use crate::types::{Capability, KeyMaterial, Mission, SignatureKey};
 
 pub type SignedFetch = Arc<
@@ -111,7 +110,7 @@ fn apply_optional_headers(request: &mut HttpRequest, options: &SignedFetchOption
 }
 
 pub(crate) fn sign_request(request: &mut HttpRequest, material: &KeyMaterial) -> Result<()> {
-    let jwt = signature_key_jwt(match &material.signature_key {
+    let token = match &material.signature_key {
         SignatureKey::Jwt(j) => &j.jwt,
         SignatureKey::JktJwt(j) => &j.jwt,
         SignatureKey::Hwk(_) => {
@@ -119,7 +118,8 @@ pub(crate) fn sign_request(request: &mut HttpRequest, material: &KeyMaterial) ->
                 "hwk signature key not supported for AAuth requests".into(),
             ))
         }
-    });
+    };
+    let jwt = format!("sig=jwt;jwt=\"{token}\"");
 
     request
         .headers

@@ -23,11 +23,11 @@ pub mod server;
 
 pub use error::{AAuthError, Result, TokenError};
 pub use headers::{
-    build_aauth_access, build_aauth_requirement, build_capabilities_header, build_mission_header,
+    build_aauth_requirement, build_capabilities_header, build_mission_header,
     parse_aauth_requirement, parse_capabilities_header, parse_mission_header,
 };
 pub use interaction_code::{canonicalize_code, generate_code};
-pub use jwt::{decode_jwt_payload, jwk_thumbprint, jwt_typ};
+pub use jwt::{decode_jwt_payload, jwk_thumbprint};
 pub use metadata::{clear_metadata_cache, CachedMetadataFetcher, MetadataFetcher};
 pub use types::*;
 

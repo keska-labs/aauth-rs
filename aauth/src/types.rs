@@ -1,5 +1,10 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParseStrError;
 
 /// AAuth JWT `typ` header values (`aa-*+jwt`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -18,15 +23,6 @@ impl JwtTyp {
         }
     }
 
-    pub fn parse(value: &str) -> Option<Self> {
-        match value {
-            "aa-agent+jwt" => Some(Self::Agent),
-            "aa-auth+jwt" => Some(Self::Auth),
-            "aa-resource+jwt" => Some(Self::Resource),
-            _ => None,
-        }
-    }
-
     pub fn verify_error_code(self) -> &'static str {
         match self {
             Self::Agent => "invalid_agent_token",
@@ -42,13 +38,27 @@ impl std::fmt::Display for JwtTyp {
     }
 }
 
+impl FromStr for JwtTyp {
+    type Err = ParseStrError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "aa-agent+jwt" => Ok(Self::Agent),
+            "aa-auth+jwt" => Ok(Self::Auth),
+            "aa-resource+jwt" => Ok(Self::Resource),
+            _ => Err(ParseStrError),
+        }
+    }
+}
+
 #[cfg(test)]
 mod jwt_typ_tests {
     use super::JwtTyp;
+    use std::str::FromStr;
 
     #[test]
     fn parse_and_display() {
-        assert_eq!(JwtTyp::parse("aa-agent+jwt"), Some(JwtTyp::Agent));
+        assert_eq!(JwtTyp::from_str("aa-agent+jwt"), Ok(JwtTyp::Agent));
         assert_eq!(JwtTyp::Auth.as_str(), "aa-auth+jwt");
         assert_eq!(JwtTyp::Resource.to_string(), "aa-resource+jwt");
     }
@@ -76,16 +86,26 @@ impl RequirementLevel {
             Self::Claims => "claims",
         }
     }
+}
 
-    pub fn parse(value: &str) -> Option<Self> {
+impl std::fmt::Display for RequirementLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for RequirementLevel {
+    type Err = ParseStrError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "agent-token" => Some(Self::AgentToken),
-            "auth-token" => Some(Self::AuthToken),
-            "approval" => Some(Self::Approval),
-            "interaction" => Some(Self::Interaction),
-            "clarification" => Some(Self::Clarification),
-            "claims" => Some(Self::Claims),
-            _ => None,
+            "agent-token" => Ok(Self::AgentToken),
+            "auth-token" => Ok(Self::AuthToken),
+            "approval" => Ok(Self::Approval),
+            "interaction" => Ok(Self::Interaction),
+            "clarification" => Ok(Self::Clarification),
+            "claims" => Ok(Self::Claims),
+            _ => Err(ParseStrError),
         }
     }
 }
@@ -106,13 +126,23 @@ impl Capability {
             Self::Payment => "payment",
         }
     }
+}
 
-    pub fn parse(value: &str) -> Option<Self> {
+impl std::fmt::Display for Capability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for Capability {
+    type Err = ParseStrError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "interaction" => Some(Self::Interaction),
-            "clarification" => Some(Self::Clarification),
-            "payment" => Some(Self::Payment),
-            _ => None,
+            "interaction" => Ok(Self::Interaction),
+            "clarification" => Ok(Self::Clarification),
+            "payment" => Ok(Self::Payment),
+            _ => Err(ParseStrError),
         }
     }
 }

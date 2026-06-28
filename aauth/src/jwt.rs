@@ -8,6 +8,18 @@ use sha2::{Digest, Sha256};
 use crate::error::{JwtError, Result};
 use crate::types::JwtTyp;
 
+impl JwtTyp {
+    /// Reads and parses the JWT `typ` header.
+    pub fn from_jwt(jwt: &str) -> Result<Self> {
+        let header = decode_header(jwt).map_err(|e| JwtError::Decode(e.to_string()))?;
+        let typ = header
+            .typ
+            .ok_or_else(|| JwtError::InvalidTyp("missing typ".into()))?;
+        typ.parse()
+            .map_err(|_| JwtError::InvalidTyp(format!("unknown typ: {typ}")).into())
+    }
+}
+
 pub fn decode_jwt_payload(jwt: &str) -> Result<Value> {
     let parts: Vec<&str> = jwt.split('.').collect();
     if parts.len() != 3 {
@@ -17,14 +29,6 @@ pub fn decode_jwt_payload(jwt: &str) -> Result<Value> {
         .decode(parts[1])
         .map_err(|e| JwtError::Decode(e.to_string()))?;
     serde_json::from_slice(&payload).map_err(|e| JwtError::Decode(e.to_string()).into())
-}
-
-pub fn jwt_typ(jwt: &str) -> Result<JwtTyp> {
-    let header = decode_header(jwt).map_err(|e| JwtError::Decode(e.to_string()))?;
-    let typ = header
-        .typ
-        .ok_or_else(|| JwtError::InvalidTyp("missing typ".into()))?;
-    JwtTyp::parse(&typ).ok_or_else(|| JwtError::InvalidTyp(format!("unknown typ: {typ}")).into())
 }
 
 pub fn jwk_thumbprint(jwk: &Value) -> Result<String> {
@@ -60,10 +64,6 @@ fn canonical_jwk_for_thumbprint(jwk: &Value) -> Result<String> {
     serde_json::to_string(&members).map_err(|e| JwtError::Decode(e.to_string()).into())
 }
 
-pub fn signature_key_jwt(token: &str) -> String {
-    format!("sig=jwt;jwt=\"{token}\"")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,10 +82,12 @@ mod tests {
     }
 
     #[test]
-    fn jwt_typ_round_trip() {
+    fn from_jwt_round_trip() {
+        use std::str::FromStr;
+
         for typ in [JwtTyp::Agent, JwtTyp::Auth, JwtTyp::Resource] {
-            assert_eq!(JwtTyp::parse(typ.as_str()), Some(typ));
+            assert_eq!(JwtTyp::from_str(typ.as_str()), Ok(typ));
         }
-        assert_eq!(JwtTyp::parse("unknown"), None);
+        assert!(JwtTyp::from_str("unknown").is_err());
     }
 }

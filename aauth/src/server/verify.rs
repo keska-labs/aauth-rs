@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::error::{AAuthError, Result, TokenError};
-use crate::jwt::{jwk_thumbprint, jwt_typ};
+use crate::jwt::{decode_jwt_payload, jwk_thumbprint};
 use crate::metadata::MetadataFetcher;
 use crate::types::{JwtTyp, VerifiedAgentToken, VerifiedAuthToken, VerifiedToken};
 
@@ -18,7 +18,7 @@ pub struct VerifyTokenOptions<F: MetadataFetcher> {
 pub async fn verify_token<F: MetadataFetcher>(
     options: VerifyTokenOptions<F>,
 ) -> Result<VerifiedToken> {
-    let typ = jwt_typ(&options.jwt)?;
+    let typ = JwtTyp::from_jwt(&options.jwt)?;
 
     let error_code = match typ {
         JwtTyp::Agent | JwtTyp::Auth => typ.verify_error_code(),
@@ -31,7 +31,7 @@ pub async fn verify_token<F: MetadataFetcher>(
         }
     };
 
-    let claims = decode_unverified_claims(&options.jwt)?;
+    let claims = decode_jwt_payload(&options.jwt)?;
 
     let iss = claim_string(&claims, "iss", error_code)?;
     let iat = claim_i64(&claims, "iat", error_code)?;
@@ -41,7 +41,12 @@ pub async fn verify_token<F: MetadataFetcher>(
     let cnf = claims
         .get("cnf")
         .and_then(|v| v.get("jwk"))
-        .ok_or_else(|| token_err(error_code, "Missing required claim: cnf.jwk"))?;
+        .ok_or_else(|| {
+            AAuthError::from(TokenError::new(
+                error_code,
+                "Missing required claim: cnf.jwk",
+            ))
+        })?;
 
     match typ {
         JwtTyp::Agent => {
@@ -49,10 +54,10 @@ pub async fn verify_token<F: MetadataFetcher>(
         }
         JwtTyp::Auth => {
             if claims.get("aud").is_none() {
-                return Err(token_err(error_code, "Missing required claim: aud"));
+                return Err(TokenError::new(error_code, "Missing required claim: aud").into());
             }
             if claims.get("agent").is_none() {
-                return Err(token_err(error_code, "Missing required claim: agent"));
+                return Err(TokenError::new(error_code, "Missing required claim: agent").into());
             }
         }
         JwtTyp::Resource => unreachable!("handled above"),
@@ -63,7 +68,7 @@ pub async fn verify_token<F: MetadataFetcher>(
         .unwrap()
         .as_secs() as i64;
     if exp < now - CLOCK_SKEW {
-        return Err(token_err(error_code, "Token has expired"));
+        return Err(TokenError::new(error_code, "Token has expired").into());
     }
 
     let cnf_thumbprint = jwk_thumbprint(cnf)?;
@@ -132,27 +137,19 @@ pub async fn verify_token<F: MetadataFetcher>(
     }
 }
 
-fn token_err(code: &str, message: impl Into<String>) -> AAuthError {
-    TokenError::new(code, message).into()
-}
-
-fn decode_unverified_claims(jwt: &str) -> Result<Value> {
-    crate::jwt::decode_jwt_payload(jwt)
-}
-
 fn claim_string(claims: &Value, key: &str, code: &str) -> Result<String> {
     claims
         .get(key)
         .and_then(|v| v.as_str())
         .map(str::to_string)
-        .ok_or_else(|| token_err(code, format!("Missing required claim: {key}")))
+        .ok_or_else(|| AAuthError::from(TokenError::new(code, format!("Missing required claim: {key}"))))
 }
 
 fn claim_i64(claims: &Value, key: &str, code: &str) -> Result<i64> {
     claims
         .get(key)
         .and_then(|v| v.as_i64())
-        .ok_or_else(|| token_err(code, format!("Missing required claim: {key}")))
+        .ok_or_else(|| AAuthError::from(TokenError::new(code, format!("Missing required claim: {key}"))))
 }
 
 fn verify_jwt_signature(jwt: &str, jwks: &Value, _exp: i64, _iat: i64) -> Result<()> {

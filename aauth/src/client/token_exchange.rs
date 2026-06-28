@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::client::deferred::{
-    parse_token_response, poll_deferred, DeferredOptions, InteractionCallback,
-};
+use crate::client::deferred::{poll_deferred, DeferredOptions, InteractionCallback};
 use crate::client::SignedFetch;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::http::HttpRequest;
-use crate::types::{AAuthProtocolError, AuthServerMetadata, RequirementLevel};
+use crate::types::{AAuthProtocolError, AuthServerMetadata, RequirementLevel, TokenResponseBody};
 
 const PREFER_WAIT: u64 = 45;
 
@@ -107,7 +105,7 @@ pub async fn exchange_token(options: TokenExchangeOptions) -> Result<TokenExchan
     .await?;
 
     if response.status == 200 {
-        let parsed = parse_token_response(&response.json()?)?;
+        let parsed: TokenResponseBody = response.json()?;
         return Ok(TokenExchangeResult {
             auth_token: parsed.auth_token,
             expires_in: parsed.expires_in,
@@ -143,7 +141,7 @@ pub async fn exchange_token(options: TokenExchangeOptions) -> Result<TokenExchan
         .await?;
 
         if result.response.status == 200 {
-            let parsed = parse_token_response(&result.response.json()?)?;
+            let parsed: TokenResponseBody = result.response.json()?;
             return Ok(TokenExchangeResult {
                 auth_token: parsed.auth_token,
                 expires_in: parsed.expires_in,
