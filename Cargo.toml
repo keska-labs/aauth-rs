@@ -13,10 +13,11 @@ aauth = { path = "aauth" }
 async-trait = "0.1"
 base64 = "0.22"
 bytes = "1"
-ed25519-dalek = { version = "3.0.0-rc.1", features = ["rand_core", "pkcs8"] }
+ed25519-dalek = { version = "3.0.0-rc.1", features = ["alloc", "rand_core", "pkcs8"] }
 http = "1"
 jsonwebtoken = { version = "10.4.0", default-features = false, features = [
     "use_pem",
+    "rust_crypto",
 ] }
 rand = "0.10.1"
 reqwest = { version = "0.13.4", default-features = false, features = [
