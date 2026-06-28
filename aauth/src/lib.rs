@@ -33,13 +33,19 @@ pub use jwt::{
     OkpSigningJwk, ResourceClaims, VerifiedToken,
 };
 pub use keys::{
-    create_test_keys, mint_agent_jwt, mint_auth_jwt, static_agent_metadata_fetcher,
-    static_auth_metadata_fetcher, Ed25519KeyPair, TestKeys,
+    create_test_keys, static_agent_metadata_fetcher, static_auth_metadata_fetcher,
+    Ed25519KeyPair, OkpSigningKey, TestKeys,
 };
 #[cfg(feature = "client")]
-pub use keys::{create_key_provider, StaticKeyMaterialProvider};
+pub use client::keys::{
+    create_key_provider, mint_agent_jwt, AgentJwtMinter, StaticKeyMaterialProvider,
+    TestAgentJwtMinter,
+};
 #[cfg(feature = "server")]
-pub use keys::resource_sign_fn;
+pub use server::keys::{
+    mint_auth_jwt, AuthJwtMinter, Ed25519ResourceTokenSigner, ResourceTokenSigner,
+    TestAuthJwtMinter,
+};
 pub use metadata::{
     clear_metadata_cache, CachedMetadataFetcher, MetadataFetcher, StaticMetadataFetcher,
 };
@@ -55,5 +61,5 @@ pub use client::{
 #[cfg(feature = "server")]
 pub use server::{
     create_resource_token, verify_token, InteractionManager, InteractionManagerOptions,
-    PendingRequest, ResourceTokenOptions, SignFn, VerifyTokenOptions,
+    PendingRequest, ResourceTokenOptions, VerifyTokenOptions,
 };

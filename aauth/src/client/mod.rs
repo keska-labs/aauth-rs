@@ -1,5 +1,6 @@
 mod deferred;
 mod fetch;
+pub mod keys;
 mod signed;
 mod token_exchange;
 

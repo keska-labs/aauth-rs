@@ -3,17 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use jsonwebtoken::{Algorithm, Header};
 
 use crate::jwt::ResourceClaims;
+use crate::server::keys::ResourceTokenSigner;
 use crate::types::JwtTyp;
-
-pub type SignFn = Box<
-    dyn Fn(
-            Header,
-            ResourceClaims,
-        )
-            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send>>
-        + Send
-        + Sync,
->;
 
 #[derive(Debug, Clone)]
 pub struct ResourceTokenOptions {
@@ -28,7 +19,7 @@ pub struct ResourceTokenOptions {
 
 pub async fn create_resource_token(
     options: ResourceTokenOptions,
-    sign: &SignFn,
+    signer: &dyn ResourceTokenSigner,
 ) -> Result<String, String> {
     let lifetime = options.lifetime.unwrap_or(300);
     let now = SystemTime::now()
@@ -52,5 +43,5 @@ pub async fn create_resource_token(
     let mut header = Header::new(Algorithm::EdDSA);
     header.typ = Some(JwtTyp::Resource.as_str().into());
 
-    sign(header, claims).await
+    signer.sign_resource_token(header, claims).await
 }

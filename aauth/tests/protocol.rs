@@ -13,10 +13,11 @@ use aauth::server::{
 use aauth::types::{AuthOkResponse, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
 use aauth::VerifiedToken;
 
-use support::{
-    create_agent_jwt, create_auth_jwt, create_key_provider, create_test_keys, MockServer,
-    MockServerConfig,
+use aauth::{
+    create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt, TestKeys,
 };
+
+use support::{MockServer, MockServerConfig};
 
 const AGENT_URL: &str = "https://agent.example";
 const AGENT_ID: &str = "aauth:test@example.com";
@@ -78,7 +79,7 @@ async fn verify_token_agent_jwt() {
     let _guard = test_lock();
     clear_metadata_cache();
     let keys = create_test_keys();
-    let agent_jwt = create_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
 
     let server = MockServer::new(mock_config(&keys, false, None, None, None));
 
@@ -107,7 +108,7 @@ async fn verify_token_auth_jwt() {
     let _guard = test_lock();
     clear_metadata_cache();
     let keys = create_test_keys();
-    let auth_jwt = create_auth_jwt(
+    let auth_jwt = mint_auth_jwt(
         &keys,
         AUTH_SERVER_URL,
         RESOURCE_URL,
@@ -145,7 +146,7 @@ async fn verify_token_key_binding_failed() {
     let _guard = test_lock();
     clear_metadata_cache();
     let keys = create_test_keys();
-    let agent_jwt = create_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let wrong = create_test_keys();
 
     let server = MockServer::new(mock_config(&keys, false, None, None, None));
@@ -170,7 +171,7 @@ async fn full_401_challenge_response_direct_grant() {
     let _guard = test_lock();
     clear_metadata_cache();
     let keys = create_test_keys();
-    let agent_jwt = create_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
 
     let server = MockServer::new(mock_config(&keys, false, None, None, None));
@@ -200,7 +201,7 @@ async fn second_request_reuses_cached_token() {
     let _guard = test_lock();
     clear_metadata_cache();
     let keys = create_test_keys();
-    let agent_jwt = create_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
 
     let call_count = Arc::new(Mutex::new(0usize));
@@ -239,7 +240,7 @@ async fn justification_and_hints_pass_through() {
     let _guard = test_lock();
     clear_metadata_cache();
     let keys = create_test_keys();
-    let agent_jwt = create_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
     let captured = Arc::new(Mutex::new(None));
 
@@ -288,7 +289,7 @@ async fn deferred_interaction_grant() {
     let _guard = test_lock();
     clear_metadata_cache();
     let keys = create_test_keys();
-    let agent_jwt = create_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
 
     let manager = Arc::new(InteractionManager::new(InteractionManagerOptions {
@@ -316,7 +317,7 @@ async fn deferred_interaction_grant() {
     let on_interaction: aauth::InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
         if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
-            let auth_jwt = create_auth_jwt(
+            let auth_jwt = mint_auth_jwt(
                 &keys_cb,
                 AUTH_SERVER_URL,
                 RESOURCE_URL,
@@ -398,7 +399,7 @@ async fn interaction_manager_create_pending_header() {
 }
 
 fn mock_config(
-    keys: &support::TestKeys,
+    keys: &TestKeys,
     deferred_mode: bool,
     interaction_manager: Option<Arc<InteractionManager>>,
     on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,

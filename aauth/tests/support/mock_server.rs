@@ -16,7 +16,7 @@ use aauth::types::{
 use aauth::VerifiedToken;
 use async_trait::async_trait;
 
-use super::keys::{create_auth_jwt, resource_sign_fn, TestKeys};
+use aauth::{mint_auth_jwt, TestKeys};
 
 pub struct MockServerConfig {
     pub keys: TestKeys,
@@ -207,7 +207,7 @@ impl MockServerState {
                 },
             )),
             VerifiedToken::Agent(agent) if self.require_auth_token => {
-                let sign = resource_sign_fn(&self.keys);
+                let signer = self.keys.resource_token_signer();
                 let resource_token = create_resource_token(
                     ResourceTokenOptions {
                         resource: self.resource_url.clone(),
@@ -218,7 +218,7 @@ impl MockServerState {
                         mission: None,
                         lifetime: None,
                     },
-                    &sign,
+                    &signer,
                 )
                 .await
                 .map_err(|e| aauth::AAuthError::Message(e))?;
@@ -289,7 +289,7 @@ impl MockServerState {
             }
         }
 
-        let auth_jwt = create_auth_jwt(
+        let auth_jwt = mint_auth_jwt(
             &self.keys,
             &self.auth_server_url,
             &self.resource_url,
