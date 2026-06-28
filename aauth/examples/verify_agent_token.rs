@@ -6,7 +6,10 @@
 
 use std::sync::Arc;
 
-use aauth::{mint_agent_jwt, static_agent_metadata_fetcher, create_test_keys, verify_token, VerifiedToken, VerifyTokenOptions};
+use aauth::{
+    VerifiedToken, VerifyTokenOptions, create_test_keys, mint_agent_jwt,
+    static_agent_metadata_fetcher, verify_token,
+};
 
 const AGENT_URL: &str = "https://agent.example";
 const AGENT_ID: &str = "aauth:test@example.com";

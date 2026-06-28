@@ -7,7 +7,7 @@
 #[path = "shared/mock_resource.rs"]
 mod mock_resource;
 
-use aauth::client::{create_aauth_fetch, AAuthFetchOptions};
+use aauth::client::{AAuthFetchOptions, create_aauth_fetch};
 use aauth::http::HttpRequest;
 use aauth::types::AgentOkResponse;
 use aauth::{create_key_provider, create_test_keys, mint_agent_jwt};

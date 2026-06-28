@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use jsonwebtoken::{encode, Algorithm, Header};
+use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
 use crate::client::KeyMaterialProvider;
@@ -49,12 +49,7 @@ impl AgentJwtMinter for TestAgentJwtMinter {
         header.typ = Some(JwtTyp::Agent.as_str().into());
         header.kid = self.keys.agent_root.kid().map(str::to_string);
 
-        encode(
-            &header,
-            &claims,
-            &self.keys.agent_root.encoding_key(),
-        )
-        .expect("sign agent jwt")
+        encode(&header, &claims, &self.keys.agent_root.encoding_key()).expect("sign agent jwt")
     }
 }
 
@@ -96,9 +91,6 @@ pub fn mint_agent_jwt(keys: &TestKeys, agent_url: &str, sub: &str) -> String {
     keys.agent_jwt_minter().mint_agent_jwt(agent_url, sub)
 }
 
-pub fn create_key_provider(
-    keys: &TestKeys,
-    agent_jwt: String,
-) -> Arc<dyn KeyMaterialProvider> {
+pub fn create_key_provider(keys: &TestKeys, agent_jwt: String) -> Arc<dyn KeyMaterialProvider> {
     StaticKeyMaterialProvider::from_test_keys(keys, agent_jwt).into_arc()
 }

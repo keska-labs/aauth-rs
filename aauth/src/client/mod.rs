@@ -4,12 +4,12 @@ pub mod keys;
 mod signed;
 mod token_exchange;
 
-pub use deferred::{poll_deferred, DeferredOptions, DeferredResult, InteractionCallback};
-pub use fetch::{create_aauth_fetch, AAuthFetch, AAuthFetchOptions};
+pub use deferred::{DeferredOptions, DeferredResult, InteractionCallback, poll_deferred};
+pub use fetch::{AAuthFetch, AAuthFetchOptions, create_aauth_fetch};
 pub use signed::{
-    create_signed_fetch, sign_request_with_auth_token, HttpClientAdapter, KeyMaterialProvider,
-    SignedFetch, SignedFetchOptions,
+    HttpClientAdapter, KeyMaterialProvider, SignedFetch, SignedFetchOptions, create_signed_fetch,
+    sign_request_with_auth_token,
 };
 pub use token_exchange::{
-    exchange_token, TokenExchangeError, TokenExchangeOptions, TokenExchangeResult,
+    TokenExchangeError, TokenExchangeOptions, TokenExchangeResult, exchange_token,
 };

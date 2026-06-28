@@ -202,8 +202,5 @@ impl VerifiedToken {
 }
 
 fn decode_err(code: &str, err: AAuthError) -> AAuthError {
-    AAuthError::from(TokenError::new(
-        code,
-        format!("JWT decode failed: {err}"),
-    ))
+    AAuthError::from(TokenError::new(code, format!("JWT decode failed: {err}")))
 }

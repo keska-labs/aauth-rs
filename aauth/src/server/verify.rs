@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use jsonwebtoken::{decode_header, DecodingKey};
+use jsonwebtoken::{DecodingKey, decode_header};
 
 use crate::error::{AAuthError, Result, TokenError};
-use crate::jwt::{jwk_thumbprint, VerifiedToken};
+use crate::jwt::{VerifiedToken, jwk_thumbprint};
 use crate::metadata::MetadataFetcher;
 use crate::types::JwtTyp;
 
@@ -74,7 +74,8 @@ pub async fn verify_token<F: MetadataFetcher>(
         .find(&kid)
         .ok_or_else(|| AAuthError::Message(format!("unknown kid: {kid}")))?;
 
-    let decoding_key = DecodingKey::from_jwk(jwk).map_err(|e| AAuthError::Message(e.to_string()))?;
+    let decoding_key =
+        DecodingKey::from_jwk(jwk).map_err(|e| AAuthError::Message(e.to_string()))?;
 
     VerifiedToken::decode_verified(&options.jwt, &decoding_key).map_err(|e| {
         if let AAuthError::Token { code, message } = e {

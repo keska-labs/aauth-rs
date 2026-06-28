@@ -4,6 +4,9 @@ Rust implementation of the [AAuth authorization protocol](https://github.com/dic
 
 This workspace provides the `aauth` crate with protocol primitives, a **client** module for signed requests and token exchange, and a **server** module for token verification and interaction management.
 
+## ⚠️ WARNING: LLM usage & pre-alpha ⚠️
+This library is currently in pre-alpha and can't in any way be described as satisfactory. It's mainly a LLM translation of the `Javascript` implementation of the `aauth` draft and a start for us to work from. We currently discourage using this, and won't be accepting contributions because our internal plans will make any external contributions moot, but if you check back in a few weeks, we're hopefully in a more acceptable state.
+
 ## Workspace layout
 
 ```text
@@ -26,7 +29,7 @@ aauth-rs/
 
 Disable defaults to depend on only one side:
 
-```toml
+```toml 
 aauth = { version = "0.1", default-features = false, features = ["client"] }
 ```
 

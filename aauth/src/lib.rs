@@ -22,6 +22,11 @@ pub mod client;
 #[cfg(feature = "server")]
 pub mod server;
 
+#[cfg(feature = "client")]
+pub use client::keys::{
+    AgentJwtMinter, StaticKeyMaterialProvider, TestAgentJwtMinter, create_key_provider,
+    mint_agent_jwt,
+};
 pub use error::{AAuthError, Result, TokenError};
 pub use headers::{
     build_aauth_requirement, build_capabilities_header, build_mission_header,
@@ -29,37 +34,32 @@ pub use headers::{
 };
 pub use interaction_code::{canonicalize_code, generate_code};
 pub use jwt::{
-    jwk_set_from_okp, jwk_thumbprint, ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk,
-    OkpSigningJwk, ResourceClaims, VerifiedToken,
+    ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
+    VerifiedToken, jwk_set_from_okp, jwk_thumbprint,
 };
 pub use keys::{
-    create_test_keys, static_agent_metadata_fetcher, static_auth_metadata_fetcher,
-    Ed25519KeyPair, OkpSigningKey, TestKeys,
+    Ed25519KeyPair, OkpSigningKey, TestKeys, create_test_keys, static_agent_metadata_fetcher,
+    static_auth_metadata_fetcher,
 };
-#[cfg(feature = "client")]
-pub use client::keys::{
-    create_key_provider, mint_agent_jwt, AgentJwtMinter, StaticKeyMaterialProvider,
-    TestAgentJwtMinter,
+pub use metadata::{
+    CachedMetadataFetcher, MetadataFetcher, StaticMetadataFetcher, clear_metadata_cache,
 };
 #[cfg(feature = "server")]
 pub use server::keys::{
-    mint_auth_jwt, AuthJwtMinter, Ed25519ResourceTokenSigner, ResourceTokenSigner,
-    TestAuthJwtMinter,
-};
-pub use metadata::{
-    clear_metadata_cache, CachedMetadataFetcher, MetadataFetcher, StaticMetadataFetcher,
+    AuthJwtMinter, Ed25519ResourceTokenSigner, ResourceTokenSigner, TestAuthJwtMinter,
+    mint_auth_jwt,
 };
 pub use types::*;
 
 #[cfg(feature = "client")]
 pub use client::{
-    create_aauth_fetch, create_signed_fetch, exchange_token, poll_deferred, AAuthFetch,
-    AAuthFetchOptions, DeferredOptions, DeferredResult, InteractionCallback, SignedFetch,
-    SignedFetchOptions, TokenExchangeError, TokenExchangeOptions, TokenExchangeResult,
+    AAuthFetch, AAuthFetchOptions, DeferredOptions, DeferredResult, InteractionCallback,
+    SignedFetch, SignedFetchOptions, TokenExchangeError, TokenExchangeOptions, TokenExchangeResult,
+    create_aauth_fetch, create_signed_fetch, exchange_token, poll_deferred,
 };
 
 #[cfg(feature = "server")]
 pub use server::{
-    create_resource_token, verify_token, InteractionManager, InteractionManagerOptions,
-    PendingRequest, ResourceTokenOptions, VerifyTokenOptions,
+    InteractionManager, InteractionManagerOptions, PendingRequest, ResourceTokenOptions,
+    VerifyTokenOptions, create_resource_token, verify_token,
 };

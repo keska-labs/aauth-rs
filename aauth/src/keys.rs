@@ -1,6 +1,6 @@
-use crate::jwt::{jwk_set_from_okp, jwk_thumbprint, OkpJwk, OkpSigningJwk};
+use crate::jwt::{OkpJwk, OkpSigningJwk, jwk_set_from_okp, jwk_thumbprint};
 use crate::metadata::StaticMetadataFetcher;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use jsonwebtoken::{EncodingKey, jwk::JwkSet};
@@ -136,10 +136,7 @@ impl TestKeys {
     }
 
     pub fn agent_metadata_fetcher(&self, agent_url: &str) -> StaticMetadataFetcher {
-        StaticMetadataFetcher::new(
-            format!("{agent_url}/jwks"),
-            self.agent_root.jwk_set(),
-        )
+        StaticMetadataFetcher::new(format!("{agent_url}/jwks"), self.agent_root.jwk_set())
     }
 
     pub fn auth_metadata_fetcher(&self, auth_server_url: &str) -> StaticMetadataFetcher {
@@ -154,10 +151,7 @@ pub fn create_test_keys() -> TestKeys {
     TestKeys::generate()
 }
 
-pub fn static_agent_metadata_fetcher(
-    keys: &TestKeys,
-    agent_url: &str,
-) -> StaticMetadataFetcher {
+pub fn static_agent_metadata_fetcher(keys: &TestKeys, agent_url: &str) -> StaticMetadataFetcher {
     keys.agent_metadata_fetcher(agent_url)
 }
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::headers::{build_aauth_requirement, AAuthRequirementParams};
+use crate::headers::{AAuthRequirementParams, build_aauth_requirement};
 use crate::interaction_code::generate_code;
 use crate::types::{RequirementLevel, TokenResponseBody};
 

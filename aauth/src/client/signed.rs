@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey};
 
 use crate::error::{AAuthError, Result};
@@ -116,7 +116,7 @@ pub(crate) fn sign_request(request: &mut HttpRequest, material: &KeyMaterial) ->
         SignatureKey::Hwk(_) => {
             return Err(AAuthError::Message(
                 "hwk signature key not supported for AAuth requests".into(),
-            ))
+            ));
         }
     };
     let jwt = format!("sig=jwt;jwt=\"{token}\"");

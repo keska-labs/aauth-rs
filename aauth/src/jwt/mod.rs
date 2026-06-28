@@ -9,7 +9,7 @@ pub use decode::{decode_unverified, decode_verified, verified_validation};
 
 use std::collections::BTreeMap;
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use jsonwebtoken::{decode_header, jwk::JwkSet};
 use sha2::{Digest, Sha256};
 

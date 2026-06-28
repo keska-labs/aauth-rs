@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use aauth::TestKeys;
+use aauth::VerifiedToken;
 use aauth::error::Result;
 use aauth::http::{HttpClient, HttpRequest, HttpResponse};
 use aauth::metadata::CachedMetadataFetcher;
-use aauth::server::{verify_token, VerifyTokenOptions};
+use aauth::server::{VerifyTokenOptions, verify_token};
 use aauth::types::AgentOkResponse;
-use aauth::VerifiedToken;
-use aauth::TestKeys;
 use async_trait::async_trait;
 
 const AGENT_URL: &str = "https://agent.example";

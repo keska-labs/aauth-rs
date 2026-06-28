@@ -2,20 +2,18 @@ mod support;
 
 use std::sync::{Arc, Mutex, OnceLock};
 
+use aauth::VerifiedToken;
 use aauth::clear_metadata_cache;
-use aauth::client::{create_aauth_fetch, AAuthFetchOptions};
-use aauth::headers::{build_aauth_requirement, parse_aauth_requirement, AAuthRequirementParams};
+use aauth::client::{AAuthFetchOptions, create_aauth_fetch};
+use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
 use aauth::http::HttpRequest;
 use aauth::metadata::CachedMetadataFetcher;
 use aauth::server::{
-    verify_token, InteractionManager, InteractionManagerOptions, VerifyTokenOptions,
+    InteractionManager, InteractionManagerOptions, VerifyTokenOptions, verify_token,
 };
 use aauth::types::{AuthOkResponse, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
-use aauth::VerifiedToken;
 
-use aauth::{
-    create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt, TestKeys,
-};
+use aauth::{TestKeys, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt};
 
 use support::{MockServer, MockServerConfig};
 
@@ -161,9 +159,10 @@ async fn verify_token_key_binding_failed() {
     .await
     .unwrap_err();
 
-    assert!(err
-        .to_string()
-        .contains("cnf.jwk thumbprint does not match"));
+    assert!(
+        err.to_string()
+            .contains("cnf.jwk thumbprint does not match")
+    );
 }
 
 #[tokio::test]

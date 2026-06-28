@@ -1,9 +1,10 @@
 [package]
 name = "aauth"
-version = "0.1.0"
+version = "0.0.1"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+authors.workspace = true
 description = "Rust implementation of the AAuth authorization protocol"
 readme = "../README.md"
 keywords = ["aauth", "oauth", "authentication", "http-signatures"]

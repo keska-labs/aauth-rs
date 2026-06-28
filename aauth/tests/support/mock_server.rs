@@ -1,22 +1,22 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use aauth::VerifiedToken;
 use aauth::error::Result;
-use aauth::headers::{build_aauth_requirement, AAuthRequirementParams};
+use aauth::headers::{AAuthRequirementParams, build_aauth_requirement};
 use aauth::http::{HttpClient, HttpRequest, HttpResponse};
 use aauth::metadata::clear_metadata_cache;
 use aauth::server::{
-    create_resource_token, verify_token, InteractionManager, InteractionManagerOptions,
-    ResourceTokenOptions, VerifyTokenOptions,
+    InteractionManager, InteractionManagerOptions, ResourceTokenOptions, VerifyTokenOptions,
+    create_resource_token, verify_token,
 };
 use aauth::types::{
     AgentOkResponse, AuthOkResponse, AuthServerMetadata, JwksDocument, MetadataDocument,
     RequirementLevel, TokenExchangeRequest, TokenResponseBody,
 };
-use aauth::VerifiedToken;
 use async_trait::async_trait;
 
-use aauth::{mint_auth_jwt, TestKeys};
+use aauth::{TestKeys, mint_auth_jwt};
 
 pub struct MockServerConfig {
     pub keys: TestKeys,

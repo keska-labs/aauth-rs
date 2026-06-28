@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use jsonwebtoken::{encode, Algorithm, Header};
+use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
 use crate::jwt::{ActClaim, AuthClaims, CnfClaim, ResourceClaims};
@@ -48,9 +48,7 @@ impl AuthJwtMinter for TestAuthJwtMinter {
             aud: aud.into(),
             jti: Uuid::new_v4().to_string(),
             agent: agent.into(),
-            act: ActClaim {
-                sub: agent.into(),
-            },
+            act: ActClaim { sub: agent.into() },
             cnf: CnfClaim {
                 jwk: self.keys.agent_ephemeral.public_jwk(),
             },
@@ -66,12 +64,7 @@ impl AuthJwtMinter for TestAuthJwtMinter {
         header.typ = Some(JwtTyp::Auth.as_str().into());
         header.kid = self.keys.auth_server.kid().map(str::to_string);
 
-        encode(
-            &header,
-            &claims,
-            &self.keys.auth_server.encoding_key(),
-        )
-        .expect("sign auth jwt")
+        encode(&header, &claims, &self.keys.auth_server.encoding_key()).expect("sign auth jwt")
     }
 }
 

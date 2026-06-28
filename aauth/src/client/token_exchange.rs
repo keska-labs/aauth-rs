@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::client::deferred::{poll_deferred, DeferredOptions, InteractionCallback};
 use crate::client::SignedFetch;
+use crate::client::deferred::{DeferredOptions, InteractionCallback, poll_deferred};
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::http::HttpRequest;
-use crate::types::{AAuthProtocolError, AuthServerMetadata, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
+use crate::types::{
+    AAuthProtocolError, AuthServerMetadata, RequirementLevel, TokenExchangeRequest,
+    TokenResponseBody,
+};
 
 const PREFER_WAIT: u64 = 45;
 

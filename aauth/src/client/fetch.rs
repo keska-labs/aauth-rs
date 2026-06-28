@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::client::deferred::{poll_deferred, DeferredOptions, InteractionCallback};
-use crate::client::signed::{sign_request_with_auth_token, HttpClientAdapter};
-use crate::client::token_exchange::{exchange_token, TokenExchangeOptions};
+use crate::client::deferred::{DeferredOptions, InteractionCallback, poll_deferred};
+use crate::client::signed::{HttpClientAdapter, sign_request_with_auth_token};
+use crate::client::token_exchange::{TokenExchangeOptions, exchange_token};
 use crate::client::{KeyMaterialProvider, SignedFetch, SignedFetchOptions};
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;

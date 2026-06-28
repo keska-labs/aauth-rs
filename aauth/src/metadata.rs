@@ -32,8 +32,7 @@ fn last_fetch_map() -> &'static Mutex<HashMap<String, Instant>> {
     LAST_FETCH.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-static JWKS_CACHE: std::sync::OnceLock<Mutex<HashMap<String, JwkSet>>> =
-    std::sync::OnceLock::new();
+static JWKS_CACHE: std::sync::OnceLock<Mutex<HashMap<String, JwkSet>>> = std::sync::OnceLock::new();
 
 fn jwks_cache() -> &'static Mutex<HashMap<String, JwkSet>> {
     JWKS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
