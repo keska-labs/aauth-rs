@@ -9,7 +9,8 @@ use aauth::server::{
     create_resource_token, verify_token, InteractionManager, InteractionManagerOptions,
     ResourceTokenOptions, VerifyTokenOptions,
 };
-use aauth::types::{RequirementLevel, VerifiedToken};
+use aauth::types::RequirementLevel;
+use aauth::VerifiedToken;
 use async_trait::async_trait;
 use serde_json::{json, Value};
 

@@ -10,7 +10,8 @@ use aauth::metadata::CachedMetadataFetcher;
 use aauth::server::{
     verify_token, InteractionManager, InteractionManagerOptions, VerifyTokenOptions,
 };
-use aauth::types::{RequirementLevel, VerifiedToken};
+use aauth::types::RequirementLevel;
+use aauth::VerifiedToken;
 
 use support::{
     create_agent_jwt, create_auth_jwt, create_key_provider, create_test_keys, MockServer,

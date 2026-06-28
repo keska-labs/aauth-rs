@@ -1,8 +1,15 @@
+mod claims;
+mod decode;
+
+pub use claims::{
+    ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, VerifiedToken,
+};
+pub use decode::{decode_unverified, decode_verified, verified_validation};
+
 use std::collections::BTreeMap;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use jsonwebtoken::decode_header;
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::error::{JwtError, Result};
@@ -20,32 +27,14 @@ impl JwtTyp {
     }
 }
 
-pub fn decode_jwt_payload(jwt: &str) -> Result<Value> {
-    let parts: Vec<&str> = jwt.split('.').collect();
-    if parts.len() != 3 {
-        return Err(JwtError::Decode("invalid JWT structure".into()).into());
-    }
-    let payload = URL_SAFE_NO_PAD
-        .decode(parts[1])
-        .map_err(|e| JwtError::Decode(e.to_string()))?;
-    serde_json::from_slice(&payload).map_err(|e| JwtError::Decode(e.to_string()).into())
-}
-
-pub fn jwk_thumbprint(jwk: &Value) -> Result<String> {
+pub fn jwk_thumbprint(jwk: &OkpJwk) -> Result<String> {
     let canonical = canonical_jwk_for_thumbprint(jwk)?;
     let digest = Sha256::digest(canonical.as_bytes());
     Ok(URL_SAFE_NO_PAD.encode(digest))
 }
 
-fn canonical_jwk_for_thumbprint(jwk: &Value) -> Result<String> {
-    let obj = jwk
-        .as_object()
-        .ok_or_else(|| JwtError::Decode("JWK must be an object".into()))?;
-
-    let kty = obj
-        .get("kty")
-        .and_then(Value::as_str)
-        .ok_or_else(|| JwtError::Decode("JWK missing kty".into()))?;
+fn canonical_jwk_for_thumbprint(jwk: &OkpJwk) -> Result<String> {
+    let kty = jwk.kty.as_str();
 
     let required: Vec<&str> = match kty {
         "OKP" => vec!["crv", "kty", "x"],
@@ -54,10 +43,15 @@ fn canonical_jwk_for_thumbprint(jwk: &Value) -> Result<String> {
         _ => return Err(JwtError::Decode(format!("unsupported kty: {kty}")).into()),
     };
 
+    let value = serde_json::to_value(jwk).map_err(|e| JwtError::Decode(e.to_string()))?;
+    let obj = value
+        .as_object()
+        .ok_or_else(|| JwtError::Decode("JWK must be an object".into()))?;
+
     let mut members = BTreeMap::new();
     for key in required {
-        if let Some(value) = obj.get(key) {
-            members.insert(key, value.clone());
+        if let Some(member) = obj.get(key) {
+            members.insert(key, member.clone());
         }
     }
 
@@ -67,24 +61,23 @@ fn canonical_jwk_for_thumbprint(jwk: &Value) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use std::str::FromStr;
 
     #[test]
     fn thumbprint_is_stable() {
-        let jwk = json!({
-            "kty": "OKP",
-            "crv": "Ed25519",
-            "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
-        });
+        let jwk = OkpJwk {
+            kty: "OKP".into(),
+            crv: "Ed25519".into(),
+            x: "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo".into(),
+            kid: None,
+        };
         let tp = jwk_thumbprint(&jwk).unwrap();
         assert!(!tp.is_empty());
         assert_eq!(tp, jwk_thumbprint(&jwk).unwrap());
     }
 
     #[test]
-    fn from_jwt_round_trip() {
-        use std::str::FromStr;
-
+    fn jwt_typ_from_str_round_trip() {
         for typ in [JwtTyp::Agent, JwtTyp::Auth, JwtTyp::Resource] {
             assert_eq!(JwtTyp::from_str(typ.as_str()), Ok(typ));
         }

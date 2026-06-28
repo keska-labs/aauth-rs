@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use aauth::client::{KeyMaterialProvider, SignedFetch};
+use aauth::client::KeyMaterialProvider;
 use aauth::error::Result;
-use aauth::jwt::jwk_thumbprint;
+use aauth::jwt::{jwk_thumbprint, ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk};
 use aauth::types::{JwtTyp, KeyMaterial, SignatureKey, SignatureKeyJwt};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -10,6 +10,7 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use rand::rngs::OsRng;
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct TestKeyPair {
@@ -26,7 +27,7 @@ impl TestKeyPair {
         let verifying_key = signing_key.verifying_key();
         let pub_jwk = ed25519_public_jwk(&verifying_key, None);
         let priv_jwk = ed25519_private_jwk(&signing_key, &verifying_key);
-        let thumbprint = jwk_thumbprint(&pub_jwk).expect("thumbprint");
+        let thumbprint = jwk_thumbprint(&okp_jwk(&pub_jwk)).expect("thumbprint");
         Self {
             signing_key,
             verifying_key,
@@ -41,7 +42,7 @@ impl TestKeyPair {
         let verifying_key = signing_key.verifying_key();
         let pub_jwk = ed25519_public_jwk(&verifying_key, Some(kid));
         let priv_jwk = ed25519_private_jwk(&signing_key, &verifying_key);
-        let thumbprint = jwk_thumbprint(&pub_jwk).expect("thumbprint");
+        let thumbprint = jwk_thumbprint(&okp_jwk(&pub_jwk)).expect("thumbprint");
         Self {
             signing_key,
             verifying_key,
@@ -79,16 +80,20 @@ pub fn create_agent_jwt(keys: &TestKeys, agent_url: &str, sub: &str) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
-        .as_secs() as usize;
+        .as_secs() as i64;
 
-    let claims = json!({
-        "iss": agent_url,
-        "dwk": "aauth-agent.json",
-        "sub": sub,
-        "cnf": { "jwk": keys.agent_ephemeral.pub_jwk },
-        "iat": now,
-        "exp": now + 3600,
-    });
+    let claims = AgentClaims {
+        iss: agent_url.into(),
+        dwk: "aauth-agent.json".into(),
+        sub: sub.into(),
+        jti: Uuid::new_v4().to_string(),
+        cnf: CnfClaim {
+            jwk: okp_jwk(&keys.agent_ephemeral.pub_jwk),
+        },
+        iat: now,
+        exp: now + 3600,
+        ps: None,
+    };
 
     let mut header = Header::new(Algorithm::EdDSA);
     header.typ = Some(JwtTyp::Agent.as_str().into());
@@ -108,23 +113,27 @@ pub fn create_auth_jwt(
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
-        .as_secs() as usize;
+        .as_secs() as i64;
 
-    let mut claims = json!({
-        "iss": iss,
-        "dwk": "aauth-person.json",
-        "aud": aud,
-        "agent": agent,
-        "cnf": { "jwk": keys.agent_ephemeral.pub_jwk },
-        "iat": now,
-        "exp": now + 3600,
-    });
-    if let Some(sub) = sub {
-        claims["sub"] = json!(sub);
-    }
-    if let Some(scope) = scope {
-        claims["scope"] = json!(scope);
-    }
+    let claims = AuthClaims {
+        iss: iss.into(),
+        dwk: "aauth-person.json".into(),
+        aud: aud.into(),
+        jti: Uuid::new_v4().to_string(),
+        agent: agent.into(),
+        act: ActClaim {
+            sub: agent.into(),
+        },
+        cnf: CnfClaim {
+            jwk: okp_jwk(&keys.agent_ephemeral.pub_jwk),
+        },
+        iat: now,
+        exp: now + 3600,
+        sub: sub.map(str::to_string),
+        scope: scope.map(str::to_string),
+        tenant: None,
+        mission: None,
+    };
 
     let mut header = Header::new(Algorithm::EdDSA);
     header.typ = Some(JwtTyp::Auth.as_str().into());
@@ -157,6 +166,10 @@ impl KeyMaterialProvider for StaticKeyMaterialProvider {
 
 pub fn create_key_provider(keys: &TestKeys, agent_jwt: String) -> Arc<dyn KeyMaterialProvider> {
     Arc::new(StaticKeyMaterialProvider::new(keys, agent_jwt))
+}
+
+fn okp_jwk(value: &Value) -> OkpJwk {
+    serde_json::from_value(value.clone()).expect("valid OKP JWK")
 }
 
 fn ed25519_public_jwk(key: &VerifyingKey, kid: Option<&str>) -> Value {

@@ -161,45 +161,6 @@ pub struct Mission {
     pub s256: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VerifiedAgentToken {
-    pub iss: String,
-    pub dwk: String,
-    pub sub: String,
-    pub cnf_jwk: Value,
-    pub iat: i64,
-    pub exp: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VerifiedAuthToken {
-    pub iss: String,
-    pub dwk: String,
-    pub aud: Value,
-    pub agent: String,
-    pub cnf_jwk: Value,
-    pub sub: Option<String>,
-    pub scope: Option<String>,
-    pub tenant: Option<String>,
-    pub iat: i64,
-    pub exp: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VerifiedToken {
-    Agent(VerifiedAgentToken),
-    Auth(VerifiedAuthToken),
-}
-
-impl VerifiedToken {
-    pub fn token_type(&self) -> &'static str {
-        match self {
-            Self::Agent(_) => "agent",
-            Self::Auth(_) => "auth",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthServerMetadata {
     pub token_endpoint: String,

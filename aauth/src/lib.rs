@@ -27,7 +27,7 @@ pub use headers::{
     parse_aauth_requirement, parse_capabilities_header, parse_mission_header,
 };
 pub use interaction_code::{canonicalize_code, generate_code};
-pub use jwt::{decode_jwt_payload, jwk_thumbprint};
+pub use jwt::{jwk_thumbprint, AgentClaims, AuthClaims, OkpJwk, VerifiedToken};
 pub use metadata::{clear_metadata_cache, CachedMetadataFetcher, MetadataFetcher};
 pub use types::*;
 
