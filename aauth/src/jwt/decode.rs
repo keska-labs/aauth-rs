@@ -1,4 +1,6 @@
-use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation, dangerous::insecure_decode, decode};
+use jsonwebtoken::{
+    Algorithm, DecodingKey, TokenData, Validation, dangerous::insecure_decode, decode,
+};
 use serde::de::DeserializeOwned;
 
 use crate::error::{JwtError, Result};

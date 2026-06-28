@@ -4,8 +4,8 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use jsonwebtoken::{EncodingKey, jwk::JwkSet};
-use rand::rngs::SysRng;
 use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
 
 pub trait OkpSigningKey: Clone + Send + Sync {
     fn thumbprint(&self) -> &str;
