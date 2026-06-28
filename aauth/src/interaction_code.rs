@@ -1,4 +1,4 @@
-use rand::RngCore;
+use rand::Rng;
 
 /// Crockford base32 alphabet — omits I, L, O, U to avoid visual ambiguity.
 pub const CROCKFORD32: &str = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -7,7 +7,7 @@ pub const CROCKFORD32: &str = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// in canonical form: `XXXX-XXXX`.
 pub fn generate_code() -> String {
     let mut buf = [0u8; 5];
-    rand::thread_rng().fill_bytes(&mut buf);
+    rand::rng().fill_bytes(&mut buf);
     let mut n = 0u128;
     for b in buf {
         n = (n << 8) | u128::from(b);

@@ -4,7 +4,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use jsonwebtoken::{EncodingKey, jwk::JwkSet};
-use rand::rngs::OsRng;
+use rand::rngs::SysRng;
 
 pub trait OkpSigningKey: Clone + Send + Sync {
     fn thumbprint(&self) -> &str;
@@ -25,7 +25,7 @@ pub struct Ed25519KeyPair {
 
 impl Ed25519KeyPair {
     pub fn generate() -> Self {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = SigningKey::generate(&mut SysRng);
         let verifying_key = signing_key.verifying_key();
         let public_jwk = Self::public_jwk_for(&verifying_key, None);
         let thumbprint = jwk_thumbprint(&public_jwk).expect("thumbprint");
