@@ -5,6 +5,7 @@ use aauth::VerifiedToken;
 use aauth::error::Result;
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement};
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
+use aauth::resolve_resource_token_audience;
 use aauth::server::{
     InteractionManager, ResourceTokenOptions, VerifyTokenOptions, create_resource_token,
     verify_token,
@@ -70,8 +71,13 @@ impl MockServerState {
         let person_metadata = format!("{}/.well-known/aauth-person.json", self.person_server_url);
         if url == person_metadata {
             let body = PersonServerMetadata {
+                issuer: Some(self.person_server_url.clone()),
                 token_endpoint: format!("{}/aauth/token", self.person_server_url),
                 jwks_uri: Some(format!("{}/jwks", self.person_server_url)),
+                name: None,
+                permission_endpoint: None,
+                interaction_endpoint: None,
+                mission_endpoint: None,
             };
             return Ok(Response::from(
                 http::Response::builder()
@@ -195,10 +201,17 @@ impl MockServerState {
             }
             VerifiedToken::Agent(agent) if self.require_auth_token => {
                 let signer = self.keys.resource_token_signer();
+                let audience = resolve_resource_token_audience(
+                    &agent,
+                    None,
+                    Some(&self.person_server_url),
+                )
+                .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
+
                 let resource_token = create_resource_token(
                     ResourceTokenOptions {
                         resource: self.resource_url.clone(),
-                        audience: self.person_server_url.clone(),
+                        audience,
                         agent: agent.iss.clone(),
                         agent_jkt: self.keys.agent_ephemeral.thumbprint().to_string(),
                         scope: None,

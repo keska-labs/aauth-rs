@@ -12,17 +12,20 @@ use aauth::types::{AgentOkResponse, AuthOkResponse, TokenResponseBody};
 use aauth::{create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt};
 
 use support::axum_server::{ServerConfig, SpawnedServer, spawn_test_server};
+use aauth::InMemoryOpaqueAccessStore;
+use aauth::OpaqueAccessStore;
 
 const AGENT_ID: &str = "aauth:test@example.com";
 
 fn build_client(
     spawned: &SpawnedServer,
     person_server_url: Option<String>,
+    ps: Option<&str>,
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<ClarificationCallback>,
     provider: Option<std::sync::Arc<dyn aauth::KeyMaterialProvider>>,
 ) -> aauth::client::reqwest::ClientWithMiddleware {
-    let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID, ps);
     let provider = provider.unwrap_or_else(|| create_key_provider(&spawned.keys, agent_jwt));
 
     ClientBuilder::new(reqwest::Client::new())
@@ -56,7 +59,7 @@ async fn direct_agent_grant_over_http() {
     })
     .await;
 
-    let client = build_client(&spawned, None, None, None, None);
+    let client = build_client(&spawned, None, None, None, None, None);
     let response = client
         .get(format!("{}/api/data", spawned.resource_url))
         .send()
@@ -81,6 +84,7 @@ async fn auth_token_challenge_over_http() {
     let client = build_client(
         &spawned,
         Some(spawned.person_server_url.clone()),
+        Some(&spawned.person_server_url),
         None,
         None,
         None,
@@ -95,6 +99,96 @@ async fn auth_token_challenge_over_http() {
     let body: AuthOkResponse = response.json().await.expect("json");
     assert_eq!(body.status, "ok");
     assert_eq!(body.user.as_deref(), Some("user-123"));
+}
+
+#[tokio::test]
+async fn ps_from_agent_claim() {
+    let spawned = spawn_test_server(ServerConfig {
+        require_auth_token: true,
+        with_auth_routes: true,
+        ..Default::default()
+    })
+    .await;
+
+    let client = build_client(
+        &spawned,
+        None,
+        Some(&spawned.person_server_url),
+        None,
+        None,
+        None,
+    );
+    let response = client
+        .get(format!("{}/api/data", spawned.resource_url))
+        .send()
+        .await
+        .expect("request");
+
+    assert!(response.status().is_success());
+    let body: AuthOkResponse = response.json().await.expect("json");
+    assert_eq!(body.user.as_deref(), Some("user-123"));
+}
+
+#[tokio::test]
+async fn federated_over_http() {
+    let spawned = spawn_test_server(ServerConfig {
+        require_auth_token: true,
+        with_auth_routes: true,
+        federated: true,
+        ..Default::default()
+    })
+    .await;
+
+    let client = build_client(
+        &spawned,
+        Some(spawned.person_server_url.clone()),
+        Some(&spawned.person_server_url),
+        None,
+        None,
+        None,
+    );
+    let response = client
+        .get(format!("{}/api/data", spawned.resource_url))
+        .send()
+        .await
+        .expect("request");
+
+    assert!(response.status().is_success());
+    let body: AuthOkResponse = response.json().await.expect("json");
+    assert_eq!(body.user.as_deref(), Some("user-federated"));
+}
+
+#[tokio::test]
+async fn resource_managed_over_http() {
+    let spawned = spawn_test_server(ServerConfig {
+        resource_managed: true,
+        ..Default::default()
+    })
+    .await;
+
+    let manager_cb = Arc::clone(&spawned.resource_interaction_manager);
+    let opaque_store_cb: Arc<InMemoryOpaqueAccessStore> = Arc::clone(&spawned.opaque_store);
+    let pending_id_capture_cb = Arc::clone(&spawned.resource_pending_id_capture);
+    let agent_url = spawned.agent_url.clone();
+
+    let on_interaction: InteractionCallback = Arc::new(move |_url, _code| {
+        if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
+            let opaque = opaque_store_cb.issue(&agent_url);
+            let _ = manager_cb.resolve_opaque_access(&id, opaque);
+        }
+    });
+
+    let client = build_client(&spawned, None, None, Some(on_interaction), None, None);
+    let response = client
+        .get(format!("{}/api/data", spawned.resource_url))
+        .send()
+        .await
+        .expect("request");
+
+    assert!(response.status().is_success());
+    let body: AgentOkResponse = response.json().await.expect("json");
+    assert_eq!(body.status, "ok");
+    assert_eq!(body.agent, spawned.agent_url);
 }
 
 #[tokio::test]
@@ -122,6 +216,7 @@ async fn deferred_interaction_over_http() {
         with_auth_routes: true,
         deferred_mode: true,
         clarification_on_poll: false,
+        ..Default::default()
     })
     .await;
 
@@ -159,6 +254,7 @@ async fn deferred_interaction_over_http() {
     let client = build_client(
         &spawned,
         Some(spawned.person_server_url.clone()),
+        Some(&spawned.person_server_url),
         Some(on_interaction),
         None,
         None,
@@ -188,6 +284,7 @@ async fn clarification_deferred_over_http() {
         with_auth_routes: true,
         deferred_mode: true,
         clarification_on_poll: true,
+        ..Default::default()
     })
     .await;
 
@@ -231,6 +328,7 @@ async fn clarification_deferred_over_http() {
     let client = build_client(
         &spawned,
         Some(spawned.person_server_url.clone()),
+        Some(&spawned.person_server_url),
         Some(on_interaction),
         Some(on_clarification),
         None,
@@ -261,10 +359,15 @@ async fn invalid_signature_rejected_over_http() {
     .await;
 
     let wrong_keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(
+        &spawned.keys,
+        &spawned.agent_url,
+        AGENT_ID,
+        Some(&spawned.person_server_url),
+    );
     let provider = create_key_provider(&wrong_keys, agent_jwt);
 
-    let client = build_client(&spawned, None, None, None, Some(provider));
+    let client = build_client(&spawned, None, None, None, None, Some(provider));
     let response = client
         .get(format!("{}/api/data", spawned.resource_url))
         .send()

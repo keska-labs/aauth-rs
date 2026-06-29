@@ -92,7 +92,7 @@ async fn aauth_requirement_header_round_trip_approval() {
 async fn verify_token_agent_jwt() {
     let _guard = test_lock();
     let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
 
     let fetcher = static_agent_metadata_fetcher(&keys, AGENT_URL);
     let result = verify_token(VerifyTokenOptions {
@@ -151,7 +151,7 @@ async fn verify_token_auth_jwt() {
 async fn verify_token_key_binding_failed() {
     let _guard = test_lock();
     let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let wrong = create_test_keys();
 
     let fetcher = static_agent_metadata_fetcher(&keys, AGENT_URL);
@@ -173,7 +173,7 @@ async fn verify_token_key_binding_failed() {
 async fn full_401_challenge_response_direct_grant() {
     let _guard = test_lock();
     let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let provider = create_key_provider(&keys, agent_jwt);
 
     let server = MockServer::new(mock_config(&keys, false, None, None, None));
@@ -195,7 +195,7 @@ async fn full_401_challenge_response_direct_grant() {
 async fn second_request_reuses_cached_token() {
     let _guard = test_lock();
     let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let provider = create_key_provider(&keys, agent_jwt);
 
     let call_count = Arc::new(Mutex::new(0usize));
@@ -231,7 +231,7 @@ async fn second_request_reuses_cached_token() {
 async fn justification_and_hints_pass_through() {
     let _guard = test_lock();
     let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let provider = create_key_provider(&keys, agent_jwt);
     let captured = Arc::new(Mutex::new(None));
 
@@ -272,7 +272,7 @@ async fn justification_and_hints_pass_through() {
 async fn deferred_interaction_grant() {
     let _guard = test_lock();
     let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let provider = create_key_provider(&keys, agent_jwt);
 
     let manager = Arc::new(InteractionManager::new(InteractionManagerOptions {

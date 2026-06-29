@@ -152,12 +152,6 @@ impl AAuthInjector {
                     let challenge = parse_aauth_requirement(header)?;
                     if challenge.requirement == RequirementLevel::AuthToken {
                         if let Some(resource_token) = challenge.resource_token {
-                            if self.person_server_url.is_none() {
-                                return Err(AAuthError::Message(
-                                    "auth-token challenge received but no person_server_url configured"
-                                        .into(),
-                                ));
-                            }
                             return Ok(InjectorStep::ExchangeToken { resource_token });
                         }
                     }

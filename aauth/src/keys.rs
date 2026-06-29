@@ -123,6 +123,7 @@ pub struct TestKeys {
     pub agent_root: Ed25519KeyPair,
     pub agent_ephemeral: Ed25519KeyPair,
     pub person_server: Ed25519KeyPair,
+    pub access_server: Ed25519KeyPair,
     pub resource: Ed25519KeyPair,
 }
 
@@ -132,6 +133,7 @@ impl TestKeys {
             agent_root: Ed25519KeyPair::generate_with_kid("agent-root-1"),
             agent_ephemeral: Ed25519KeyPair::generate(),
             person_server: Ed25519KeyPair::generate_with_kid("auth-1"),
+            access_server: Ed25519KeyPair::generate_with_kid("access-1"),
             resource: Ed25519KeyPair::generate_with_kid("resource-1"),
         }
     }
@@ -144,6 +146,20 @@ impl TestKeys {
         StaticMetadataFetcher::new(
             format!("{person_server_url}/jwks"),
             self.person_server.jwk_set(),
+        )
+    }
+
+    pub fn access_metadata_fetcher(&self, access_server_url: &str) -> StaticMetadataFetcher {
+        StaticMetadataFetcher::new(
+            format!("{access_server_url}/jwks"),
+            self.access_server.jwk_set(),
+        )
+    }
+
+    pub fn resource_metadata_fetcher(&self, resource_url: &str) -> StaticMetadataFetcher {
+        StaticMetadataFetcher::new(
+            format!("{resource_url}/jwks"),
+            self.resource.jwk_set(),
         )
     }
 }

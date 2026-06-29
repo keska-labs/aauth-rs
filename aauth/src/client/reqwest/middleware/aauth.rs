@@ -6,6 +6,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
 use crate::client::injector::{AAuthClientOptions, AAuthInjector, AuthAttempt, InjectorStep};
+use crate::client::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use crate::client::reqwest::deferred::{DeferredOptions, poll_deferred_with};
 use crate::client::reqwest::middleware::signing::{SigningMiddleware, sign_and_run};
 use crate::client::reqwest::send::SignedSend;
@@ -140,18 +141,36 @@ impl AAuthMiddleware {
                         },
                     )
                     .await?;
+
+                    let retry = {
+                        let mut injector = self.injector.lock().unwrap();
+                        let step = injector.observe_response(
+                            &origin,
+                            &attempt,
+                            result.response.status(),
+                            result.response.headers(),
+                        )?;
+                        matches!(step, InjectorStep::Finish)
+                    };
+
+                    if retry {
+                        continue;
+                    }
                     return Ok(result.response);
                 }
                 InjectorStep::Invalidate(_) => continue,
                 InjectorStep::Continue => continue,
                 InjectorStep::ExchangeToken { resource_token } => {
-                    let person_server_url =
-                        self.options.person_server_url.clone().ok_or_else(|| {
-                            AAuthError::Message(
-                                "auth-token challenge received but no person_server_url configured"
-                                    .into(),
-                            )
-                        })?;
+                    let material = self
+                        .options
+                        .provider
+                        .key_material()
+                        .await?;
+                    let agent_jwt = agent_jwt_from_signature_key(&material.signature_key)?;
+                    let person_server_url = resolve_person_server_url(
+                        self.options.person_server_url.as_deref(),
+                        agent_jwt,
+                    )?;
 
                     let capabilities = self
                         .options

@@ -15,7 +15,7 @@ pub trait KeyMaterialProvider: Send + Sync {
 }
 
 pub trait AgentJwtMinter: Send + Sync {
-    fn mint_agent_jwt(&self, agent_url: &str, sub: &str) -> String;
+    fn mint_agent_jwt(&self, agent_url: &str, sub: &str, ps: Option<&str>) -> String;
 }
 
 #[derive(Clone)]
@@ -30,7 +30,7 @@ impl TestAgentJwtMinter {
 }
 
 impl AgentJwtMinter for TestAgentJwtMinter {
-    fn mint_agent_jwt(&self, agent_url: &str, sub: &str) -> String {
+    fn mint_agent_jwt(&self, agent_url: &str, sub: &str, ps: Option<&str>) -> String {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -46,7 +46,7 @@ impl AgentJwtMinter for TestAgentJwtMinter {
             },
             iat: now,
             exp: now + 3600,
-            ps: None,
+            ps: ps.map(str::to_string),
         };
 
         let mut header = Header::new(Algorithm::EdDSA);
@@ -91,8 +91,13 @@ impl KeyMaterialProvider for StaticKeyMaterialProvider {
     }
 }
 
-pub fn mint_agent_jwt(keys: &TestKeys, agent_url: &str, sub: &str) -> String {
-    keys.agent_jwt_minter().mint_agent_jwt(agent_url, sub)
+pub fn mint_agent_jwt(
+    keys: &TestKeys,
+    agent_url: &str,
+    sub: &str,
+    ps: Option<&str>,
+) -> String {
+    keys.agent_jwt_minter().mint_agent_jwt(agent_url, sub, ps)
 }
 
 pub fn create_key_provider(keys: &TestKeys, agent_jwt: String) -> Arc<dyn KeyMaterialProvider> {

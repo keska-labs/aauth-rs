@@ -22,7 +22,7 @@ async fn main() -> aauth::Result<()> {
     })
     .await;
 
-    let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID);
+    let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID, None);
     let provider = create_key_provider(&spawned.keys, agent_jwt);
 
     let client = ClientBuilder::new(reqwest::Client::new())

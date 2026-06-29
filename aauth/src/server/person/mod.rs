@@ -3,6 +3,9 @@ pub mod keys;
 #[cfg(feature = "server-axum")]
 pub mod axum;
 
-mod interaction;
+#[cfg(feature = "server-axum")]
+pub mod federation;
 
-pub use interaction::{InteractionManager, InteractionManagerOptions, PendingRequest};
+pub use crate::server::interaction::{
+    InteractionManager, InteractionManagerOptions, PendingRequest,
+};

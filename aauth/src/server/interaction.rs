@@ -12,6 +12,7 @@ pub struct PendingRequest {
     pub code: String,
     pub created_at: u64,
     pub result: Arc<Mutex<Option<Result<TokenResponseBody, String>>>>,
+    pub opaque_access: Arc<Mutex<Option<String>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +59,7 @@ impl InteractionManager {
             code: code.clone(),
             created_at,
             result: Arc::new(Mutex::new(None)),
+            opaque_access: Arc::new(Mutex::new(None)),
         };
 
         self.pending
@@ -99,6 +101,22 @@ impl InteractionManager {
             .cloned()
             .ok_or_else(|| format!("No pending request with id: {id}"))?;
         *pending.result.lock().unwrap() = Some(Ok(value));
+        Ok(())
+    }
+
+    pub fn resolve_opaque_access(&self, id: &str, opaque: String) -> Result<(), String> {
+        let pending = self
+            .pending
+            .lock()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| format!("No pending request with id: {id}"))?;
+        *pending.opaque_access.lock().unwrap() = Some(opaque);
+        *pending.result.lock().unwrap() = Some(Ok(TokenResponseBody {
+            auth_token: String::new(),
+            expires_in: 0,
+        }));
         Ok(())
     }
 

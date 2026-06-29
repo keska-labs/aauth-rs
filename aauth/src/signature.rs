@@ -161,7 +161,7 @@ mod tests {
 
         let keys = create_test_keys();
         let agent_url = "http://127.0.0.1";
-        let agent_jwt = mint_agent_jwt(&keys, agent_url, "aauth:test@example.com");
+    let agent_jwt = mint_agent_jwt(&keys, agent_url, "aauth:test@example.com", None);
         let provider = create_key_provider(&keys, agent_jwt);
         let material = provider.key_material().await.unwrap();
 

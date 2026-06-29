@@ -7,8 +7,9 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
 use crate::keys::TestKeys;
-use crate::server::person::InteractionManager;
-use crate::server::person::keys::mint_auth_jwt;
+use crate::metadata::MetadataFetcher;
+use crate::server::interaction::InteractionManager;
+use crate::server::person::federation::fulfill_token_exchange;
 use crate::types::{
     ClarificationChallenge, ClarificationResponse, JwksDocument, PersonServerMetadata,
     TokenExchangeRequest, TokenResponseBody,
@@ -26,14 +27,21 @@ pub struct PersonServerState {
     pub pending_id_capture: Option<Arc<Mutex<Option<String>>>>,
     pub clarification_state: Option<Arc<Mutex<HashMap<String, bool>>>>,
     pub clarification_prompt: bool,
+    pub fetcher: Arc<dyn MetadataFetcher>,
+    pub http_client: reqwest::Client,
 }
 
 pub async fn person_metadata_handler(
     State(state): State<PersonServerState>,
 ) -> Json<PersonServerMetadata> {
     Json(PersonServerMetadata {
+        issuer: Some(state.person_server_url.clone()),
         token_endpoint: format!("{}/aauth/token", state.person_server_url),
         jwks_uri: Some(state.person_jwks_uri.clone()),
+        name: None,
+        permission_endpoint: None,
+        interaction_endpoint: None,
+        mission_endpoint: None,
     })
 }
 
@@ -47,34 +55,38 @@ pub async fn token_exchange_handler(
     State(state): State<PersonServerState>,
     body: Option<Json<TokenExchangeRequest>>,
 ) -> Result<Json<TokenResponseBody>, StatusCode> {
-    let _request = body.map(|Json(b)| b);
+    let request = body.map(|Json(b)| b);
+    let resource_token = request
+        .as_ref()
+        .map(|r| r.resource_token.as_str())
+        .ok_or(StatusCode::BAD_REQUEST)?;
 
-    let auth_jwt = mint_auth_jwt(
+    let response = fulfill_token_exchange(
         &state.keys,
         &state.person_server_url,
         &state.resource_url,
         &state.agent_url,
-        Some("user-123"),
-        None,
-    );
+        resource_token,
+        Arc::clone(&state.fetcher),
+        &state.http_client,
+    )
+    .await
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    Ok(Json(TokenResponseBody {
-        auth_token: auth_jwt,
-        expires_in: 3600,
-    }))
+    Ok(Json(response))
 }
 
 pub async fn token_exchange_deferred_handler(
     State(state): State<PersonServerState>,
     body: Option<Json<TokenExchangeRequest>>,
 ) -> Result<Response, StatusCode> {
-    let _request = body.map(|Json(b)| b);
-
     if !state.deferred_mode {
-        return token_exchange_handler(State(state), None)
+        return token_exchange_handler(State(state), body)
             .await
             .map(|json| json.into_response());
     }
+
+    let _request = body.map(|Json(b)| b);
 
     let (headers, pending) = state.interaction_manager.create_pending();
 

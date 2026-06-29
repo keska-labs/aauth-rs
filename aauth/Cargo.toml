@@ -17,7 +17,7 @@ default = ["client", "client-reqwest", "server", "server-axum"]
 client = []
 client-reqwest = ["client", "dep:reqwest", "dep:reqwest-middleware", "dep:http-body-util", "dep:tokio"]
 server = []
-server-axum = ["server", "dep:axum", "dep:tower"]
+server-axum = ["server", "dep:axum", "dep:tower", "dep:reqwest"]
 
 [dependencies]
 async-trait.workspace = true

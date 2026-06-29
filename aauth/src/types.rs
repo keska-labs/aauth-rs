@@ -164,18 +164,111 @@ pub struct Mission {
     pub s256: String,
 }
 
+/// Person Server metadata (`/.well-known/aauth-person.json`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonServerMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
     pub token_endpoint: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwks_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interaction_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mission_endpoint: Option<String>,
 }
 
+impl PersonServerMetadata {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.token_endpoint.is_empty() {
+            return Err("Person server metadata missing token_endpoint".into());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::{AccessServerMetadata, PersonServerMetadata, ResourceServerMetadata};
+
+    #[test]
+    fn person_metadata_deserializes_optional_fields() {
+        let json = r#"{
+            "issuer": "https://person.example",
+            "token_endpoint": "https://person.example/aauth/token",
+            "jwks_uri": "https://person.example/jwks",
+            "name": "Example PS"
+        }"#;
+        let meta: PersonServerMetadata = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(meta.issuer.as_deref(), Some("https://person.example"));
+        assert_eq!(meta.token_endpoint, "https://person.example/aauth/token");
+        assert!(meta.validate().is_ok());
+    }
+
+    #[test]
+    fn access_metadata_deserializes_optional_fields() {
+        let json = r#"{
+            "issuer": "https://as.example",
+            "token_endpoint": "https://as.example/aauth/token",
+            "jwks_uri": "https://as.example/jwks"
+        }"#;
+        let meta: AccessServerMetadata = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(meta.issuer.as_deref(), Some("https://as.example"));
+        assert!(meta.validate().is_ok());
+    }
+
+    #[test]
+    fn resource_metadata_deserializes_optional_fields() {
+        let json = r#"{
+            "issuer": "https://resource.example",
+            "jwks_uri": "https://resource.example/jwks",
+            "authorization_endpoint": "https://resource.example/authorize"
+        }"#;
+        let meta: ResourceServerMetadata = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(meta.issuer.as_deref(), Some("https://resource.example"));
+        assert_eq!(
+            meta.authorization_endpoint.as_deref(),
+            Some("https://resource.example/authorize")
+        );
+    }
+}
+
+/// Access Server metadata (`/.well-known/aauth-access.json`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessServerMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
     pub token_endpoint: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwks_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+impl AccessServerMetadata {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.token_endpoint.is_empty() {
+            return Err("Access server metadata missing token_endpoint".into());
+        }
+        Ok(())
+    }
+}
+
+/// Resource metadata (`/.well-known/aauth-resource.json`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceServerMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jwks_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

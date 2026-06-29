@@ -229,11 +229,7 @@ async fn fetch_metadata<S: SignedSend>(
         .json()
         .await
         .map_err(|e| AAuthError::Message(e.to_string()))?;
-    if metadata.token_endpoint.is_empty() {
-        return Err(AAuthError::Message(
-            "Person server metadata missing token_endpoint".into(),
-        ));
-    }
+    metadata.validate().map_err(AAuthError::Message)?;
     Ok(metadata)
 }
 

@@ -17,12 +17,14 @@ aauth-rs/
     │   ├── client/
     │   │   ├── injector.rs   # framework-agnostic auth flow
     │   │   ├── keys.rs       # KeyMaterialProvider, JWT minting
+    │   │   ├── resolve.rs    # PS URL resolution from agent `ps` claim
     │   │   └── reqwest/      # AAuthMiddleware, token exchange (feature "client-reqwest")
     │   ├── server/
-    │   │   ├── resource/     # verify, resource tokens, AAuthLayer (feature "server-axum")
-    │   │   ├── person/       # interaction, auth JWT minting, PS route helpers
-    │   │   ├── access/       # stub for four-party federation
-    │   │   └── axum/         # facade re-exporting resource + person axum helpers
+    │   │   ├── interaction.rs # shared InteractionManager (PS + resource)
+    │   │   ├── resource/     # verify, resource tokens, ResourceAccessPolicy, AAuthLayer
+    │   │   ├── person/       # federation, auth JWT minting, PS route helpers
+    │   │   ├── access/       # AS auth JWT minting and route helpers
+    │   │   └── axum/         # facade re-exporting resource + person + access axum helpers
     │   ├── signature.rs      # shared HTTP Signature build + verify
     │   └── …                 # headers, JWT helpers, metadata cache
     └── tests/                # protocol integration tests (TypeScript e2e parity)
@@ -35,7 +37,20 @@ aauth-rs/
 | Agent | `aauth::client` |
 | Resource server | `aauth::server::resource` |
 | Person server | `aauth::server::person` |
-| Access server | `aauth::server::access` (stub) |
+| Access server | `aauth::server::access` |
+
+## Resource access modes
+
+`ResourceAccessPolicy` on `AAuthLayer` selects how the resource evaluates requests:
+
+| Mode | Policy variant | Description |
+|------|----------------|-------------|
+| Identity-based | `IdentityBased` | Grant on verified agent or auth token alone |
+| PS-asserted (three-party) | `PsAsserted { require_auth_token, access_server_url: None, person_server_fallback }` | Resource token `aud` = agent `ps` claim (or fallback) |
+| Federated (four-party) | `PsAsserted { require_auth_token, access_server_url: Some(...), ... }` | Resource token `aud` = AS; PS federates to AS |
+| Resource-managed (two-party) | `ResourceManaged { interaction_manager, opaque_store, ... }` | Interaction + opaque `AAuth-Access` tokens |
+
+The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `client::resolve::resolve_person_server_url` or leave `person_server_url` unset on `AAuthClientOptions` to resolve from the agent token.
 
 ## Features
 
@@ -43,8 +58,8 @@ aauth-rs/
 |---------|---------|-------------|
 | `client` | yes | `aauth::client::injector`, `aauth::client::keys` — auth flow and key material |
 | `client-reqwest` | yes | `aauth::client::reqwest` — `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
-| `server` | yes | `verify_token`, `create_resource_token`, `InteractionManager` |
-| `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `VerifiedAAuthToken`, person-server route helpers |
+| `server` | yes | `verify_token`, `verify_resource_token`, `create_resource_token`, `InteractionManager` |
+| `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `ResourceAccessPolicy`, route helpers |
 
 Disable defaults to depend on only one side:
 
@@ -75,7 +90,7 @@ async fn main() -> aauth::Result<()> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(AAuthMiddleware::new(AAuthClientOptions {
             provider: Arc::new(MyProvider),
-            person_server_url: Some("https://person.example".into()),
+            person_server_url: None, // resolved from agent JWT `ps` claim when challenged
             person_server_metadata: None,
             on_metadata: None,
             on_auth_token: None,
@@ -131,7 +146,7 @@ cargo build --examples --all-features
 
 - `aauth-local-keys` crate (OS keychain, hardware keys, bootstrap CLI)
 - MCP bridges and CLI tools
-- AS federation / four-party `claims` exchange
+- Claims exchange (`requirement=claims`)
 
 ## Development
 

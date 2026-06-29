@@ -201,6 +201,20 @@ impl VerifiedToken {
     }
 }
 
+/// Decode a resource token payload without signature verification.
+pub fn decode_resource_token_unverified(jwt: &str) -> Result<ResourceClaims> {
+    let typ = JwtTyp::from_jwt(jwt)?;
+    if typ != JwtTyp::Resource {
+        return Err(AAuthError::from(TokenError::new(
+            typ.verify_error_code(),
+            format!("expected resource JWT, got {typ}"),
+        )));
+    }
+    decode_unverified::<ResourceClaims>(jwt)
+        .map(|data| data.claims)
+        .map_err(|e| decode_err(typ.verify_error_code(), e))
+}
+
 fn decode_err(code: &str, err: AAuthError) -> AAuthError {
     AAuthError::from(TokenError::new(code, format!("JWT decode failed: {err}")))
 }
