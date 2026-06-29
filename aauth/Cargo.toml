@@ -13,8 +13,9 @@ keywords = ["aauth", "oauth", "authentication", "http-signatures"]
 categories = ["authentication", "web-programming"]
 
 [features]
-default = ["client", "server", "server-axum"]
-client = ["dep:reqwest", "dep:reqwest-middleware", "dep:http-body-util", "dep:tokio"]
+default = ["client", "client-reqwest", "server", "server-axum"]
+client = []
+client-reqwest = ["client", "dep:reqwest", "dep:reqwest-middleware", "dep:http-body-util", "dep:tokio"]
 server = []
 server-axum = ["server", "dep:axum", "dep:tower"]
 
@@ -53,11 +54,11 @@ tower.workspace = true
 
 [[example]]
 name = "direct_agent_grant"
-required-features = ["client", "server", "server-axum"]
+required-features = ["client-reqwest", "server", "server-axum"]
 
 [[example]]
 name = "auth_token_challenge"
-required-features = ["client", "server", "server-axum"]
+required-features = ["client-reqwest", "server", "server-axum"]
 
 [package.metadata.docs.rs]
 all-features = true

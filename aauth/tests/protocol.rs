@@ -3,7 +3,6 @@ mod support;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use aauth::VerifiedToken;
-use aauth::clear_metadata_cache;
 use aauth::client::reqwest::{
     AAuthClientOptions, AAuthMiddleware, ClientBuilder, InteractionCallback,
 };
@@ -92,7 +91,6 @@ async fn aauth_requirement_header_round_trip_approval() {
 #[tokio::test]
 async fn verify_token_agent_jwt() {
     let _guard = test_lock();
-    clear_metadata_cache();
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
 
@@ -118,7 +116,6 @@ async fn verify_token_agent_jwt() {
 #[tokio::test]
 async fn verify_token_auth_jwt() {
     let _guard = test_lock();
-    clear_metadata_cache();
     let keys = create_test_keys();
     let auth_jwt = mint_auth_jwt(
         &keys,
@@ -153,7 +150,6 @@ async fn verify_token_auth_jwt() {
 #[tokio::test]
 async fn verify_token_key_binding_failed() {
     let _guard = test_lock();
-    clear_metadata_cache();
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let wrong = create_test_keys();
@@ -176,7 +172,6 @@ async fn verify_token_key_binding_failed() {
 #[tokio::test]
 async fn full_401_challenge_response_direct_grant() {
     let _guard = test_lock();
-    clear_metadata_cache();
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
@@ -199,7 +194,6 @@ async fn full_401_challenge_response_direct_grant() {
 #[tokio::test]
 async fn second_request_reuses_cached_token() {
     let _guard = test_lock();
-    clear_metadata_cache();
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
@@ -236,7 +230,6 @@ async fn second_request_reuses_cached_token() {
 #[tokio::test]
 async fn justification_and_hints_pass_through() {
     let _guard = test_lock();
-    clear_metadata_cache();
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
@@ -278,7 +271,6 @@ async fn justification_and_hints_pass_through() {
 #[tokio::test]
 async fn deferred_interaction_grant() {
     let _guard = test_lock();
-    clear_metadata_cache();
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);

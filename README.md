@@ -17,7 +17,7 @@ aauth-rs/
     │   ├── client/
     │   │   ├── injector.rs   # framework-agnostic auth flow
     │   │   ├── keys.rs       # KeyMaterialProvider, JWT minting
-    │   │   └── reqwest/      # AAuthMiddleware, token exchange (feature "client")
+    │   │   └── reqwest/      # AAuthMiddleware, token exchange (feature "client-reqwest")
     │   ├── server/
     │   │   ├── verify.rs, interaction.rs, …
     │   │   └── axum/         # AAuthLayer, route helpers (feature "server-axum")
@@ -30,14 +30,15 @@ aauth-rs/
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `client` | yes | `aauth::client::reqwest` — `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
+| `client` | yes | `aauth::client::injector`, `aauth::client::keys` — auth flow and key material |
+| `client-reqwest` | yes | `aauth::client::reqwest` — `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
 | `server` | yes | `verify_token`, `create_resource_token`, `InteractionManager` |
 | `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `VerifiedAAuthToken`, auth-server route helpers |
 
 Disable defaults to depend on only one side:
 
 ```toml
-aauth = { version = "0.1", default-features = false, features = ["client"] }
+aauth = { version = "0.1", default-features = false, features = ["client-reqwest"] }
 ```
 
 ## Quick example

@@ -2,7 +2,8 @@
 //!
 //! # Features
 //!
-//! - `client` — signed HTTP requests, token exchange, and protocol-aware fetch (`client::reqwest`)
+//! - `client` — framework-agnostic auth flow and key material (`client::injector`, `client::keys`)
+//! - `client-reqwest` — reqwest middleware and token exchange (`client::reqwest`)
 //! - `server` — token verification, resource token creation, interaction management
 //! - `server-axum` — axum middleware and route helpers (`server::axum`)
 
@@ -40,9 +41,7 @@ pub use keys::{
     Ed25519KeyPair, OkpSigningKey, TestKeys, create_test_keys, static_agent_metadata_fetcher,
     static_auth_metadata_fetcher,
 };
-pub use metadata::{
-    CachedMetadataFetcher, MetadataFetcher, StaticMetadataFetcher, clear_metadata_cache,
-};
+pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
 #[cfg(feature = "server")]
 pub use server::keys::{
     AuthJwtMinter, Ed25519ResourceTokenSigner, ResourceTokenSigner, TestAuthJwtMinter,

@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use aauth::metadata::clear_metadata_cache;
 use aauth::server::{InteractionManager, InteractionManagerOptions};
 use aauth::types::TokenExchangeRequest;
 
@@ -27,7 +26,6 @@ pub struct MockServer {
 
 impl MockServer {
     pub fn new(config: MockServerConfig) -> Self {
-        clear_metadata_cache();
         let interaction_manager = Arc::new(Mutex::new(config.interaction_manager.or_else(|| {
             if config.deferred_mode {
                 Some(Arc::new(InteractionManager::new(
