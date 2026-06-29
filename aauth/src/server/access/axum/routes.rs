@@ -11,9 +11,9 @@ use crate::metadata::MetadataFetcher;
 use crate::server::access::keys::AccessAuthJwtMinter;
 use crate::server::deferred::PendingInput;
 use crate::server::deferred::{
-    AccessPendingContext, ClaimsSubmission, DeferRequirement, PendingContext, PendingKind,
-    PendingOutcome, PendingRecord, PendingSnapshot, PendingStore, PollResponse, build_accepted,
-    generate_pending_id, map_snapshot_to_poll_parts, pending_location,
+    AccessPendingContext, AccessPendingRecord, ClaimsSubmission, DeferRequirement, PendingOutcome,
+    PendingSnapshot, PendingStore, PollResponse, build_accepted, generate_pending_id,
+    map_snapshot_to_poll_parts, pending_location,
 };
 use crate::server::policy::{
     AccessTokenContext, AccessTokenPolicy, AuthGrant, TokenPolicyDecision,
@@ -41,7 +41,7 @@ pub struct AccessServerConfig {
 pub struct AccessServerState<P, S, M>
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     pub policy: P,
@@ -55,7 +55,7 @@ pub async fn access_metadata_handler<P, S, M>(
 ) -> Json<AccessServerMetadata>
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     Json(AccessServerMetadata {
@@ -71,7 +71,7 @@ pub async fn access_jwks_handler<P, S, M>(
 ) -> Json<JwksDocument>
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     Json(JwksDocument {
@@ -86,7 +86,7 @@ pub async fn access_token_exchange_handler<P, S, M>(
 ) -> Response
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     let authority = headers
@@ -123,7 +123,7 @@ pub async fn access_pending_poll_handler<P, S, M>(
 ) -> Response
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     let record = match state.pending.load(&id).await {
@@ -147,7 +147,7 @@ pub async fn access_pending_post_handler<P, S, M>(
 ) -> Response
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     let record = match state.pending.load(&id).await {
@@ -161,10 +161,7 @@ where
         return StatusCode::GONE.into_response();
     }
 
-    let ctx = match record.context {
-        PendingContext::Access(c) => access_context_from_pending(*c),
-        _ => return StatusCode::BAD_REQUEST.into_response(),
-    };
+    let ctx = access_context_from_pending(record.context);
 
     let input = parse_pending_input(body.as_ref().map(|Json(v)| v));
 
@@ -221,7 +218,7 @@ async fn apply_access_pending_decision<P, S, M>(
 ) -> Response
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     match decision {
@@ -253,7 +250,7 @@ async fn update_access_pending_defer<P, S, M>(
 ) -> Response
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     let Some(mut record) = state.pending.load(pending_id).await.ok().flatten() else {
@@ -290,7 +287,7 @@ async fn apply_access_decision<P, S, M>(
 ) -> Response
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     match decision {
@@ -334,7 +331,7 @@ async fn create_deferred_access_response<P, S, M>(
 ) -> Response
 where
     P: AccessTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter,
 {
     let id = generate_pending_id();
@@ -344,10 +341,9 @@ where
         &id,
     );
     let ttl = state.config.pending_ttl_secs;
-    let record = PendingRecord::new(
+    let record = AccessPendingRecord::new(
         id,
-        PendingKind::AccessToken,
-        PendingContext::Access(Box::new(AccessPendingContext {
+        AccessPendingContext {
             access_server_url: ctx.access_server_url.clone(),
             resource_url: ctx.resource_url.clone(),
             person_server_url: ctx.person_server_url.clone(),
@@ -355,7 +351,7 @@ where
             resource_claims: ctx.resource_claims.clone(),
             resource_token: ctx.resource_token.clone(),
             agent_token: ctx.agent_token.clone(),
-        })),
+        },
         PendingSnapshot::waiting(requirement.clone()),
         ttl,
     );

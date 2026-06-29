@@ -1,4 +1,4 @@
-use crate::server::deferred::PendingStore;
+use crate::server::deferred::{InMemoryResourcePendingStore, PendingStore, ResourcePendingRecord};
 use crate::server::policy::ResourceConsentPolicy;
 use crate::server::resource::opaque::OpaqueAccessStore;
 
@@ -7,7 +7,7 @@ use crate::server::resource::opaque::OpaqueAccessStore;
 pub enum ResourceAccessMode<P, S, O>
 where
     P: ResourceConsentPolicy,
-    S: PendingStore,
+    S: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
     /// Grant based on verified agent or auth token identity alone.
@@ -33,6 +33,6 @@ where
 /// Type-erased mode for callers that do not need resource-managed generics.
 pub type ResourceAccessPolicy = ResourceAccessMode<
     crate::server::policy::AlwaysGrantResourcePolicy,
-    crate::server::deferred::InMemoryPendingStore,
+    InMemoryResourcePendingStore,
     crate::server::resource::InMemoryOpaqueAccessStore,
 >;

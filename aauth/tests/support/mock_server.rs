@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use aauth::InMemoryPendingStore;
+use aauth::InMemoryPersonPendingStore;
 use aauth::types::TokenExchangeRequest;
 
 use aauth::TestKeys;
@@ -15,7 +15,7 @@ pub struct MockServerConfig {
     pub sub: String,
     pub require_auth_token: bool,
     pub deferred_mode: bool,
-    pub pending: Option<InMemoryPendingStore>,
+    pub pending: Option<InMemoryPersonPendingStore>,
     pub on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
 }
 
@@ -25,7 +25,7 @@ pub struct MockServer {
 
 impl MockServer {
     pub fn new(config: MockServerConfig) -> Self {
-        let pending = config.pending.unwrap_or_else(InMemoryPendingStore::new);
+        let pending = config.pending.unwrap_or_else(InMemoryPersonPendingStore::new);
 
         let state = Arc::new(MockServerState {
             keys: config.keys,
@@ -45,7 +45,7 @@ impl MockServer {
         MockTransport::new(Arc::clone(&self.state))
     }
 
-    pub fn pending_store(&self) -> InMemoryPendingStore {
+    pub fn pending_store(&self) -> InMemoryPersonPendingStore {
         self.state.pending.clone()
     }
 

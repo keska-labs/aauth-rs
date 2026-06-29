@@ -1,22 +1,32 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use super::PendingStore;
-use super::types::{PendingOutcome, PendingRecord, PendingSnapshot};
+use super::store::{PendingStorable, PendingStore};
+use super::types::{AccessPendingRecord, PendingOutcome, PendingSnapshot, PersonPendingRecord, ResourcePendingRecord};
 
 #[derive(Debug, Clone)]
-pub struct InMemoryPendingStore {
-    inner: Arc<Mutex<HashMap<String, PendingRecord>>>,
+pub struct InMemoryPendingStore<R> {
+    inner: Arc<Mutex<HashMap<String, R>>>,
     pub last_created: Arc<Mutex<Option<String>>>,
 }
 
-impl Default for InMemoryPendingStore {
+pub type InMemoryPersonPendingStore = InMemoryPendingStore<PersonPendingRecord>;
+pub type InMemoryAccessPendingStore = InMemoryPendingStore<AccessPendingRecord>;
+pub type InMemoryResourcePendingStore = InMemoryPendingStore<ResourcePendingRecord>;
+
+impl<R> Default for InMemoryPendingStore<R>
+where
+    R: PendingStorable,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl InMemoryPendingStore {
+impl<R> InMemoryPendingStore<R>
+where
+    R: PendingStorable,
+{
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(HashMap::new())),
@@ -38,21 +48,24 @@ impl InMemoryPendingStore {
 }
 
 #[async_trait::async_trait]
-impl PendingStore for InMemoryPendingStore {
+impl<R> PendingStore<R> for InMemoryPendingStore<R>
+where
+    R: PendingStorable,
+{
     type Error = std::io::Error;
 
-    async fn create(&self, record: PendingRecord) -> Result<String, Self::Error> {
-        let id = record.id.clone();
+    async fn create(&self, record: R) -> Result<String, Self::Error> {
+        let id = record.pending_id().to_string();
         *self.last_created.lock().unwrap() = Some(id.clone());
         self.inner.lock().unwrap().insert(id.clone(), record);
         Ok(id)
     }
 
-    async fn load(&self, id: &str) -> Result<Option<PendingRecord>, Self::Error> {
+    async fn load(&self, id: &str) -> Result<Option<R>, Self::Error> {
         Ok(self.inner.lock().unwrap().get(id).cloned())
     }
 
-    async fn save(&self, id: &str, record: PendingRecord) -> Result<(), Self::Error> {
+    async fn save(&self, id: &str, record: R) -> Result<(), Self::Error> {
         self.inner.lock().unwrap().insert(id.to_string(), record);
         Ok(())
     }
@@ -60,7 +73,7 @@ impl PendingStore for InMemoryPendingStore {
     async fn complete(&self, id: &str, outcome: PendingOutcome) -> Result<(), Self::Error> {
         let mut guard = self.inner.lock().unwrap();
         if let Some(record) = guard.get_mut(id) {
-            record.snapshot = PendingSnapshot::complete(outcome);
+            record.set_snapshot(PendingSnapshot::complete(outcome));
         }
         Ok(())
     }

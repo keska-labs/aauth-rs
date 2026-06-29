@@ -11,8 +11,8 @@ use crate::headers::build_aauth_requirement;
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::server::deferred::{
-    DeferRequirement, PendingContext, PendingKind, PendingRecord, PendingSnapshot, PendingStore,
-    ResourcePendingContext, build_accepted, generate_pending_id, pending_location,
+    DeferRequirement, PendingSnapshot, PendingStore, ResourcePendingContext, ResourcePendingRecord,
+    build_accepted, generate_pending_id, pending_location,
 };
 use crate::server::policy::{
     ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy,
@@ -32,7 +32,7 @@ use crate::types::AAuthChallenge;
 pub struct ResourceAuthLayer<P, S, O>
 where
     P: ResourceConsentPolicy,
-    S: PendingStore,
+    S: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
     pub fetcher: Arc<dyn MetadataFetcher>,
@@ -44,7 +44,7 @@ where
 impl<P, S, O> ResourceAuthLayer<P, S, O>
 where
     P: ResourceConsentPolicy,
-    S: PendingStore,
+    S: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
     pub fn new(
@@ -65,7 +65,7 @@ where
 impl<S, P, St, O> Layer<S> for ResourceAuthLayer<P, St, O>
 where
     P: ResourceConsentPolicy,
-    St: PendingStore,
+    St: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
     type Service = ResourceAuthService<S, P, St, O>;
@@ -85,7 +85,7 @@ where
 pub struct ResourceAuthService<S, P, St, O>
 where
     P: ResourceConsentPolicy,
-    St: PendingStore,
+    St: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
     inner: S,
@@ -102,7 +102,7 @@ where
     S::Error: std::fmt::Display + Send + 'static,
     B: Send + 'static,
     P: ResourceConsentPolicy + Clone + Send + Sync + 'static,
-    St: PendingStore + Clone + Send + Sync + 'static,
+    St: PendingStore<ResourcePendingRecord> + Clone + Send + Sync + 'static,
     O: OpaqueAccessStore + Clone + Send + Sync + 'static,
 {
     type Response = Response<Body>;
@@ -275,14 +275,13 @@ where
                             }
                             let id = generate_pending_id();
                             let location = pending_location(pending_base_url, pending_path, &id);
-                            let record = PendingRecord::new(
+                            let record = ResourcePendingRecord::new(
                                 id,
-                                PendingKind::ResourceAccess,
-                                PendingContext::Resource(Box::new(ResourcePendingContext {
+                                ResourcePendingContext {
                                     resource_url: resource_url.clone(),
                                     agent_claims: agent.clone(),
                                     scope: None,
-                                })),
+                                },
                                 PendingSnapshot::waiting(requirement.clone()),
                                 *pending_ttl_secs,
                             );

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use aauth::InMemoryPendingStore;
+use aauth::InMemoryPersonPendingStore;
 use aauth::PendingOutcome;
 use aauth::PendingStore;
 use aauth::VerifiedToken;
@@ -10,9 +10,9 @@ use aauth::headers::build_aauth_requirement;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::resolve_resource_token_audience;
 use aauth::server::{
-    DEFAULT_PENDING_TTL_SECS, DeferRequirement, PendingContext, PendingKind, PendingRecord,
-    PendingSnapshot, PersonPendingContext, ResourceTokenOptions, VerifyTokenOptions,
-    build_accepted, create_resource_token, generate_pending_id, pending_location, verify_token,
+    DEFAULT_PENDING_TTL_SECS, DeferRequirement, PendingSnapshot, PersonPendingContext,
+    PersonPendingRecord, ResourceTokenOptions, VerifyTokenOptions, build_accepted,
+    create_resource_token, generate_pending_id, pending_location, verify_token,
 };
 use aauth::types::{
     AAuthChallenge, AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument,
@@ -40,7 +40,7 @@ pub struct MockServerState {
     pub agent_url: String,
     pub require_auth_token: bool,
     pub deferred_mode: bool,
-    pub pending: InMemoryPendingStore,
+    pub pending: InMemoryPersonPendingStore,
     pub on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
 }
 
@@ -304,10 +304,9 @@ impl MockServerState {
                 platform: None,
                 device: None,
             });
-            let record = PendingRecord::new(
+            let record = PersonPendingRecord::new(
                 id,
-                PendingKind::PersonToken,
-                PendingContext::Person(Box::new(PersonPendingContext {
+                PersonPendingContext {
                     person_server_url: self.person_server_url.clone(),
                     resource_url: self.resource_url.clone(),
                     agent_claims: aauth::jwt::AgentClaims {
@@ -342,7 +341,7 @@ impl MockServerState {
                     exchange_request: exchange,
                     agent_token: String::new(),
                     federation: None,
-                })),
+                },
                 PendingSnapshot::waiting(requirement.clone()),
                 DEFAULT_PENDING_TTL_SECS,
             );

@@ -3,14 +3,15 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
 use crate::server::deferred::{
-    PendingOutcome, PendingSnapshot, PendingStore, PollResponse, map_snapshot_to_poll_parts,
+    PendingOutcome, PendingSnapshot, PendingStore, PollResponse, ResourcePendingRecord,
+    map_snapshot_to_poll_parts,
 };
 use crate::server::resource::opaque::OpaqueAccessStore;
 
 #[derive(Clone)]
 pub struct ResourceServerState<S, O>
 where
-    S: PendingStore,
+    S: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
     pub pending: S,
@@ -22,7 +23,7 @@ pub async fn resource_pending_poll_handler<S, O>(
     Path(id): Path<String>,
 ) -> Response
 where
-    S: PendingStore,
+    S: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
     let record = match state.pending.load(&id).await {

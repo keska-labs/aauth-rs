@@ -137,19 +137,13 @@ pub enum PendingInput {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PendingKind {
-    PersonToken,
-    AccessToken,
-    ResourceAccess,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FederationPendingState {
     pub access_server_url: String,
     pub as_pending_url: String,
 }
 
+/// Resume state for a Person Server deferred token exchange.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonPendingContext {
     pub person_server_url: String,
@@ -162,6 +156,7 @@ pub struct PersonPendingContext {
     pub federation: Option<FederationPendingState>,
 }
 
+/// Resume state for an Access Server deferred token exchange.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessPendingContext {
     pub access_server_url: String,
@@ -173,6 +168,7 @@ pub struct AccessPendingContext {
     pub agent_token: String,
 }
 
+/// Resume state for a resource-managed deferred access request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourcePendingContext {
     pub resource_url: String,
@@ -181,31 +177,22 @@ pub struct ResourcePendingContext {
     pub scope: Option<String>,
 }
 
+/// Stored pending request with role-specific resume context.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PendingContext {
-    Person(Box<PersonPendingContext>),
-    Access(Box<AccessPendingContext>),
-    Resource(Box<ResourcePendingContext>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PendingRecord {
+pub struct PendingRecord<C> {
     pub id: String,
     pub created_at: u64,
     pub expires_at: u64,
-    pub kind: PendingKind,
-    pub context: PendingContext,
+    pub context: C,
     pub snapshot: PendingSnapshot,
 }
 
-impl PendingRecord {
-    pub fn new(
-        id: String,
-        kind: PendingKind,
-        context: PendingContext,
-        snapshot: PendingSnapshot,
-        ttl_secs: u64,
-    ) -> Self {
+pub type PersonPendingRecord = PendingRecord<PersonPendingContext>;
+pub type AccessPendingRecord = PendingRecord<AccessPendingContext>;
+pub type ResourcePendingRecord = PendingRecord<ResourcePendingContext>;
+
+impl<C> PendingRecord<C> {
+    pub fn new(id: String, context: C, snapshot: PendingSnapshot, ttl_secs: u64) -> Self {
         let created_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -214,7 +201,6 @@ impl PendingRecord {
             id,
             created_at,
             expires_at: created_at + ttl_secs,
-            kind,
             context,
             snapshot,
         }

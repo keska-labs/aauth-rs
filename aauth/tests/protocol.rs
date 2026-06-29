@@ -8,7 +8,7 @@ use aauth::client::reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, Inter
 use aauth::headers::{build_aauth_requirement, parse_aauth_requirement};
 use aauth::server::{DeferRequirement, VerifyTokenOptions, build_accepted, verify_token};
 use aauth::types::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
-use aauth::{InMemoryPendingStore, PendingOutcome, PendingStore};
+use aauth::{InMemoryPersonPendingStore, PendingOutcome, PendingStore};
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
@@ -256,7 +256,7 @@ async fn deferred_interaction_grant() {
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let provider = create_key_provider(&keys, agent_jwt);
 
-    let pending = InMemoryPendingStore::new();
+    let pending = InMemoryPersonPendingStore::new();
 
     let server = MockServer::new(mock_config(&keys, true, Some(pending.clone()), None));
 
@@ -345,7 +345,7 @@ async fn deferred_accepted_response_format() {
 fn mock_config(
     keys: &TestKeys,
     deferred_mode: bool,
-    pending: Option<InMemoryPendingStore>,
+    pending: Option<InMemoryPersonPendingStore>,
     on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
 ) -> MockServerConfig {
     MockServerConfig {

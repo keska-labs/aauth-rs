@@ -17,7 +17,7 @@ Changes since [0.0.1].
 - `TokenExchangeOptions` now uses a builder API (`TokenExchangeOptions::builder(person_server_url, resource_token)`).
 - `AAuthChallenge` is now an enum keyed by requirement level; each variant carries only the parameters defined for that level (`AuthToken { resource_token }`, `Interaction { url, code }`, etc.).
 - `build_aauth_requirement` takes `&AAuthChallenge` instead of `(RequirementLevel, Option<AAuthRequirementParams>)`.
-- `PendingSnapshot` is now `Waiting { status, requirement }` or `Complete(outcome)` instead of optional fields on a struct.
+- `PendingStore<R>` is generic over role-specific pending records (`PersonPendingRecord`, `AccessPendingRecord`, `ResourcePendingRecord`); `InMemoryPendingStore<R>` and per-role store aliases replace the unified record enum.
 - `PendingStatus` moved to `aauth::types` (wire `status` on pending response bodies).
 - `TokenExchangeRequest.capabilities` is `Option<Vec<Capability>>` instead of `Option<Vec<String>>`.
 - `ClarificationChallenge.status` and `ClaimsChallenge.status` use `PendingStatus` instead of `String` / `Option<String>`.
@@ -43,7 +43,7 @@ Changes since [0.0.1].
 - `AAuthClientOptions` (use `AgentOptions` and `AgentOptions::builder`).
 - `AAuthMiddleware`, `AAuthInjector`, `AuthAttempt`, `InjectorStep`, `DeferredOptions`, `AAuthLayer`, `AAuthService` (see renamed replacements above).
 - `AAuthRequirementParams` (use `AAuthChallenge` variants directly).
-- `PendingStatusBody` (use `PendingStatus` on challenge bodies).
+- `PendingContext` and `PendingKind` (each server store is typed to its own pending record).
 - `InteractionManager`, `InteractionManagerOptions`, `PendingRequest`.
 - Test-only server flags: `deferred_mode`, `clarification_prompt`, `pending_id_capture`.
 

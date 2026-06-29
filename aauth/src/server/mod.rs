@@ -9,9 +9,12 @@ pub mod axum;
 pub mod access;
 
 pub use deferred::{
-    ClaimsSubmission, DEFAULT_PENDING_TTL_SECS, DeferRequirement, FederationPendingState,
-    InMemoryPendingStore, PendingContext, PendingInput, PendingKind, PendingOutcome, PendingRecord,
-    PendingSnapshot, PendingStore, PersonPendingContext, generate_pending_id, pending_location,
+    AccessPendingContext, AccessPendingRecord, ClaimsSubmission, DEFAULT_PENDING_TTL_SECS,
+    DeferRequirement, FederationPendingState, InMemoryAccessPendingStore, InMemoryPendingStore,
+    InMemoryPersonPendingStore, InMemoryResourcePendingStore, PendingInput, PendingOutcome,
+    PendingRecord, PendingSnapshot, PendingStorable, PendingStore, PersonPendingContext,
+    PersonPendingRecord, ResourcePendingContext, ResourcePendingRecord, generate_pending_id,
+    pending_location,
 };
 #[cfg(feature = "server-axum")]
 pub use deferred::{

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use aauth::InMemoryOpaqueAccessStore;
-use aauth::InMemoryPendingStore;
+use aauth::InMemoryAccessPendingStore;
+use aauth::InMemoryPersonPendingStore;
+use aauth::InMemoryResourcePendingStore;
 use aauth::OpaqueAccessStore;
 use aauth::PendingOutcome;
 use aauth::PendingStore;
@@ -75,9 +77,9 @@ pub struct SpawnedServer {
     pub person_server_url: String,
     pub resource_url: String,
     pub metadata_fetcher: Arc<dyn MetadataFetcher>,
-    pub person_pending: InMemoryPendingStore,
-    pub access_pending: InMemoryPendingStore,
-    pub resource_pending: InMemoryPendingStore,
+    pub person_pending: InMemoryPersonPendingStore,
+    pub access_pending: InMemoryAccessPendingStore,
+    pub resource_pending: InMemoryResourcePendingStore,
     pub opaque_store: InMemoryOpaqueAccessStore,
     handle: JoinHandle<()>,
 }
@@ -116,10 +118,11 @@ impl Drop for SpawnedServer {
 }
 
 type TestPersonState =
-    PersonServerState<HarnessPersonPolicy, InMemoryPendingStore, TestAuthJwtMinter>;
+    PersonServerState<HarnessPersonPolicy, InMemoryPersonPendingStore, TestAuthJwtMinter>;
 type TestAccessState =
-    AccessServerState<HarnessAccessPolicy, InMemoryPendingStore, TestAccessAuthJwtMinter>;
-type TestResourceState = ResourceServerState<InMemoryPendingStore, InMemoryOpaqueAccessStore>;
+    AccessServerState<HarnessAccessPolicy, InMemoryAccessPendingStore, TestAccessAuthJwtMinter>;
+type TestResourceState =
+    ResourceServerState<InMemoryResourcePendingStore, InMemoryOpaqueAccessStore>;
 
 #[derive(Clone)]
 struct TestServerState {
@@ -178,11 +181,11 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         Arc::new(keys.resource_token_signer());
 
     let opaque_store = InMemoryOpaqueAccessStore::new();
-    let person_pending = InMemoryPendingStore::new();
-    let resource_pending = InMemoryPendingStore::new();
+    let person_pending = InMemoryPersonPendingStore::new();
+    let resource_pending = InMemoryResourcePendingStore::new();
     let http_client = reqwest::Client::new();
 
-    let access_pending = InMemoryPendingStore::new();
+    let access_pending = InMemoryAccessPendingStore::new();
 
     let person_policy = if config.clarification_on_poll {
         HarnessPersonPolicy::Clarify(ClarificationThenGrantPersonPolicy {

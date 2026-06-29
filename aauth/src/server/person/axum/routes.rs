@@ -9,10 +9,10 @@ use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 use crate::server::deferred::PendingInput;
 use crate::server::deferred::{
-    ClaimsSubmission, DeferRequirement, FederationPendingState, PendingContext, PendingKind,
-    PendingOutcome, PendingRecord, PendingSnapshot, PendingStore, PersonPendingContext,
-    PollResponse, ServerPollOptions, ServerPollOutcome, build_accepted, generate_pending_id,
-    map_snapshot_to_poll_parts, pending_location, poll_pending_http, post_pending_input,
+    ClaimsSubmission, DeferRequirement, FederationPendingState, PendingOutcome, PersonPendingContext,
+    PersonPendingRecord, PendingSnapshot, PendingStore, PollResponse, ServerPollOptions,
+    ServerPollOutcome, build_accepted, generate_pending_id, map_snapshot_to_poll_parts,
+    pending_location, poll_pending_http, post_pending_input,
 };
 use crate::server::person::federation::{
     FederationOutcome, federate_to_access_server, verify_federated_auth_token,
@@ -69,7 +69,7 @@ impl PersonServerConfig {
 pub struct PersonServerState<P, S, M>
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     pub policy: P,
@@ -83,7 +83,7 @@ pub async fn person_metadata_handler<P, S, M>(
 ) -> Json<PersonServerMetadata>
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     Json(PersonServerMetadata {
@@ -102,7 +102,7 @@ pub async fn person_jwks_handler<P, S, M>(
 ) -> Json<JwksDocument>
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     Json(JwksDocument {
@@ -117,7 +117,7 @@ pub async fn token_exchange_handler<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     let orch = state.config.orchestrate();
@@ -166,7 +166,7 @@ pub async fn pending_poll_handler<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     let record = match state.pending.load(&id).await {
@@ -190,7 +190,7 @@ pub async fn pending_post_handler<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     let record = match state.pending.load(&id).await {
@@ -212,10 +212,7 @@ where
         exchange_request,
         agent_token,
         federation,
-    } = match record.context {
-        PendingContext::Person(c) => *c,
-        _ => return StatusCode::BAD_REQUEST.into_response(),
-    };
+    } = record.context;
 
     let input = parse_pending_input(body.as_ref().map(|Json(v)| v));
     let orch = state.config.orchestrate();
@@ -259,7 +256,7 @@ async fn apply_person_pending_decision<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     match decision {
@@ -330,7 +327,7 @@ async fn update_person_pending_defer<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     let Some(mut record) = state.pending.load(pending_id).await.ok().flatten() else {
@@ -365,7 +362,7 @@ async fn apply_person_decision<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     match decision {
@@ -421,7 +418,7 @@ async fn create_federated_deferred_response<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     let id = pending_id
@@ -443,16 +440,15 @@ where
         let Some(mut record) = state.pending.load(&id).await.ok().flatten() else {
             return StatusCode::GONE.into_response();
         };
-        record.context = PendingContext::Person(Box::new(person_ctx));
+        record.context = person_ctx;
         record.snapshot = PendingSnapshot::waiting(requirement.clone());
         if state.pending.save(&id, record).await.is_err() {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     } else {
-        let record = PendingRecord::new(
+        let record = PersonPendingRecord::new(
             id.clone(),
-            PendingKind::PersonToken,
-            PendingContext::Person(Box::new(person_ctx)),
+            person_ctx,
             PendingSnapshot::waiting(requirement.clone()),
             orch.pending_ttl_secs,
         );
@@ -475,7 +471,7 @@ async fn handle_federated_pending_post<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     if matches!(input, PendingInput::Cancelled) {
@@ -557,12 +553,10 @@ where
                 return StatusCode::GONE.into_response();
             };
             record.snapshot = PendingSnapshot::waiting(requirement.clone());
-            if let PendingContext::Person(ref mut ctx) = record.context {
-                ctx.federation = Some(FederationPendingState {
-                    access_server_url: federation.access_server_url.clone(),
-                    as_pending_url: location_url,
-                });
-            }
+            record.context.federation = Some(FederationPendingState {
+                access_server_url: federation.access_server_url.clone(),
+                as_pending_url: location_url,
+            });
             if state.pending.save(pending_id, record).await.is_err() {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
@@ -607,15 +601,14 @@ async fn create_deferred_person_response<P, S, M>(
 ) -> Response
 where
     P: PersonTokenPolicy,
-    S: PendingStore,
+    S: PendingStore<PersonPendingRecord>,
     M: AuthJwtMinter,
 {
     let id = generate_pending_id();
     let location = pending_location(&orch.pending_base_url, &orch.pending_path, &id);
-    let record = PendingRecord::new(
+    let record = PersonPendingRecord::new(
         id,
-        PendingKind::PersonToken,
-        PendingContext::Person(Box::new(PersonPendingContext {
+        PersonPendingContext {
             person_server_url: ctx.person_server_url.clone(),
             resource_url: ctx.resource_url.clone(),
             agent_claims: ctx.agent_claims.clone(),
@@ -623,7 +616,7 @@ where
             exchange_request: ctx.exchange_request.clone(),
             agent_token: agent_jwt.to_string(),
             federation: None,
-        })),
+        },
         PendingSnapshot::waiting(requirement.clone()),
         orch.pending_ttl_secs,
     );
