@@ -10,7 +10,7 @@ use aauth::{OpaqueAccessStore, PendingStore};
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
-use support::client::{build_client, AGENT_ID};
+use support::client::{AGENT_ID, build_client};
 
 #[rstest]
 #[timeout(Duration::from_secs(1))]

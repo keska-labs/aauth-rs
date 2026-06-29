@@ -10,7 +10,7 @@ use crate::client::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::{
-    AAuthProtocolError, AAuthChallenge, PersonServerMetadata, TokenExchangeRequest,
+    AAuthChallenge, AAuthProtocolError, PersonServerMetadata, TokenExchangeRequest,
     TokenResponseBody,
 };
 
@@ -277,8 +277,7 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             .get("aauth-requirement")
             .and_then(|v| v.to_str().ok())
         {
-            if let Ok(AAuthChallenge::Interaction { url, code }) = parse_aauth_requirement(header)
-            {
+            if let Ok(AAuthChallenge::Interaction { url, code }) = parse_aauth_requirement(header) {
                 deferred = deferred.interaction(url, code);
             }
         }

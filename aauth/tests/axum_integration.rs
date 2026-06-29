@@ -12,7 +12,7 @@ use aauth::{PendingStore, create_key_provider, create_test_keys, mint_agent_jwt,
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
-use support::client::{build_client, AGENT_ID};
+use support::client::{AGENT_ID, build_client};
 
 #[rstest]
 #[timeout(Duration::from_secs(1))]

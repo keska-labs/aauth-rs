@@ -3,7 +3,9 @@ use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, decode_header};
 
 use crate::error::{AAuthError, Result, TokenError};
-use crate::jwt::{AuthClaims, ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint};
+use crate::jwt::{
+    AuthClaims, ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint,
+};
 use crate::metadata::MetadataFetcher;
 use crate::types::JwtTyp;
 
@@ -135,11 +137,9 @@ fn normalize_server_url(url: &str) -> String {
 /// Verify auth token `aud` binding for resource access.
 pub fn verify_auth_token_binding(auth: &AuthClaims, resource_url: &str) -> Result<()> {
     if normalize_server_url(&auth.aud) != normalize_server_url(resource_url) {
-        return Err(TokenError::new(
-            JwtTyp::Auth.verify_error_code(),
-            "auth token aud mismatch",
-        )
-        .into());
+        return Err(
+            TokenError::new(JwtTyp::Auth.verify_error_code(), "auth token aud mismatch").into(),
+        );
     }
     Ok(())
 }
@@ -162,11 +162,9 @@ pub async fn verify_client_auth_token(
     let auth = match verified {
         VerifiedToken::Auth(c) => c,
         _ => {
-            return Err(TokenError::new(
-                JwtTyp::Auth.verify_error_code(),
-                "expected auth token",
-            )
-            .into());
+            return Err(
+                TokenError::new(JwtTyp::Auth.verify_error_code(), "expected auth token").into(),
+            );
         }
     };
 

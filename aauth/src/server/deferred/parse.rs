@@ -93,18 +93,17 @@ fn map_challenge_to_defer(
                 .unwrap_or_default();
             Ok(DeferRequirement::Claims { required_claims })
         }
-        crate::types::AAuthChallenge::Interaction { url, code } => Ok(
-            DeferRequirement::Interaction {
+        crate::types::AAuthChallenge::Interaction { url, code } => {
+            Ok(DeferRequirement::Interaction {
                 url: url.clone(),
                 code: code.clone(),
-            },
-        ),
-        crate::types::AAuthChallenge::Approval => Ok(DeferRequirement::Approval),
-        crate::types::AAuthChallenge::AgentToken | crate::types::AAuthChallenge::AuthToken { .. } => {
-            Err(AAuthError::Message(
-                "agent-token/auth-token requirements are not defer requirements".into(),
-            ))
+            })
         }
+        crate::types::AAuthChallenge::Approval => Ok(DeferRequirement::Approval),
+        crate::types::AAuthChallenge::AgentToken
+        | crate::types::AAuthChallenge::AuthToken { .. } => Err(AAuthError::Message(
+            "agent-token/auth-token requirements are not defer requirements".into(),
+        )),
     }
 }
 

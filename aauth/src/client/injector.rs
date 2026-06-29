@@ -328,9 +328,7 @@ impl AgentAuth {
             AgentAuthAttempt::AgentSigned => {
                 if let Some(header) = header_value(headers, "aauth-requirement") {
                     let challenge = parse_aauth_requirement(header)?;
-                    if let crate::types::AAuthChallenge::AuthToken { resource_token } =
-                        challenge
-                    {
+                    if let crate::types::AAuthChallenge::AuthToken { resource_token } = challenge {
                         return Ok(AgentAuthStep::ExchangeToken { resource_token });
                     }
                 }

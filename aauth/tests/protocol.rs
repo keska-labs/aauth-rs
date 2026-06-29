@@ -7,9 +7,7 @@ use aauth::VerifiedToken;
 use aauth::client::reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
 use aauth::headers::{build_aauth_requirement, parse_aauth_requirement};
 use aauth::server::{DeferRequirement, VerifyTokenOptions, build_accepted, verify_token};
-use aauth::types::{
-    AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody,
-};
+use aauth::types::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
 use aauth::{InMemoryPendingStore, PendingOutcome, PendingStore};
 use http::Extensions;
 use reqwest::{Request, Response};
@@ -190,12 +188,7 @@ async fn second_request_reuses_cached_token() {
     let call_count = Arc::new(Mutex::new(0usize));
     let server = MockServer::new(mock_config(&keys, false, None, None));
 
-    let options = aauth_options(
-        provider,
-        server.metadata_fetcher(),
-        None,
-        None,
-    );
+    let options = aauth_options(provider, server.metadata_fetcher(), None, None);
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(AgentMiddleware::new(options))
         .with(CountingMiddleware {

@@ -15,8 +15,8 @@ use aauth::server::{
     build_accepted, create_resource_token, generate_pending_id, pending_location, verify_token,
 };
 use aauth::types::{
-    AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument, PersonServerMetadata,
-    AAuthChallenge, TokenExchangeRequest, TokenResponseBody,
+    AAuthChallenge, AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument,
+    PersonServerMetadata, TokenExchangeRequest, TokenResponseBody,
 };
 use async_trait::async_trait;
 use http::StatusCode;
@@ -164,9 +164,7 @@ impl MockServerState {
 
         let fetcher = Arc::new(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
-            person: self
-                .keys
-                .person_metadata_fetcher(&self.person_server_url),
+            person: self.keys.person_metadata_fetcher(&self.person_server_url),
             resource: self.keys.resource_metadata_fetcher(&self.resource_url),
             agent_jwks_uri: format!("{}/jwks", self.agent_url),
             person_jwks_uri: format!("{}/jwks", self.person_server_url),
@@ -470,9 +468,7 @@ impl MockServerState {
     pub fn metadata_fetcher(&self) -> Arc<dyn MetadataFetcher> {
         Arc::new(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
-            person: self
-                .keys
-                .person_metadata_fetcher(&self.person_server_url),
+            person: self.keys.person_metadata_fetcher(&self.person_server_url),
             resource: self.keys.resource_metadata_fetcher(&self.resource_url),
             agent_jwks_uri: format!("{}/jwks", self.agent_url),
             person_jwks_uri: format!("{}/jwks", self.person_server_url),

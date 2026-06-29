@@ -8,7 +8,6 @@ use axum::http::{Request, Response, StatusCode};
 use tower::{Layer, Service};
 
 use crate::headers::build_aauth_requirement;
-use crate::types::AAuthChallenge;
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::server::deferred::{
@@ -27,6 +26,7 @@ use crate::server::resource::{
     verify_token,
 };
 use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
+use crate::types::AAuthChallenge;
 
 #[derive(Clone)]
 pub struct ResourceAuthLayer<P, S, O>

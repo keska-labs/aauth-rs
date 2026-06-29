@@ -65,8 +65,7 @@ pub async fn federate_to_access_server(
     };
 
     let (authority, path) = url_authority_path(&metadata.token_endpoint)?;
-    let body_json =
-        serde_json::to_string(&body).map_err(|e| AAuthError::Message(e.to_string()))?;
+    let body_json = serde_json::to_string(&body).map_err(|e| AAuthError::Message(e.to_string()))?;
     let mut headers = HeaderMap::new();
     headers.insert(
         http::HeaderName::from_static("content-type"),
@@ -82,9 +81,7 @@ pub async fn federate_to_access_server(
         None,
     )?;
 
-    let mut request = client
-        .post(&metadata.token_endpoint)
-        .body(body_json);
+    let mut request = client.post(&metadata.token_endpoint).body(body_json);
     for (name, value) in headers.iter() {
         request = request.header(name, value);
     }
@@ -270,12 +267,7 @@ pub async fn fulfill_token_exchange(
         client,
         &orch,
         resource_token,
-        &crate::mint_agent_jwt(
-            keys,
-            person_server_url,
-            agent_id,
-            Some(person_server_url),
-        ),
+        &crate::mint_agent_jwt(keys, person_server_url, agent_id, Some(person_server_url)),
     )
     .await?
     {

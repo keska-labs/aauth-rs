@@ -193,7 +193,9 @@ pub fn verify_request_signature_with_options(
         .unwrap()
         .as_secs();
     if created > now + options.clock_skew_secs as u64 {
-        return Err(AAuthError::Message("signature created in the future".into()));
+        return Err(AAuthError::Message(
+            "signature created in the future".into(),
+        ));
     }
     if now.saturating_sub(created) > options.max_age_secs + options.clock_skew_secs as u64 {
         return Err(AAuthError::Message("signature expired".into()));
@@ -207,14 +209,8 @@ pub fn verify_request_signature_with_options(
         extras.push(("authorization", authorization));
     }
 
-    let (signature_base, _) = build_signature_base_with_extras(
-        method,
-        authority,
-        path,
-        &signature_key,
-        created,
-        &extras,
-    );
+    let (signature_base, _) =
+        build_signature_base_with_extras(method, authority, path, &signature_key, created, &extras);
     let signature_bytes = parse_signature_value(&signature_header)?;
     let verifying_key = verifying_key_from_jwk(cnf_jwk)?;
     let signature =
@@ -249,14 +245,8 @@ pub fn apply_outbound_signature(
         .unwrap()
         .as_secs();
 
-    let (signature_base, signature_params) = build_signature_base_with_extras(
-        method,
-        authority,
-        path,
-        &signature_key,
-        created,
-        &extras,
-    );
+    let (signature_base, signature_params) =
+        build_signature_base_with_extras(method, authority, path, &signature_key, created, &extras);
 
     let signing_key = signing_key_from_jwk(signing_jwk)?;
     let signature_bytes = signing_key.sign(signature_base.as_bytes());
@@ -275,11 +265,13 @@ pub fn apply_outbound_signature(
 
     headers.insert(
         http::HeaderName::from_static("signature-key"),
-        http::HeaderValue::from_str(&signature_key).map_err(|e| AAuthError::Message(e.to_string()))?,
+        http::HeaderValue::from_str(&signature_key)
+            .map_err(|e| AAuthError::Message(e.to_string()))?,
     );
     headers.insert(
         http::HeaderName::from_static("signature-input"),
-        http::HeaderValue::from_str(&signature_input).map_err(|e| AAuthError::Message(e.to_string()))?,
+        http::HeaderValue::from_str(&signature_input)
+            .map_err(|e| AAuthError::Message(e.to_string()))?,
     );
     headers.insert(
         http::HeaderName::from_static("signature"),
@@ -371,9 +363,11 @@ mod tests {
         headers.insert("signature-key", signature_key.parse().unwrap());
         headers.insert(
             "signature-input",
-            format!("sig=(\"@method\" \"@authority\" \"@path\" \"signature-key\");created={created}")
-                .parse()
-                .unwrap(),
+            format!(
+                "sig=(\"@method\" \"@authority\" \"@path\" \"signature-key\");created={created}"
+            )
+            .parse()
+            .unwrap(),
         );
         headers.insert("signature", format!("sig=:{sig}:").parse().unwrap());
 

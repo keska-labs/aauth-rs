@@ -110,10 +110,6 @@ pub fn mint_person_server_signature_jwt(keys: &TestKeys, person_server_url: &str
     header.typ = Some(JwtTyp::Agent.as_str().into());
     header.kid = keys.person_server.kid().map(str::to_string);
 
-    encode(
-        &header,
-        &claims,
-        &keys.person_server.encoding_key(),
-    )
-    .expect("sign person server signature jwt")
+    encode(&header, &claims, &keys.person_server.encoding_key())
+        .expect("sign person server signature jwt")
 }

@@ -74,9 +74,10 @@ pub fn parse_aauth_requirement(header_value: &str) -> Result<AAuthChallenge> {
         RequirementLevel::Clarification => Ok(AAuthChallenge::Clarification),
         RequirementLevel::Claims => Ok(AAuthChallenge::Claims),
         RequirementLevel::AuthToken => {
-            let resource_token = extract_quoted_param(trimmed, "resource-token").ok_or_else(
-                || AAuthError::InvalidHeader("auth-token requires resource-token".into()),
-            )?;
+            let resource_token =
+                extract_quoted_param(trimmed, "resource-token").ok_or_else(|| {
+                    AAuthError::InvalidHeader("auth-token requires resource-token".into())
+                })?;
             Ok(AAuthChallenge::AuthToken { resource_token })
         }
         RequirementLevel::Interaction => {
