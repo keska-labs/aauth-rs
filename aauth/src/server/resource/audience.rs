@@ -76,12 +76,8 @@ mod tests {
     #[test]
     fn ps_claim_used_when_no_as() {
         assert_eq!(
-            resolve_resource_token_audience(
-                &agent(Some("https://ps.example")),
-                None,
-                None,
-            )
-            .unwrap(),
+            resolve_resource_token_audience(&agent(Some("https://ps.example")), None, None,)
+                .unwrap(),
             "https://ps.example"
         );
     }

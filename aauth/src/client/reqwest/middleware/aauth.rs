@@ -6,12 +6,12 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
 use crate::client::injector::{AAuthClientOptions, AAuthInjector, AuthAttempt, InjectorStep};
-use crate::client::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use crate::client::reqwest::deferred::{DeferredOptions, poll_deferred_with};
 use crate::client::reqwest::middleware::signing::{SigningMiddleware, sign_and_run};
 use crate::client::reqwest::send::SignedSend;
 use crate::client::reqwest::signed::SigningOptions;
 use crate::client::reqwest::token_exchange::{TokenExchangeOptions, exchange_token_with};
+use crate::client::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::RequirementLevel;
@@ -161,11 +161,7 @@ impl AAuthMiddleware {
                 InjectorStep::Invalidate(_) => continue,
                 InjectorStep::Continue => continue,
                 InjectorStep::ExchangeToken { resource_token } => {
-                    let material = self
-                        .options
-                        .provider
-                        .key_material()
-                        .await?;
+                    let material = self.options.provider.key_material().await?;
                     let agent_jwt = agent_jwt_from_signature_key(&material.signature_key)?;
                     let person_server_url = resolve_person_server_url(
                         self.options.person_server_url.as_deref(),

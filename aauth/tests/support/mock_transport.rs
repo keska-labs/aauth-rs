@@ -201,12 +201,9 @@ impl MockServerState {
             }
             VerifiedToken::Agent(agent) if self.require_auth_token => {
                 let signer = self.keys.resource_token_signer();
-                let audience = resolve_resource_token_audience(
-                    &agent,
-                    None,
-                    Some(&self.person_server_url),
-                )
-                .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
+                let audience =
+                    resolve_resource_token_audience(&agent, None, Some(&self.person_server_url))
+                        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
 
                 let resource_token = create_resource_token(
                     ResourceTokenOptions {

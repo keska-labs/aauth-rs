@@ -138,10 +138,7 @@ pub async fn pending_clarification_post_handler(
 ) -> Response {
     let _ = body.0;
     if let Some(clarification_state) = &state.clarification_state {
-        clarification_state
-            .lock()
-            .unwrap()
-            .insert(id, true);
+        clarification_state.lock().unwrap().insert(id, true);
     }
     StatusCode::ACCEPTED.into_response()
 }

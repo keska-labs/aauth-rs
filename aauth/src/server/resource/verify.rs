@@ -76,9 +76,7 @@ pub async fn verify_token(options: VerifyTokenOptions) -> Result<VerifiedToken> 
     })
 }
 
-pub async fn verify_resource_token(
-    options: VerifyResourceTokenOptions,
-) -> Result<ResourceClaims> {
+pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Result<ResourceClaims> {
     let error_code = JwtTyp::Resource.verify_error_code();
     let claims = decode_resource_token_unverified(&options.jwt)?;
 

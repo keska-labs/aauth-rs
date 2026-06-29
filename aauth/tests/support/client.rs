@@ -1,10 +1,9 @@
 //! Reqwest client setup shared by integration tests and runnable examples.
 
 use aauth::client::reqwest::{
-    AAuthClientOptions, AAuthMiddleware, ClarificationCallback, ClientBuilder,
-    InteractionCallback,
+    AAuthClientOptions, AAuthMiddleware, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
-use aauth::{create_key_provider, mint_agent_jwt, KeyMaterialProvider};
+use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
 
 use super::axum_server::SpawnedServer;
 

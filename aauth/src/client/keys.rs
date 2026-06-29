@@ -91,12 +91,7 @@ impl KeyMaterialProvider for StaticKeyMaterialProvider {
     }
 }
 
-pub fn mint_agent_jwt(
-    keys: &TestKeys,
-    agent_url: &str,
-    sub: &str,
-    ps: Option<&str>,
-) -> String {
+pub fn mint_agent_jwt(keys: &TestKeys, agent_url: &str, sub: &str, ps: Option<&str>) -> String {
     keys.agent_jwt_minter().mint_agent_jwt(agent_url, sub, ps)
 }
 

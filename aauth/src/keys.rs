@@ -157,10 +157,7 @@ impl TestKeys {
     }
 
     pub fn resource_metadata_fetcher(&self, resource_url: &str) -> StaticMetadataFetcher {
-        StaticMetadataFetcher::new(
-            format!("{resource_url}/jwks"),
-            self.resource.jwk_set(),
-        )
+        StaticMetadataFetcher::new(format!("{resource_url}/jwks"), self.resource.jwk_set())
     }
 }
 

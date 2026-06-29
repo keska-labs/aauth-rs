@@ -9,7 +9,7 @@ use aauth::types::{AuthOkResponse, TokenResponseBody};
 use aauth::{create_test_keys, mint_agent_jwt, mint_auth_jwt};
 
 use support::axum_server::{ServerConfig, spawn_test_server};
-use support::client::{build_client, AGENT_ID};
+use support::client::{AGENT_ID, build_client};
 
 #[tokio::test]
 async fn person_server_managed_ps_from_agent_claim_over_http() {

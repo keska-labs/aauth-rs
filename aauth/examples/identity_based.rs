@@ -8,7 +8,7 @@ mod support;
 
 use aauth::types::AgentOkResponse;
 
-use support::{build_client, spawn_test_server, ServerConfig};
+use support::{ServerConfig, build_client, spawn_test_server};
 
 #[tokio::main]
 async fn main() -> aauth::Result<()> {

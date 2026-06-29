@@ -63,12 +63,8 @@ impl AccessAuthJwtMinter for TestAccessAuthJwtMinter {
         header.typ = Some(JwtTyp::Auth.as_str().into());
         header.kid = self.keys.access_server.kid().map(str::to_string);
 
-        encode(
-            &header,
-            &claims,
-            &self.keys.access_server.encoding_key(),
-        )
-        .expect("sign access auth jwt")
+        encode(&header, &claims, &self.keys.access_server.encoding_key())
+            .expect("sign access auth jwt")
     }
 }
 

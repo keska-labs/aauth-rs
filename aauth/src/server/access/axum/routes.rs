@@ -5,9 +5,7 @@ use axum::http::StatusCode;
 use crate::jwt::decode_resource_token_unverified;
 use crate::keys::TestKeys;
 use crate::server::access::keys::mint_access_auth_jwt;
-use crate::types::{
-    AccessServerMetadata, JwksDocument, TokenExchangeRequest, TokenResponseBody,
-};
+use crate::types::{AccessServerMetadata, JwksDocument, TokenExchangeRequest, TokenResponseBody};
 
 #[derive(Clone)]
 pub struct AccessServerState {
@@ -44,7 +42,8 @@ pub async fn access_token_exchange_handler(
         .map(|r| r.resource_token.as_str())
         .ok_or(StatusCode::BAD_REQUEST)?;
 
-    let claims = decode_resource_token_unverified(resource_token).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let claims =
+        decode_resource_token_unverified(resource_token).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let auth_jwt = mint_access_auth_jwt(
         &state.keys,

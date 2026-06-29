@@ -5,10 +5,7 @@ use crate::types::SignatureKey;
 /// Resolve the Person Server URL for token exchange.
 ///
 /// Prefers explicit configuration; otherwise uses the `ps` claim from the agent JWT.
-pub fn resolve_person_server_url(
-    configured: Option<&str>,
-    agent_jwt: &str,
-) -> Result<String> {
+pub fn resolve_person_server_url(configured: Option<&str>, agent_jwt: &str) -> Result<String> {
     if let Some(url) = configured {
         return Ok(url.to_string());
     }

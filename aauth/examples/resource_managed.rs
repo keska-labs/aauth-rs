@@ -10,7 +10,7 @@ use std::sync::Arc;
 use aauth::types::AgentOkResponse;
 use aauth::{InMemoryOpaqueAccessStore, OpaqueAccessStore};
 
-use support::{build_client, spawn_test_server, ServerConfig};
+use support::{ServerConfig, build_client, spawn_test_server};
 
 #[tokio::main]
 async fn main() -> aauth::Result<()> {

@@ -63,12 +63,7 @@ impl AuthJwtMinter for TestAuthJwtMinter {
         header.typ = Some(JwtTyp::Auth.as_str().into());
         header.kid = self.keys.person_server.kid().map(str::to_string);
 
-        encode(
-            &header,
-            &claims,
-            &self.keys.person_server.encoding_key(),
-        )
-        .expect("sign auth jwt")
+        encode(&header, &claims, &self.keys.person_server.encoding_key()).expect("sign auth jwt")
     }
 }
 

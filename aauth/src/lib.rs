@@ -54,6 +54,10 @@ pub use keys::{
     static_person_metadata_fetcher,
 };
 pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
+#[cfg(all(feature = "server", feature = "server-axum"))]
+pub use server::access::{
+    AccessAuthJwtMinter, AccessServerMetadata, TestAccessAuthJwtMinter, mint_access_auth_jwt,
+};
 #[cfg(feature = "server")]
 pub use server::{
     AuthJwtMinter, Ed25519ResourceTokenSigner, InMemoryOpaqueAccessStore, InteractionManager,
@@ -61,9 +65,5 @@ pub use server::{
     ResourceTokenOptions, ResourceTokenSigner, TestAuthJwtMinter, VerifyResourceTokenOptions,
     VerifyTokenOptions, create_resource_token, mint_auth_jwt, resolve_resource_token_audience,
     verify_resource_token, verify_token,
-};
-#[cfg(all(feature = "server", feature = "server-axum"))]
-pub use server::access::{
-    AccessAuthJwtMinter, AccessServerMetadata, TestAccessAuthJwtMinter, mint_access_auth_jwt,
 };
 pub use types::*;

@@ -97,11 +97,7 @@ where
                     Err(e) => return Ok(unauthorized(e.to_string())),
                 };
 
-            if let ResourceAccessPolicy::ResourceManaged {
-                opaque_store,
-                ..
-            } = &policy
-            {
+            if let ResourceAccessPolicy::ResourceManaged { opaque_store, .. } = &policy {
                 if let Some(opaque) = extract_aauth_access(req.headers()) {
                     let agent_iss = agent_iss_from_jwt(&verified_sig.jwt);
                     if opaque_store.validate(&opaque, &agent_iss) {
@@ -205,9 +201,7 @@ where
                     for (name, value) in headers {
                         response = response.header(name, value);
                     }
-                    Ok(response
-                        .body(Body::empty())
-                        .expect("valid response"))
+                    Ok(response.body(Body::empty()).expect("valid response"))
                 }
                 (ResourceAccessPolicy::ResourceManaged { .. }, VerifiedToken::Auth(_)) => {
                     req.extensions_mut().insert(verified);
@@ -225,9 +219,7 @@ fn agent_iss_from_jwt(jwt: &str) -> String {
 }
 
 fn extract_aauth_access(headers: &axum::http::HeaderMap) -> Option<String> {
-    let value = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())?;
+    let value = headers.get("authorization").and_then(|v| v.to_str().ok())?;
     let rest = value.strip_prefix("AAuth ")?;
     if rest.is_empty() {
         return None;

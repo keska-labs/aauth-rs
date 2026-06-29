@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use aauth::InMemoryOpaqueAccessStore;
 use aauth::TestKeys;
 use aauth::VerifiedToken;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::server::axum::{
-    AccessServerState, AAuthLayer, PersonServerState, ResourceAccessPolicy, ResourceServerState,
-    VerifiedAAuthToken, access_jwks_handler, access_metadata_handler, access_token_exchange_handler,
-    pending_clarification_post_handler, pending_poll_handler, person_jwks_handler,
-    person_metadata_handler, resource_pending_poll_handler, token_exchange_deferred_handler,
-    token_exchange_handler,
+    AAuthLayer, AccessServerState, PersonServerState, ResourceAccessPolicy, ResourceServerState,
+    VerifiedAAuthToken, access_jwks_handler, access_metadata_handler,
+    access_token_exchange_handler, pending_clarification_post_handler, pending_poll_handler,
+    person_jwks_handler, person_metadata_handler, resource_pending_poll_handler,
+    token_exchange_deferred_handler, token_exchange_handler,
 };
-use aauth::InMemoryOpaqueAccessStore;
 use aauth::server::{InteractionManager, InteractionManagerOptions, ResourceTokenSigner};
 use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use async_trait::async_trait;
@@ -130,14 +130,13 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         ttl: None,
     }));
 
-    let resource_interaction_manager = Arc::new(InteractionManager::new(
-        InteractionManagerOptions {
+    let resource_interaction_manager =
+        Arc::new(InteractionManager::new(InteractionManagerOptions {
             base_url: resource_url.clone(),
             interaction_url: format!("{resource_url}/interact"),
             pending_path: Some("/resource/pending".into()),
             ttl: None,
-        },
-    ));
+        }));
 
     let pending_id_capture = Arc::new(Mutex::new(None));
     let resource_pending_id_capture = Arc::new(Mutex::new(None));
@@ -217,7 +216,10 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         };
 
         app = app
-            .route("/.well-known/aauth-person.json", get(person_metadata_handler))
+            .route(
+                "/.well-known/aauth-person.json",
+                get(person_metadata_handler),
+            )
             .route("/auth/jwks", get(person_jwks_handler))
             .route("/aauth/token", token_handler)
             .route(
@@ -233,14 +235,14 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
                 get(access_metadata_handler),
             )
             .route("/as/access/jwks", get(access_jwks_handler))
-            .route("/as/access/aauth/token", post(access_token_exchange_handler));
+            .route(
+                "/as/access/aauth/token",
+                post(access_token_exchange_handler),
+            );
     }
 
     if config.resource_managed {
-        app = app.route(
-            "/resource/pending/{id}",
-            get(resource_pending_poll_handler),
-        );
+        app = app.route("/resource/pending/{id}", get(resource_pending_poll_handler));
     }
 
     let app = app.with_state(test_state);
@@ -282,9 +284,7 @@ async fn api_data_handler(token: VerifiedAAuthToken) -> Json<serde_json::Value> 
     }
 }
 
-async fn agent_metadata_handler(
-    State(state): State<TestServerState>,
-) -> Json<MetadataDocument> {
+async fn agent_metadata_handler(State(state): State<TestServerState>) -> Json<MetadataDocument> {
     Json(MetadataDocument {
         jwks_uri: state.agent_jwks_uri,
         extra: Default::default(),
