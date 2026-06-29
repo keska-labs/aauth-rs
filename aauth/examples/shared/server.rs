@@ -103,7 +103,10 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
 
     if config.with_auth_routes {
         app = app
-            .route("/.well-known/aauth-person.json", get(person_metadata_handler))
+            .route(
+                "/.well-known/aauth-person.json",
+                get(person_metadata_handler),
+            )
             .route("/auth/jwks", get(jwks_handler))
             .route("/aauth/token", post(token_exchange_handler))
             .route("/pending/{id}", get(pending_poll_handler));
@@ -145,9 +148,7 @@ async fn api_data_handler(token: VerifiedAAuthToken) -> Json<serde_json::Value> 
     }
 }
 
-async fn agent_metadata_handler(
-    State(state): State<AuthServerState>,
-) -> Json<MetadataDocument> {
+async fn agent_metadata_handler(State(state): State<AuthServerState>) -> Json<MetadataDocument> {
     Json(MetadataDocument {
         jwks_uri: state.agent_jwks_uri,
         extra: Default::default(),

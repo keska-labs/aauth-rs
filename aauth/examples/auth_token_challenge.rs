@@ -51,7 +51,10 @@ async fn main() -> aauth::Result<()> {
         .await
         .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
 
-    assert!(response.status().is_success(), "expected 200 OK after token exchange");
+    assert!(
+        response.status().is_success(),
+        "expected 200 OK after token exchange"
+    );
     let body: AuthOkResponse = response
         .json()
         .await

@@ -233,18 +233,15 @@ fn cache_key(resource_origin: &str, auth_server: &str) -> String {
 }
 
 fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers
-        .get(name)
-        .and_then(|v| v.to_str().ok())
-        .or_else(|| {
-            headers.iter().find_map(|(k, v)| {
-                if k.as_str().eq_ignore_ascii_case(name) {
-                    v.to_str().ok()
-                } else {
-                    None
-                }
-            })
+    headers.get(name).and_then(|v| v.to_str().ok()).or_else(|| {
+        headers.iter().find_map(|(k, v)| {
+            if k.as_str().eq_ignore_ascii_case(name) {
+                v.to_str().ok()
+            } else {
+                None
+            }
         })
+    })
 }
 
 #[cfg(test)]

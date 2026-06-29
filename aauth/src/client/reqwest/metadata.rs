@@ -172,7 +172,10 @@ impl MetadataFetcher for CachedMetadataFetcher {
         if !response.status().is_success() {
             return Err(crate::error::AAuthError::Token {
                 code: "invalid_agent_token".into(),
-                message: format!("Failed to fetch JWKS from {jwks_uri}: {}", response.status()),
+                message: format!(
+                    "Failed to fetch JWKS from {jwks_uri}: {}",
+                    response.status()
+                ),
             });
         }
 

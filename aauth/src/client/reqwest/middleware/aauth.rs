@@ -122,8 +122,7 @@ impl AAuthMiddleware {
             match step {
                 InjectorStep::Finish => return Ok(resp),
                 InjectorStep::PollDeferred => {
-                    let (interaction_url, interaction_code) =
-                        interaction_from_response(&resp);
+                    let (interaction_url, interaction_code) = interaction_from_response(&resp);
                     let location = location_header(&resp)?;
                     let result = poll_deferred_with(
                         DeferredOptions {
@@ -146,20 +145,19 @@ impl AAuthMiddleware {
                 InjectorStep::Invalidate(_) => continue,
                 InjectorStep::Continue => continue,
                 InjectorStep::ExchangeToken { resource_token } => {
-                    let auth_server_url = self
-                        .options
-                        .auth_server_url
-                        .clone()
-                        .ok_or_else(|| {
+                    let auth_server_url =
+                        self.options.auth_server_url.clone().ok_or_else(|| {
                             AAuthError::Message(
                                 "auth-token challenge received but no auth_server_url configured"
                                     .into(),
                             )
                         })?;
 
-                    let capabilities = self.options.capabilities.as_ref().map(|caps| {
-                        caps.iter().map(|c| c.as_str().to_string()).collect()
-                    });
+                    let capabilities = self
+                        .options
+                        .capabilities
+                        .as_ref()
+                        .map(|caps| caps.iter().map(|c| c.as_str().to_string()).collect());
 
                     let result = exchange_token_with(
                         TokenExchangeOptions {

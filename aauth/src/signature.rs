@@ -91,8 +91,8 @@ pub fn verify_request_signature(
     let signature_base = build_signature_base(method, authority, path, &signature_key, created);
     let signature_bytes = parse_signature_value(&signature_header)?;
     let verifying_key = verifying_key_from_jwk(cnf_jwk)?;
-    let signature = Signature::from_slice(&signature_bytes)
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
+    let signature =
+        Signature::from_slice(&signature_bytes).map_err(|e| AAuthError::Message(e.to_string()))?;
 
     verifying_key
         .verify(signature_base.as_bytes(), &signature)
@@ -112,18 +112,15 @@ fn verifying_key_from_jwk(jwk: &crate::jwt::OkpJwk) -> Result<VerifyingKey> {
 }
 
 fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers
-        .get(name)
-        .and_then(|v| v.to_str().ok())
-        .or_else(|| {
-            headers.iter().find_map(|(k, v)| {
-                if k.as_str().eq_ignore_ascii_case(name) {
-                    v.to_str().ok()
-                } else {
-                    None
-                }
-            })
+    headers.get(name).and_then(|v| v.to_str().ok()).or_else(|| {
+        headers.iter().find_map(|(k, v)| {
+            if k.as_str().eq_ignore_ascii_case(name) {
+                v.to_str().ok()
+            } else {
+                None
+            }
         })
+    })
 }
 
 #[cfg(test)]

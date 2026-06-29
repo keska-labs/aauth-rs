@@ -32,10 +32,7 @@ pub struct DeferredResult {
     pub error: Option<AAuthProtocolError>,
 }
 
-pub async fn poll_deferred<F, Fut>(
-    options: DeferredOptions,
-    send: F,
-) -> Result<DeferredResult>
+pub async fn poll_deferred<F, Fut>(options: DeferredOptions, send: F) -> Result<DeferredResult>
 where
     F: FnMut(Request) -> Fut + Send,
     Fut: Future<Output = Result<Response>> + Send,

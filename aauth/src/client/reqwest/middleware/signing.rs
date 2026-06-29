@@ -43,9 +43,8 @@ impl SigningMiddleware {
 
         match &attempt {
             AuthAttempt::AuthToken(token) => {
-                sign_request_with_auth_token(&mut req, &material, token).map_err(|e| {
-                    reqwest_middleware::Error::Middleware(anyhow!(e.to_string()))
-                })?;
+                sign_request_with_auth_token(&mut req, &material, token)
+                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
             }
             AuthAttempt::OpaqueToken(token) => {
                 apply_opaque_token(&mut req, token);

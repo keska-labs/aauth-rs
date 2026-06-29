@@ -61,10 +61,6 @@ impl MockServer {
     }
 
     pub fn interaction_manager(&self) -> Option<Arc<InteractionManager>> {
-        self.state
-            .interaction_manager
-            .lock()
-            .unwrap()
-            .clone()
+        self.state.interaction_manager.lock().unwrap().clone()
     }
 }

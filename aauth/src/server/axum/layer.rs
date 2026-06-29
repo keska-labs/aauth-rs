@@ -11,7 +11,9 @@ use crate::headers::{AAuthRequirementParams, build_aauth_requirement};
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::server::keys::ResourceTokenSigner;
-use crate::server::{ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_token};
+use crate::server::{
+    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_token,
+};
 use crate::signature::verify_request_signature;
 use crate::types::RequirementLevel;
 
@@ -94,15 +96,11 @@ where
         Box::pin(async move {
             let (method, authority, path) = request_signature_parts(&req);
 
-            let verified_sig = match verify_request_signature(
-                &method,
-                &authority,
-                &path,
-                req.headers(),
-            ) {
-                Ok(v) => v,
-                Err(e) => return Ok(unauthorized(e.to_string())),
-            };
+            let verified_sig =
+                match verify_request_signature(&method, &authority, &path, req.headers()) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(unauthorized(e.to_string())),
+                };
 
             let verified = match verify_token(VerifyTokenOptions {
                 jwt: verified_sig.jwt,

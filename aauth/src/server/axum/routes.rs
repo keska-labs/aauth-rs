@@ -93,7 +93,9 @@ pub async fn token_exchange_deferred_handler(
     for (name, value) in headers {
         response = response.header(name, value);
     }
-    Ok(response.body(axum::body::Body::empty()).expect("valid response"))
+    Ok(response
+        .body(axum::body::Body::empty())
+        .expect("valid response"))
 }
 
 pub async fn pending_poll_handler(

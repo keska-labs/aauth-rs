@@ -2,11 +2,11 @@ mod support;
 
 use std::sync::{Arc, Mutex, OnceLock};
 
+use aauth::KeyMaterialProvider;
 use aauth::VerifiedToken;
 use aauth::client::reqwest::{
     AAuthClientOptions, AAuthMiddleware, ClientBuilder, InteractionCallback,
 };
-use aauth::KeyMaterialProvider;
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
 use aauth::server::{
     InteractionManager, InteractionManagerOptions, VerifyTokenOptions, verify_token,
