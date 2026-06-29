@@ -14,7 +14,7 @@ aauth-rs/
 ├── Cargo.toml          # workspace root
 └── aauth/
     ├── src/
-    │   ├── client/     # signed fetch, token exchange, protocol-aware fetch
+    │   ├── client/     # AAuthMiddleware, token exchange, signing helpers
     │   ├── server/     # verify_token, resource tokens, InteractionManager
     │   └── …           # shared headers, JWT helpers, metadata cache
     └── tests/          # protocol integration tests (TypeScript e2e parity)
@@ -24,7 +24,7 @@ aauth-rs/
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `client` | yes | `create_signed_fetch`, `create_aauth_fetch`, `exchange_token`, `poll_deferred` |
+| `client` | yes | `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
 | `server` | yes | `verify_token`, `create_resource_token`, `InteractionManager` |
 
 Disable defaults to depend on only one side:
@@ -38,8 +38,7 @@ aauth = { version = "0.1", default-features = false, features = ["client"] }
 ```rust
 use std::sync::Arc;
 
-use aauth::client::{create_aauth_fetch, AAuthFetchOptions, HttpClientAdapter, KeyMaterialProvider};
-use aauth::http::{HttpRequest, ReqwestClient};
+use aauth::client::{AAuthClientOptions, AAuthMiddleware, ClientBuilder, KeyMaterialProvider};
 use aauth::types::KeyMaterial;
 
 #[async_trait::async_trait]
@@ -52,40 +51,34 @@ impl KeyMaterialProvider for MyProvider {
 
 #[tokio::main]
 async fn main() -> aauth::Result<()> {
-    let client = Arc::new(ReqwestClient::new()) as Arc<dyn HttpClientAdapter>;
-    let fetch = create_aauth_fetch(AAuthFetchOptions {
-        provider: Arc::new(MyProvider),
-        client,
-        auth_server_url: Some("https://person.example".into()),
-        auth_server_metadata: None,
-        on_metadata: None,
-        on_auth_token: None,
-        on_opaque_token: None,
-        opaque_token: None,
-        on_interaction: None,
-        on_clarification: None,
-        justification: None,
-        login_hint: None,
-        tenant: None,
-        domain_hint: None,
-        capabilities: None,
-        mission: None,
-        prompt: None,
-    });
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(AAuthMiddleware::new(AAuthClientOptions {
+            provider: Arc::new(MyProvider),
+            auth_server_url: Some("https://person.example".into()),
+            auth_server_metadata: None,
+            on_metadata: None,
+            on_auth_token: None,
+            on_opaque_token: None,
+            opaque_token: None,
+            on_interaction: None,
+            on_clarification: None,
+            justification: None,
+            login_hint: None,
+            tenant: None,
+            domain_hint: None,
+            capabilities: None,
+            mission: None,
+            prompt: None,
+        }))
+        .build();
 
-    let response = fetch
-        .fetch(
-            "https://resource.example/api",
-            HttpRequest {
-                method: "GET".into(),
-                url: "https://resource.example/api".into(),
-                headers: Default::default(),
-                body: None,
-            },
-        )
-        .await?;
+    let response = client
+        .get("https://resource.example/api")
+        .send()
+        .await
+        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
 
-    println!("status: {}", response.status);
+    println!("status: {}", response.status());
     Ok(())
 }
 ```

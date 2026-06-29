@@ -1,11 +1,13 @@
-use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
-use crate::client::SignedFetch;
-use crate::client::deferred::{DeferredOptions, InteractionCallback, poll_deferred};
+use http::{Method, Request as HttpRequest};
+use reqwest::{Request, Response};
+
+use crate::client::deferred::{DeferredOptions, InteractionCallback, poll_deferred_with};
+use crate::client::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
-use crate::http::HttpRequest;
 use crate::types::{
     AAuthProtocolError, AuthServerMetadata, RequirementLevel, TokenExchangeRequest,
     TokenResponseBody,
@@ -21,7 +23,6 @@ pub struct TokenExchangeResult {
 
 #[derive(Clone)]
 pub struct TokenExchangeOptions {
-    pub signed_fetch: SignedFetch,
     pub auth_server_url: String,
     pub auth_server_metadata: Option<AuthServerMetadata>,
     pub on_metadata: Option<Arc<dyn Fn(AuthServerMetadata) + Send + Sync>>,
@@ -59,11 +60,38 @@ impl std::fmt::Display for TokenExchangeError {
 
 impl std::error::Error for TokenExchangeError {}
 
-pub async fn exchange_token(options: TokenExchangeOptions) -> Result<TokenExchangeResult> {
+pub async fn exchange_token<F, Fut>(
+    options: TokenExchangeOptions,
+    send: F,
+) -> Result<TokenExchangeResult>
+where
+    F: FnMut(Request) -> Fut + Send,
+    Fut: Future<Output = Result<Response>> + Send,
+{
+    struct Adapter<F>(F);
+
+    #[async_trait::async_trait]
+    impl<F, Fut> SignedSend for Adapter<F>
+    where
+        F: FnMut(Request) -> Fut + Send,
+        Fut: Future<Output = Result<Response>> + Send,
+    {
+        async fn send(&mut self, req: Request) -> Result<Response> {
+            (self.0)(req).await
+        }
+    }
+
+    exchange_token_with(options, &mut Adapter(send)).await
+}
+
+pub(crate) async fn exchange_token_with<S: SignedSend>(
+    options: TokenExchangeOptions,
+    send: &mut S,
+) -> Result<TokenExchangeResult> {
     let metadata = if let Some(metadata) = options.auth_server_metadata.clone() {
         metadata
     } else {
-        let metadata = fetch_metadata(&options.signed_fetch, &options.auth_server_url).await?;
+        let metadata = fetch_metadata(&options.auth_server_url, send).await?;
         if let Some(on_metadata) = &options.on_metadata {
             on_metadata(metadata.clone());
         }
@@ -83,34 +111,33 @@ pub async fn exchange_token(options: TokenExchangeOptions) -> Result<TokenExchan
 
     let token_body =
         serde_json::to_string(&body).map_err(|e| AAuthError::Message(e.to_string()))?;
-    let response = options.signed_fetch.as_ref()(HttpRequest {
-        method: "POST".into(),
-        url: metadata.token_endpoint.clone(),
-        headers: HashMap::from([
-            ("content-type".to_string(), "application/json".to_string()),
-            ("prefer".to_string(), format!("wait={PREFER_WAIT}")),
-        ]),
-        body: Some(token_body.into_bytes()),
-    })
-    .await?;
 
-    if response.status == 200 {
-        let parsed: TokenResponseBody = response.json()?;
-        return Ok(TokenExchangeResult {
-            auth_token: parsed.auth_token,
-            expires_in: parsed.expires_in,
-        });
-    }
+    let http_req = HttpRequest::builder()
+        .method(Method::POST)
+        .uri(&metadata.token_endpoint)
+        .header("content-type", "application/json")
+        .header("prefer", format!("wait={PREFER_WAIT}"))
+        .body(token_body.into_bytes())
+        .expect("valid http request");
+    let response = send
+        .send(Request::try_from(http_req).expect("valid reqwest request"))
+        .await?;
 
-    if response.status == 202 {
+    if response.status().as_u16() == 202 {
         let location = response
-            .header("location")
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
             .ok_or_else(|| AAuthError::Message("202 response missing Location header".into()))?
             .to_string();
 
         let mut interaction_url = None;
         let mut interaction_code = None;
-        if let Some(header) = response.header("aauth-requirement") {
+        if let Some(header) = response
+            .headers()
+            .get("aauth-requirement")
+            .and_then(|v| v.to_str().ok())
+        {
             if let Ok(challenge) = parse_aauth_requirement(header) {
                 if challenge.requirement == RequirementLevel::Interaction {
                     interaction_url = challenge.url;
@@ -119,19 +146,25 @@ pub async fn exchange_token(options: TokenExchangeOptions) -> Result<TokenExchan
             }
         }
 
-        let result = poll_deferred(DeferredOptions {
-            signed_fetch: options.signed_fetch.clone(),
-            location_url: resolve_url(&options.auth_server_url, &location),
-            interaction_url,
-            interaction_code,
-            on_interaction: options.on_interaction,
-            on_clarification: options.on_clarification,
-            max_poll_duration: None,
-        })
+        let result = poll_deferred_with(
+            DeferredOptions {
+                location_url: resolve_url(&options.auth_server_url, &location),
+                interaction_url,
+                interaction_code,
+                on_interaction: options.on_interaction,
+                on_clarification: options.on_clarification,
+                max_poll_duration: None,
+            },
+            send,
+        )
         .await?;
 
-        if result.response.status == 200 {
-            let parsed: TokenResponseBody = result.response.json()?;
+        if result.response.status().is_success() {
+            let parsed: TokenResponseBody = result
+                .response
+                .json()
+                .await
+                .map_err(|e| AAuthError::Message(e.to_string()))?;
             return Ok(TokenExchangeResult {
                 auth_token: parsed.auth_token,
                 expires_in: parsed.expires_in,
@@ -140,46 +173,61 @@ pub async fn exchange_token(options: TokenExchangeOptions) -> Result<TokenExchan
 
         return Err(AAuthError::Message(
             TokenExchangeError {
-                status: result.response.status,
+                status: result.response.status().as_u16(),
                 aauth_error: result.error,
             }
             .to_string(),
         ));
     }
 
+    if response.status().is_success() {
+        let parsed: TokenResponseBody = response
+            .json()
+            .await
+            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        return Ok(TokenExchangeResult {
+            auth_token: parsed.auth_token,
+            expires_in: parsed.expires_in,
+        });
+    }
+
     Err(AAuthError::Message(
         TokenExchangeError {
-            status: response.status,
+            status: response.status().as_u16(),
             aauth_error: None,
         }
         .to_string(),
     ))
 }
 
-async fn fetch_metadata(
-    signed_fetch: &SignedFetch,
+async fn fetch_metadata<S: SignedSend>(
     auth_server_url: &str,
+    send: &mut S,
 ) -> Result<AuthServerMetadata> {
     let metadata_url = format!(
         "{}/.well-known/aauth-person.json",
         auth_server_url.trim_end_matches('/')
     );
-    let response = signed_fetch.as_ref()(HttpRequest {
-        method: "GET".into(),
-        url: metadata_url,
-        headers: HashMap::new(),
-        body: None,
-    })
-    .await?;
+    let http_req = HttpRequest::builder()
+        .method(Method::GET)
+        .uri(&metadata_url)
+        .body(Vec::new())
+        .expect("valid http request");
+    let response = send
+        .send(Request::try_from(http_req).expect("valid reqwest request"))
+        .await?;
 
-    if !response.ok() {
+    if !response.status().is_success() {
         return Err(AAuthError::Message(format!(
             "Failed to fetch auth server metadata: {}",
-            response.status
+            response.status()
         )));
     }
 
-    let metadata: AuthServerMetadata = response.json()?;
+    let metadata: AuthServerMetadata = response
+        .json()
+        .await
+        .map_err(|e| AAuthError::Message(e.to_string()))?;
     if metadata.token_endpoint.is_empty() {
         return Err(AAuthError::Message(
             "Auth server metadata missing token_endpoint".into(),

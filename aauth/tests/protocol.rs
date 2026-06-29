@@ -4,18 +4,22 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use aauth::VerifiedToken;
 use aauth::clear_metadata_cache;
-use aauth::client::{AAuthFetchOptions, create_aauth_fetch};
+use aauth::client::{AAuthClientOptions, AAuthMiddleware, ClientBuilder, KeyMaterialProvider};
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
-use aauth::http::HttpRequest;
-use aauth::metadata::CachedMetadataFetcher;
 use aauth::server::{
     InteractionManager, InteractionManagerOptions, VerifyTokenOptions, verify_token,
 };
 use aauth::types::{AuthOkResponse, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
+use http::Extensions;
+use reqwest::{Request, Response};
+use reqwest_middleware::{Error, Middleware, Next};
 
-use aauth::{TestKeys, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt};
+use aauth::{
+    TestKeys, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt,
+    static_agent_metadata_fetcher, static_auth_metadata_fetcher,
+};
 
-use support::{MockServer, MockServerConfig};
+use support::{MockServer, MockServerConfig, MockTransport};
 
 const AGENT_URL: &str = "https://agent.example";
 const AGENT_ID: &str = "aauth:test@example.com";
@@ -28,6 +32,16 @@ fn test_lock() -> std::sync::MutexGuard<'static, ()> {
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn build_client(
+    options: AAuthClientOptions,
+    server: &MockServer,
+) -> aauth::client::ClientWithMiddleware {
+    ClientBuilder::new(reqwest::Client::new())
+        .with(AAuthMiddleware::new(options))
+        .with(server.mock_transport())
+        .build()
 }
 
 #[tokio::test]
@@ -79,10 +93,7 @@ async fn verify_token_agent_jwt() {
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
 
-    let server = MockServer::new(mock_config(&keys, false, None, None, None));
-
-    let fetcher =
-        CachedMetadataFetcher::new(server.client.clone() as Arc<dyn aauth::http::HttpClient>);
+    let fetcher = static_agent_metadata_fetcher(&keys, AGENT_URL);
     let result = verify_token(VerifyTokenOptions {
         jwt: agent_jwt,
         http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
@@ -115,10 +126,7 @@ async fn verify_token_auth_jwt() {
         Some("files.read"),
     );
 
-    let server = MockServer::new(mock_config(&keys, false, None, None, None));
-
-    let fetcher =
-        CachedMetadataFetcher::new(server.client.clone() as Arc<dyn aauth::http::HttpClient>);
+    let fetcher = static_auth_metadata_fetcher(&keys, AUTH_SERVER_URL);
     let result = verify_token(VerifyTokenOptions {
         jwt: auth_jwt,
         http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
@@ -147,10 +155,7 @@ async fn verify_token_key_binding_failed() {
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let wrong = create_test_keys();
 
-    let server = MockServer::new(mock_config(&keys, false, None, None, None));
-
-    let fetcher =
-        CachedMetadataFetcher::new(server.client.clone() as Arc<dyn aauth::http::HttpClient>);
+    let fetcher = static_agent_metadata_fetcher(&keys, AGENT_URL);
     let err = verify_token(VerifyTokenOptions {
         jwt: agent_jwt,
         http_signature_thumbprint: wrong.agent_ephemeral.thumbprint().to_string(),
@@ -174,23 +179,16 @@ async fn full_401_challenge_response_direct_grant() {
     let provider = create_key_provider(&keys, agent_jwt);
 
     let server = MockServer::new(mock_config(&keys, false, None, None, None));
-    let fetch = aauth_fetch(provider, server.client.clone(), None, None);
+    let client = aauth_client(provider, &server, None, None);
 
-    let response = fetch
-        .fetch(
-            &format!("{RESOURCE_URL}/api/data"),
-            HttpRequest {
-                method: "GET".into(),
-                url: format!("{RESOURCE_URL}/api/data"),
-                headers: Default::default(),
-                body: None,
-            },
-        )
+    let response = client
+        .get(format!("{RESOURCE_URL}/api/data"))
+        .send()
         .await
         .unwrap();
 
-    assert_eq!(response.status, 200);
-    let body: AuthOkResponse = response.json().unwrap();
+    assert_eq!(response.status(), 200);
+    let body: AuthOkResponse = response.json().await.unwrap();
     assert_eq!(body.status, "ok");
     assert_eq!(body.user.as_deref(), Some("user-123"));
 }
@@ -205,27 +203,25 @@ async fn second_request_reuses_cached_token() {
 
     let call_count = Arc::new(Mutex::new(0usize));
     let server = MockServer::new(mock_config(&keys, false, None, None, None));
-    let counting_client = Arc::new(CountingClient {
-        inner: server.client.clone(),
-        count: Arc::clone(&call_count),
-    });
 
-    let fetch = aauth_fetch(provider, counting_client, None, None);
+    let options = aauth_options(provider, None, None);
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(AAuthMiddleware::new(options))
+        .with(CountingMiddleware {
+            count: Arc::clone(&call_count),
+        })
+        .with(server.mock_transport())
+        .build();
 
-    let req = |path: &str| HttpRequest {
-        method: "GET".into(),
-        url: format!("{RESOURCE_URL}{path}"),
-        headers: Default::default(),
-        body: None,
-    };
-
-    let _ = fetch
-        .fetch(&req("/api/data").url, req("/api/data"))
+    let _ = client
+        .get(format!("{RESOURCE_URL}/api/data"))
+        .send()
         .await
         .unwrap();
     let after_first = *call_count.lock().unwrap();
-    let _ = fetch
-        .fetch(&req("/api/other").url, req("/api/other"))
+    let _ = client
+        .get(format!("{RESOURCE_URL}/api/other"))
+        .send()
         .await
         .unwrap();
     let after_second = *call_count.lock().unwrap();
@@ -251,9 +247,9 @@ async fn justification_and_hints_pass_through() {
         None,
     ));
 
-    let fetch = aauth_fetch(
+    let client = aauth_client(
         provider,
-        server.client.clone(),
+        &server,
         Some("read user files".into()),
         Some((
             "alice@acme.com".into(),
@@ -262,16 +258,9 @@ async fn justification_and_hints_pass_through() {
         )),
     );
 
-    let _ = fetch
-        .fetch(
-            &format!("{RESOURCE_URL}/api/data"),
-            HttpRequest {
-                method: "GET".into(),
-                url: format!("{RESOURCE_URL}/api/data"),
-                headers: Default::default(),
-                body: None,
-            },
-        )
+    let _ = client
+        .get(format!("{RESOURCE_URL}/api/data"))
+        .send()
         .await
         .unwrap();
 
@@ -334,9 +323,8 @@ async fn deferred_interaction_grant() {
         }
     });
 
-    let fetch = create_aauth_fetch(AAuthFetchOptions {
-        provider,
-        client: server.client.clone(),
+    let options = AAuthClientOptions {
+        provider: Arc::clone(&provider),
         auth_server_url: Some(AUTH_SERVER_URL.into()),
         auth_server_metadata: None,
         on_metadata: None,
@@ -352,22 +340,16 @@ async fn deferred_interaction_grant() {
         capabilities: None,
         mission: None,
         prompt: None,
-    });
+    };
+    let client = build_client(options, &server);
 
-    let response = fetch
-        .fetch(
-            &format!("{RESOURCE_URL}/api/data"),
-            HttpRequest {
-                method: "GET".into(),
-                url: format!("{RESOURCE_URL}/api/data"),
-                headers: Default::default(),
-                body: None,
-            },
-        )
+    let response = client
+        .get(format!("{RESOURCE_URL}/api/data"))
+        .send()
         .await
         .unwrap();
 
-    assert_eq!(response.status, 200);
+    assert_eq!(response.status(), 200);
     let interaction = received.lock().unwrap().clone();
     assert!(interaction.is_some());
     let (url, code) = interaction.unwrap();
@@ -418,19 +400,17 @@ fn mock_config(
     }
 }
 
-fn aauth_fetch(
-    provider: Arc<dyn aauth::client::KeyMaterialProvider>,
-    client: Arc<dyn aauth::client::HttpClientAdapter>,
+fn aauth_options(
+    provider: Arc<dyn KeyMaterialProvider>,
     justification: Option<String>,
     hints: Option<(String, String, String)>,
-) -> aauth::client::AAuthFetch {
+) -> AAuthClientOptions {
     let (login_hint, tenant, domain_hint) = hints
         .map(|(l, t, d)| (Some(l), Some(t), Some(d)))
         .unwrap_or((None, None, None));
 
-    create_aauth_fetch(AAuthFetchOptions {
+    AAuthClientOptions {
         provider,
-        client,
         auth_server_url: Some(AUTH_SERVER_URL.into()),
         auth_server_metadata: None,
         on_metadata: None,
@@ -446,21 +426,34 @@ fn aauth_fetch(
         capabilities: None,
         mission: None,
         prompt: None,
-    })
+    }
 }
 
-struct CountingClient {
-    inner: Arc<support::MockHttpClient>,
+fn aauth_client(
+    provider: Arc<dyn KeyMaterialProvider>,
+    server: &MockServer,
+    justification: Option<String>,
+    hints: Option<(String, String, String)>,
+) -> aauth::client::ClientWithMiddleware {
+    build_client(
+        aauth_options(Arc::clone(&provider), justification, hints),
+        server,
+    )
+}
+
+struct CountingMiddleware {
     count: Arc<Mutex<usize>>,
 }
 
 #[async_trait::async_trait]
-impl aauth::client::HttpClientAdapter for CountingClient {
-    async fn send(
+impl Middleware for CountingMiddleware {
+    async fn handle(
         &self,
-        request: aauth::http::HttpRequest,
-    ) -> aauth::error::Result<aauth::http::HttpResponse> {
+        req: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> std::result::Result<Response, Error> {
         *self.count.lock().unwrap() += 1;
-        self.inner.send(request).await
+        next.run(req, extensions).await
     }
 }

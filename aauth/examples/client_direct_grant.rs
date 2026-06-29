@@ -7,8 +7,8 @@
 #[path = "shared/mock_resource.rs"]
 mod mock_resource;
 
-use aauth::client::{AAuthFetchOptions, create_aauth_fetch};
-use aauth::http::HttpRequest;
+use std::sync::Arc;
+
 use aauth::types::AgentOkResponse;
 use aauth::{create_key_provider, create_test_keys, mint_agent_jwt};
 
@@ -21,42 +21,24 @@ async fn main() -> aauth::Result<()> {
     let keys = create_test_keys();
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID);
     let provider = create_key_provider(&keys, agent_jwt);
-    let client = mock_resource::MockResourceClient::new(keys, RESOURCE_URL);
 
-    let fetch = create_aauth_fetch(AAuthFetchOptions {
-        provider,
-        client,
-        auth_server_url: None,
-        auth_server_metadata: None,
-        on_metadata: None,
-        on_auth_token: None,
-        on_opaque_token: None,
-        opaque_token: None,
-        on_interaction: None,
-        on_clarification: None,
-        justification: None,
-        login_hint: None,
-        tenant: None,
-        domain_hint: None,
-        capabilities: None,
-        mission: None,
-        prompt: None,
-    });
+    let client = mock_resource::build_client(
+        Arc::clone(&provider),
+        keys,
+        RESOURCE_URL,
+    );
 
-    let response = fetch
-        .fetch(
-            &format!("{RESOURCE_URL}/api/data"),
-            HttpRequest {
-                method: "GET".into(),
-                url: format!("{RESOURCE_URL}/api/data"),
-                headers: Default::default(),
-                body: None,
-            },
-        )
-        .await?;
+    let response = client
+        .get(format!("{RESOURCE_URL}/api/data"))
+        .send()
+        .await
+        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
 
-    println!("status: {}", response.status);
-    let body: AgentOkResponse = response.json()?;
+    println!("status: {}", response.status());
+    let body: AgentOkResponse = response
+        .json()
+        .await
+        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
     println!("agent: {}", body.agent);
 
     Ok(())

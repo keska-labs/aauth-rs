@@ -14,7 +14,7 @@ categories = ["authentication", "web-programming"]
 
 [features]
 default = ["client", "server"]
-client = ["dep:reqwest", "dep:tokio"]
+client = ["dep:reqwest", "dep:reqwest-middleware", "dep:http-body-util", "dep:tokio"]
 server = []
 
 [dependencies]
@@ -25,7 +25,10 @@ ed25519-dalek.workspace = true
 http.workspace = true
 jsonwebtoken.workspace = true
 rand.workspace = true
+anyhow.workspace = true
 reqwest = { workspace = true, optional = true }
+reqwest-middleware = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 sfv.workspace = true
@@ -38,6 +41,10 @@ uuid.workspace = true
 [dev-dependencies]
 tokio.workspace = true
 wiremock.workspace = true
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+http-body-util.workspace = true
+anyhow.workspace = true
 
 [[example]]
 name = "verify_agent_token"

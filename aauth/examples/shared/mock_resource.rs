@@ -1,65 +1,85 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use aauth::TestKeys;
 use aauth::VerifiedToken;
-use aauth::error::Result;
-use aauth::http::{HttpClient, HttpRequest, HttpResponse};
-use aauth::metadata::CachedMetadataFetcher;
+use aauth::client::{AAuthClientOptions, AAuthMiddleware, ClientBuilder, KeyMaterialProvider};
 use aauth::server::{VerifyTokenOptions, verify_token};
 use aauth::types::AgentOkResponse;
-use async_trait::async_trait;
+use http::Extensions;
+use http::StatusCode;
+use reqwest::{Request, Response, ResponseBuilderExt, Url};
+use reqwest_middleware::{Error, Middleware, Next};
 
 const AGENT_URL: &str = "https://agent.example";
 
-pub struct MockResourceClient {
+pub fn build_client(
+    provider: Arc<dyn KeyMaterialProvider>,
+    keys: TestKeys,
+    resource_url: impl Into<String>,
+) -> aauth::client::ClientWithMiddleware {
+    let resource_url = resource_url.into();
+    ClientBuilder::new(reqwest::Client::new())
+        .with(AAuthMiddleware::new(AAuthClientOptions {
+            provider,
+            auth_server_url: None,
+            auth_server_metadata: None,
+            on_metadata: None,
+            on_auth_token: None,
+            on_opaque_token: None,
+            opaque_token: None,
+            on_interaction: None,
+            on_clarification: None,
+            justification: None,
+            login_hint: None,
+            tenant: None,
+            domain_hint: None,
+            capabilities: None,
+            mission: None,
+            prompt: None,
+        }))
+        .with(MockResourceTransport {
+            keys,
+            resource_url,
+        })
+        .build()
+}
+
+struct MockResourceTransport {
     keys: TestKeys,
     resource_url: String,
 }
 
-impl MockResourceClient {
-    pub fn new(keys: TestKeys, resource_url: impl Into<String>) -> Arc<Self> {
-        Arc::new(Self {
-            keys,
-            resource_url: resource_url.into(),
-        })
-    }
-}
-
-#[async_trait]
-impl aauth::client::HttpClientAdapter for MockResourceClient {
-    async fn send(&self, request: HttpRequest) -> Result<HttpResponse> {
-        self.handle(request).await
-    }
-}
-
-#[async_trait]
-impl HttpClient for MockResourceClient {
-    async fn send(
+#[async_trait::async_trait]
+impl Middleware for MockResourceTransport {
+    async fn handle(
         &self,
-        request: HttpRequest,
-    ) -> std::result::Result<HttpResponse, aauth::error::HttpError> {
-        self.handle(request)
+        req: Request,
+        _extensions: &mut Extensions,
+        _next: Next<'_>,
+    ) -> std::result::Result<Response, Error> {
+        self.handle(req)
             .await
-            .map_err(|e| aauth::error::HttpError::Request(e.to_string()))
+            .map_err(|e| Error::Middleware(anyhow::anyhow!(e.to_string())))
     }
 }
 
-impl MockResourceClient {
-    async fn handle(&self, request: HttpRequest) -> Result<HttpResponse> {
-        if !request.url.starts_with(&self.resource_url) {
-            return Ok(aauth::http::empty_response(404));
+impl MockResourceTransport {
+    async fn handle(&self, req: Request) -> aauth::Result<Response> {
+        let url = req.url().as_str();
+        if !url.starts_with(&self.resource_url) {
+            return Ok(Response::from(
+                http::Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .url(Url::parse(url).expect("valid url"))
+                    .body(Vec::new())
+                    .expect("valid http response"),
+            ));
         }
 
-        let jwt = extract_signature_jwt(&request)
+        let jwt = extract_signature_jwt(&req)
             .ok_or_else(|| aauth::AAuthError::Message("Missing signature-key jwt".into()))?;
 
-        let metadata_client = Arc::new(MetadataOnlyClient {
-            keys: self.keys.clone(),
-            agent_url: AGENT_URL.into(),
-        }) as Arc<dyn HttpClient>;
-
-        let fetcher = CachedMetadataFetcher::new(metadata_client);
+        let fetcher = self.keys.agent_metadata_fetcher(AGENT_URL);
         let verified = verify_token(VerifyTokenOptions {
             jwt,
             http_signature_thumbprint: self.keys.agent_ephemeral.thumbprint().to_string(),
@@ -70,74 +90,43 @@ impl MockResourceClient {
         let verified = match verified {
             Ok(v) => v,
             Err(e) => {
-                return Ok(HttpResponse {
-                    status: 401,
-                    headers: HashMap::new(),
-                    body: e.to_string().into_bytes(),
-                });
+                return Ok(Response::from(
+                    http::Response::builder()
+                        .status(StatusCode::UNAUTHORIZED)
+                        .url(Url::parse(url).expect("valid url"))
+                        .body(e.to_string().into_bytes())
+                        .expect("valid http response"),
+                ));
             }
         };
 
-        match verified {
-            VerifiedToken::Agent(agent) => Ok(aauth::http::json_response(
-                200,
-                &AgentOkResponse {
-                    status: "ok".into(),
-                    agent: agent.iss,
-                },
-            )),
-            VerifiedToken::Auth(_) => Ok(aauth::http::json_response(
-                200,
-                &AgentOkResponse {
-                    status: "ok".into(),
-                    agent: AGENT_URL.into(),
-                },
-            )),
-        }
+        let body = match verified {
+            VerifiedToken::Agent(agent) => AgentOkResponse {
+                status: "ok".into(),
+                agent: agent.iss,
+            },
+            VerifiedToken::Auth(_) => AgentOkResponse {
+                status: "ok".into(),
+                agent: AGENT_URL.into(),
+            },
+        };
+
+        Ok(Response::from(
+            http::Response::builder()
+                .status(StatusCode::OK)
+                .url(Url::parse(url).expect("valid url"))
+                .header("content-type", "application/json")
+                .body(serde_json::to_vec(&body).expect("serialize json"))
+                .expect("valid http response"),
+        ))
     }
 }
 
-#[derive(Clone)]
-struct MetadataOnlyClient {
-    keys: TestKeys,
-    agent_url: String,
-}
-
-#[async_trait]
-impl HttpClient for MetadataOnlyClient {
-    async fn send(
-        &self,
-        request: HttpRequest,
-    ) -> std::result::Result<HttpResponse, aauth::error::HttpError> {
-        let url = request.url.as_str();
-
-        if url == format!("{}/.well-known/aauth-agent.json", self.agent_url) {
-            return Ok(aauth::http::json_response(
-                200,
-                &aauth::MetadataDocument {
-                    jwks_uri: format!("{}/jwks", self.agent_url),
-                    extra: HashMap::new(),
-                },
-            ));
-        }
-
-        if url == format!("{}/jwks", self.agent_url) {
-            return Ok(aauth::http::json_response(
-                200,
-                &self.keys.agent_root.jwk_set(),
-            ));
-        }
-
-        Ok(aauth::http::empty_response(404))
-    }
-}
-
-fn extract_signature_jwt(request: &HttpRequest) -> Option<String> {
-    let header = request
-        .headers
-        .iter()
-        .find(|(k, _)| k.eq_ignore_ascii_case("signature-key"))
-        .map(|(_, v)| v.as_str())?;
+fn extract_signature_jwt(req: &Request) -> Option<String> {
+    let header = req
+        .headers()
+        .get("signature-key")
+        .and_then(|v| v.to_str().ok())?;
     let start = header.find("jwt=\"")? + 5;
     let rest = &header[start..];
     let end = rest.find('"')?;

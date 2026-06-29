@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use jsonwebtoken::jwk::JwkSet;
+use reqwest::Client;
 
 use crate::error::Result;
-use crate::http::{HttpClient, HttpRequest};
 use crate::types::MetadataDocument;
 
 const METADATA_CACHE_TTL: Duration = Duration::from_secs(600);
@@ -86,11 +86,11 @@ impl MetadataFetcher for StaticMetadataFetcher {
 
 #[derive(Clone)]
 pub struct CachedMetadataFetcher {
-    client: Arc<dyn HttpClient>,
+    client: Client,
 }
 
 impl CachedMetadataFetcher {
-    pub fn new(client: Arc<dyn HttpClient>) -> Self {
+    pub fn new(client: Client) -> Self {
         Self { client }
     }
 
@@ -117,26 +117,25 @@ impl CachedMetadataFetcher {
 
         let response = self
             .client
-            .send(HttpRequest {
-                method: "GET".into(),
-                url: metadata_url.to_string(),
-                headers: HashMap::new(),
-                body: None,
-            })
+            .get(metadata_url)
+            .send()
             .await
-            .map_err(crate::error::AAuthError::Http)?;
+            .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
 
-        if !response.ok() {
+        if !response.status().is_success() {
             return Err(crate::error::AAuthError::Token {
                 code: "metadata_fetch_failed".into(),
                 message: format!(
                     "Failed to fetch metadata from {metadata_url}: {}",
-                    response.status
+                    response.status()
                 ),
             });
         }
 
-        let metadata: MetadataDocument = response.json()?;
+        let metadata: MetadataDocument = response
+            .json()
+            .await
+            .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
         if metadata.jwks_uri.is_empty() {
             return Err(crate::error::AAuthError::Token {
                 code: "metadata_fetch_failed".into(),
@@ -183,24 +182,21 @@ impl MetadataFetcher for CachedMetadataFetcher {
 
         let response = self
             .client
-            .send(HttpRequest {
-                method: "GET".into(),
-                url: jwks_uri.to_string(),
-                headers: HashMap::new(),
-                body: None,
-            })
+            .get(jwks_uri)
+            .send()
             .await
-            .map_err(crate::error::AAuthError::Http)?;
+            .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
 
-        if !response.ok() {
+        if !response.status().is_success() {
             return Err(crate::error::AAuthError::Token {
                 code: "invalid_agent_token".into(),
-                message: format!("Failed to fetch JWKS from {jwks_uri}: {}", response.status),
+                message: format!("Failed to fetch JWKS from {jwks_uri}: {}", response.status()),
             });
         }
 
         let jwks: JwkSet = response
             .json()
+            .await
             .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
         jwks_cache()
             .lock()

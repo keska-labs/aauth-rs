@@ -1,15 +1,17 @@
 mod deferred;
-mod fetch;
+pub mod injector;
 pub mod keys;
+mod middleware;
+mod send;
 mod signed;
 mod token_exchange;
 
-pub use deferred::{DeferredOptions, DeferredResult, InteractionCallback, poll_deferred};
-pub use fetch::{AAuthFetch, AAuthFetchOptions, create_aauth_fetch};
-pub use signed::{
-    HttpClientAdapter, KeyMaterialProvider, SignedFetch, SignedFetchOptions, create_signed_fetch,
-    sign_request_with_auth_token,
-};
+pub use deferred::{ClarificationCallback, DeferredOptions, DeferredResult, InteractionCallback, poll_deferred};
+pub use injector::{AAuthClientOptions, AAuthInjector, AuthAttempt, InjectorStep};
+pub use middleware::{AAuthMiddleware, ClientBuilder, ClientWithMiddleware};
+pub use reqwest;
+pub use reqwest_middleware;
+pub use signed::KeyMaterialProvider;
 pub use token_exchange::{
     TokenExchangeError, TokenExchangeOptions, TokenExchangeResult, exchange_token,
 };

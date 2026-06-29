@@ -9,7 +9,6 @@
 
 pub mod error;
 pub mod headers;
-pub mod http;
 pub mod interaction_code;
 pub mod jwt;
 pub mod keys;
@@ -53,9 +52,10 @@ pub use types::*;
 
 #[cfg(feature = "client")]
 pub use client::{
-    AAuthFetch, AAuthFetchOptions, DeferredOptions, DeferredResult, InteractionCallback,
-    SignedFetch, SignedFetchOptions, TokenExchangeError, TokenExchangeOptions, TokenExchangeResult,
-    create_aauth_fetch, create_signed_fetch, exchange_token, poll_deferred,
+    AAuthClientOptions, AAuthInjector, AAuthMiddleware, AuthAttempt, ClarificationCallback,
+    ClientBuilder, ClientWithMiddleware, DeferredOptions, DeferredResult, InjectorStep,
+    InteractionCallback, KeyMaterialProvider, TokenExchangeError, TokenExchangeOptions,
+    TokenExchangeResult, exchange_token, poll_deferred,
 };
 
 #[cfg(feature = "server")]
