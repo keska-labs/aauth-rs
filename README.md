@@ -123,13 +123,23 @@ Key material is injected via `KeyMaterialProvider` (equivalent to the TypeScript
 
 ## Examples
 
-```bash
-# Direct agent grant: axum resource server + reqwest client
-cargo run --example direct_agent_grant
+Each example mirrors an access mode from the [AAuth explorer](https://explorer.aauth.dev/):
 
-# Full 401 auth-token challenge with token exchange
-cargo run --example auth_token_challenge
+```bash
+# Identity Based — agent JWT alone grants access
+cargo run --example identity_based
+
+# Person Server Managed — 401 challenge, token exchange at the Person Server
+cargo run --example person_server_managed
+
+# Resource Managed — resource-owned interaction and opaque AAuth-Access tokens
+cargo run --example resource_managed
+
+# Federated — Person Server delegates token exchange to an Access Server
+cargo run --example federated
 ```
+
+Each example has a matching E2E test in `tests/example_flows.rs` (run with `cargo test --test example_flows --all-features`).
 
 Build all examples in CI:
 
