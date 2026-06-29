@@ -26,7 +26,7 @@ use crate::signature::verify_request_signature;
 use crate::types::RequirementLevel;
 
 #[derive(Clone)]
-pub struct AAuthLayer<P, S, O>
+pub struct ResourceAuthLayer<P, S, O>
 where
     P: ResourceConsentPolicy,
     S: PendingStore,
@@ -38,7 +38,7 @@ where
     pub resource_token_signer: Arc<dyn ResourceTokenSigner>,
 }
 
-impl<P, S, O> AAuthLayer<P, S, O>
+impl<P, S, O> ResourceAuthLayer<P, S, O>
 where
     P: ResourceConsentPolicy,
     S: PendingStore,
@@ -59,16 +59,16 @@ where
     }
 }
 
-impl<S, P, St, O> Layer<S> for AAuthLayer<P, St, O>
+impl<S, P, St, O> Layer<S> for ResourceAuthLayer<P, St, O>
 where
     P: ResourceConsentPolicy,
     St: PendingStore,
     O: OpaqueAccessStore + Clone,
 {
-    type Service = AAuthService<S, P, St, O>;
+    type Service = ResourceAuthService<S, P, St, O>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        AAuthService {
+        ResourceAuthService {
             inner,
             fetcher: Arc::clone(&self.fetcher),
             resource_url: self.resource_url.clone(),
@@ -79,7 +79,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct AAuthService<S, P, St, O>
+pub struct ResourceAuthService<S, P, St, O>
 where
     P: ResourceConsentPolicy,
     St: PendingStore,
@@ -92,7 +92,7 @@ where
     resource_token_signer: Arc<dyn ResourceTokenSigner>,
 }
 
-impl<S, B, P, St, O> Service<Request<B>> for AAuthService<S, P, St, O>
+impl<S, B, P, St, O> Service<Request<B>> for ResourceAuthService<S, P, St, O>
 where
     S: Service<Request<B>, Response = Response<Body>> + Clone + Send + 'static,
     S::Future: Send + 'static,

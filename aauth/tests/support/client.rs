@@ -1,7 +1,7 @@
 //! Reqwest client setup shared by integration tests and runnable examples.
 
 use aauth::client::reqwest::{
-    AAuthClientOptions, AAuthMiddleware, ClarificationCallback, ClientBuilder, InteractionCallback,
+    AgentOptions, AgentMiddleware, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
 use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
 
@@ -21,25 +21,18 @@ pub fn build_client(
     let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID, ps);
     let provider = provider.unwrap_or_else(|| create_key_provider(&spawned.keys, agent_jwt));
 
+    let mut builder = AgentOptions::builder(provider).max_poll_duration_secs(TEST_POLL_MAX_SECS);
+    if let Some(url) = person_server_url {
+        builder = builder.person_server_url(url);
+    }
+    if let Some(on_interaction) = on_interaction {
+        builder = builder.on_interaction(on_interaction);
+    }
+    if let Some(on_clarification) = on_clarification {
+        builder = builder.on_clarification(on_clarification);
+    }
+
     ClientBuilder::new(reqwest::Client::new())
-        .with(AAuthMiddleware::new(AAuthClientOptions {
-            provider,
-            person_server_url,
-            person_server_metadata: None,
-            on_metadata: None,
-            on_auth_token: None,
-            on_opaque_token: None,
-            opaque_token: None,
-            on_interaction,
-            on_clarification,
-            justification: None,
-            login_hint: None,
-            tenant: None,
-            domain_hint: None,
-            capabilities: None,
-            mission: None,
-            prompt: None,
-            max_poll_duration_secs: Some(TEST_POLL_MAX_SECS),
-        }))
+        .with(AgentMiddleware::new(builder.build()))
         .build()
 }

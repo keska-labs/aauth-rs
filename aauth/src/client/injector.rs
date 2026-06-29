@@ -17,19 +17,19 @@ pub type ClarificationCallback = std::sync::Arc<
 >;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AuthAttempt {
+pub enum AgentAuthAttempt {
     AuthToken(String),
     OpaqueToken(String),
     AgentSigned,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InjectorStep {
+pub enum AgentAuthStep {
     Continue,
     Finish,
     ExchangeToken { resource_token: String },
     PollDeferred,
-    Invalidate(AuthAttempt),
+    Invalidate(AgentAuthAttempt),
 }
 
 #[derive(Clone)]
@@ -46,8 +46,9 @@ struct CachedOpaque {
 /// Framework-agnostic auth/caching state machine for the AAuth protocol.
 ///
 /// Operates on `http::StatusCode` and `http::HeaderMap` only — no reqwest dependency.
-/// Pair with a transport adapter (e.g. `AAuthMiddleware`) that performs signing and HTTP.
-pub struct AAuthInjector {
+/// Pair with a transport adapter (e.g. [`AgentMiddleware`](crate::client::reqwest::AgentMiddleware))
+/// that performs signing and HTTP.
+pub struct AgentAuth {
     token_cache: HashMap<String, CachedToken>,
     opaque_cache: HashMap<String, CachedOpaque>,
     person_server_url: Option<String>,
@@ -55,30 +56,188 @@ pub struct AAuthInjector {
     on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
 }
 
+/// Configuration for an AAuth agent client (signing, token exchange, deferred flows).
 #[derive(Clone)]
-pub struct AAuthClientOptions {
-    pub provider: Arc<dyn super::keys::KeyMaterialProvider>,
-    pub person_server_url: Option<String>,
-    pub person_server_metadata: Option<PersonServerMetadata>,
-    pub opaque_token: Option<String>,
-    pub capabilities: Option<Vec<Capability>>,
-    pub mission: Option<Mission>,
-    pub justification: Option<String>,
-    pub login_hint: Option<String>,
-    pub tenant: Option<String>,
-    pub domain_hint: Option<String>,
-    pub prompt: Option<String>,
-    pub on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
-    pub on_auth_token: Option<Arc<dyn Fn(String, u64) + Send + Sync>>,
-    pub on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
-    pub on_interaction: Option<InteractionCallback>,
-    pub on_clarification: Option<ClarificationCallback>,
+pub struct AgentOptions {
+    pub(crate) provider: Arc<dyn super::keys::KeyMaterialProvider>,
+    pub(crate) person_server_url: Option<String>,
+    pub(crate) person_server_metadata: Option<PersonServerMetadata>,
+    pub(crate) opaque_token: Option<String>,
+    pub(crate) capabilities: Option<Vec<Capability>>,
+    pub(crate) mission: Option<Mission>,
+    pub(crate) justification: Option<String>,
+    pub(crate) login_hint: Option<String>,
+    pub(crate) tenant: Option<String>,
+    pub(crate) domain_hint: Option<String>,
+    pub(crate) prompt: Option<String>,
+    pub(crate) on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
+    pub(crate) on_auth_token: Option<Arc<dyn Fn(String, u64) + Send + Sync>>,
+    pub(crate) on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
+    pub(crate) on_interaction: Option<InteractionCallback>,
+    pub(crate) on_clarification: Option<ClarificationCallback>,
     /// Max seconds to poll a pending URL before failing (default 300).
-    pub max_poll_duration_secs: Option<u64>,
+    pub(crate) max_poll_duration_secs: Option<u64>,
 }
 
-impl AAuthInjector {
-    pub fn from_options(options: &AAuthClientOptions) -> Self {
+/// Builder for [`AgentOptions`]. Only `provider` is required.
+#[derive(Clone)]
+pub struct AgentOptionsBuilder {
+    provider: Arc<dyn super::keys::KeyMaterialProvider>,
+    person_server_url: Option<String>,
+    person_server_metadata: Option<PersonServerMetadata>,
+    opaque_token: Option<String>,
+    capabilities: Option<Vec<Capability>>,
+    mission: Option<Mission>,
+    justification: Option<String>,
+    login_hint: Option<String>,
+    tenant: Option<String>,
+    domain_hint: Option<String>,
+    prompt: Option<String>,
+    on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
+    on_auth_token: Option<Arc<dyn Fn(String, u64) + Send + Sync>>,
+    on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
+    on_interaction: Option<InteractionCallback>,
+    on_clarification: Option<ClarificationCallback>,
+    max_poll_duration_secs: Option<u64>,
+}
+
+impl AgentOptions {
+    pub fn builder(provider: Arc<dyn super::keys::KeyMaterialProvider>) -> AgentOptionsBuilder {
+        AgentOptionsBuilder::new(provider)
+    }
+}
+
+impl AgentOptionsBuilder {
+    pub fn new(provider: Arc<dyn super::keys::KeyMaterialProvider>) -> Self {
+        Self {
+            provider,
+            person_server_url: None,
+            person_server_metadata: None,
+            opaque_token: None,
+            capabilities: None,
+            mission: None,
+            justification: None,
+            login_hint: None,
+            tenant: None,
+            domain_hint: None,
+            prompt: None,
+            on_metadata: None,
+            on_auth_token: None,
+            on_opaque_token: None,
+            on_interaction: None,
+            on_clarification: None,
+            max_poll_duration_secs: None,
+        }
+    }
+
+    pub fn person_server_url(mut self, url: impl Into<String>) -> Self {
+        self.person_server_url = Some(url.into());
+        self
+    }
+
+    pub fn person_server_metadata(mut self, metadata: PersonServerMetadata) -> Self {
+        self.person_server_metadata = Some(metadata);
+        self
+    }
+
+    pub fn opaque_token(mut self, token: impl Into<String>) -> Self {
+        self.opaque_token = Some(token.into());
+        self
+    }
+
+    pub fn capabilities(mut self, capabilities: Vec<Capability>) -> Self {
+        self.capabilities = Some(capabilities);
+        self
+    }
+
+    pub fn mission(mut self, mission: Mission) -> Self {
+        self.mission = Some(mission);
+        self
+    }
+
+    pub fn justification(mut self, justification: impl Into<String>) -> Self {
+        self.justification = Some(justification.into());
+        self
+    }
+
+    pub fn login_hint(mut self, login_hint: impl Into<String>) -> Self {
+        self.login_hint = Some(login_hint.into());
+        self
+    }
+
+    pub fn tenant(mut self, tenant: impl Into<String>) -> Self {
+        self.tenant = Some(tenant.into());
+        self
+    }
+
+    pub fn domain_hint(mut self, domain_hint: impl Into<String>) -> Self {
+        self.domain_hint = Some(domain_hint.into());
+        self
+    }
+
+    pub fn prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.prompt = Some(prompt.into());
+        self
+    }
+
+    pub fn on_metadata(
+        mut self,
+        callback: Arc<dyn Fn(PersonServerMetadata) + Send + Sync>,
+    ) -> Self {
+        self.on_metadata = Some(callback);
+        self
+    }
+
+    pub fn on_auth_token(mut self, callback: Arc<dyn Fn(String, u64) + Send + Sync>) -> Self {
+        self.on_auth_token = Some(callback);
+        self
+    }
+
+    pub fn on_opaque_token(mut self, callback: Arc<dyn Fn(String) + Send + Sync>) -> Self {
+        self.on_opaque_token = Some(callback);
+        self
+    }
+
+    pub fn on_interaction(mut self, callback: InteractionCallback) -> Self {
+        self.on_interaction = Some(callback);
+        self
+    }
+
+    pub fn on_clarification(mut self, callback: ClarificationCallback) -> Self {
+        self.on_clarification = Some(callback);
+        self
+    }
+
+    pub fn max_poll_duration_secs(mut self, secs: u64) -> Self {
+        self.max_poll_duration_secs = Some(secs);
+        self
+    }
+
+    pub fn build(self) -> AgentOptions {
+        AgentOptions {
+            provider: self.provider,
+            person_server_url: self.person_server_url,
+            person_server_metadata: self.person_server_metadata,
+            opaque_token: self.opaque_token,
+            capabilities: self.capabilities,
+            mission: self.mission,
+            justification: self.justification,
+            login_hint: self.login_hint,
+            tenant: self.tenant,
+            domain_hint: self.domain_hint,
+            prompt: self.prompt,
+            on_metadata: self.on_metadata,
+            on_auth_token: self.on_auth_token,
+            on_opaque_token: self.on_opaque_token,
+            on_interaction: self.on_interaction,
+            on_clarification: self.on_clarification,
+            max_poll_duration_secs: self.max_poll_duration_secs,
+        }
+    }
+}
+
+impl AgentAuth {
+    pub fn from_options(options: &AgentOptions) -> Self {
         Self {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
@@ -109,56 +268,56 @@ impl AAuthInjector {
         }
     }
 
-    pub fn next_attempt(&mut self, origin: &str) -> AuthAttempt {
+    pub fn next_attempt(&mut self, origin: &str) -> AgentAuthAttempt {
         if let Some(cached) = self.find_cached_token(origin) {
-            return AuthAttempt::AuthToken(cached.auth_token);
+            return AgentAuthAttempt::AuthToken(cached.auth_token);
         }
         if let Some(token) = self
             .opaque_cache
             .get(origin)
             .map(|entry| entry.token.clone())
         {
-            return AuthAttempt::OpaqueToken(token);
+            return AgentAuthAttempt::OpaqueToken(token);
         }
-        AuthAttempt::AgentSigned
+        AgentAuthAttempt::AgentSigned
     }
 
     pub fn observe_response(
         &mut self,
         origin: &str,
-        attempt: &AuthAttempt,
+        attempt: &AgentAuthAttempt,
         status: StatusCode,
         headers: &HeaderMap,
-    ) -> Result<InjectorStep> {
+    ) -> Result<AgentAuthStep> {
         if status != StatusCode::UNAUTHORIZED {
             self.cache_opaque_from_headers(origin, headers);
             if status == StatusCode::ACCEPTED {
-                return Ok(InjectorStep::PollDeferred);
+                return Ok(AgentAuthStep::PollDeferred);
             }
-            return Ok(InjectorStep::Finish);
+            return Ok(AgentAuthStep::Finish);
         }
 
         match attempt {
-            AuthAttempt::AuthToken(_) => {
+            AgentAuthAttempt::AuthToken(_) => {
                 if let Some(cached) = self.find_cached_token_key(origin) {
                     self.token_cache.remove(&cached);
                 }
-                Ok(InjectorStep::Invalidate(attempt.clone()))
+                Ok(AgentAuthStep::Invalidate(attempt.clone()))
             }
-            AuthAttempt::OpaqueToken(_) => {
+            AgentAuthAttempt::OpaqueToken(_) => {
                 self.opaque_cache.remove(origin);
-                Ok(InjectorStep::Invalidate(attempt.clone()))
+                Ok(AgentAuthStep::Invalidate(attempt.clone()))
             }
-            AuthAttempt::AgentSigned => {
+            AgentAuthAttempt::AgentSigned => {
                 if let Some(header) = header_value(headers, "aauth-requirement") {
                     let challenge = parse_aauth_requirement(header)?;
                     if challenge.requirement == RequirementLevel::AuthToken {
                         if let Some(resource_token) = challenge.resource_token {
-                            return Ok(InjectorStep::ExchangeToken { resource_token });
+                            return Ok(AgentAuthStep::ExchangeToken { resource_token });
                         }
                     }
                 }
-                Ok(InjectorStep::Finish)
+                Ok(AgentAuthStep::Finish)
             }
         }
     }
@@ -259,7 +418,7 @@ mod tests {
 
     #[test]
     fn next_attempt_prefers_auth_over_opaque() {
-        let mut inj = AAuthInjector {
+        let mut inj = AgentAuth {
             token_cache: HashMap::from([(
                 "https://resource.example|https://auth.example".into(),
                 CachedToken {
@@ -279,13 +438,13 @@ mod tests {
         };
         assert_eq!(
             inj.next_attempt("https://resource.example"),
-            AuthAttempt::AuthToken("auth".into())
+            AgentAuthAttempt::AuthToken("auth".into())
         );
     }
 
     #[test]
     fn observe_401_agent_with_challenge() {
-        let inj = AAuthInjector {
+        let inj = AgentAuth {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
             person_server_url: Some("https://person.example".into()),
@@ -296,7 +455,7 @@ mod tests {
         let step = inj
             .observe_response(
                 "https://resource.example",
-                &AuthAttempt::AgentSigned,
+                &AgentAuthAttempt::AgentSigned,
                 StatusCode::UNAUTHORIZED,
                 &headers(&[(
                     "aauth-requirement",
@@ -306,7 +465,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             step,
-            InjectorStep::ExchangeToken {
+            AgentAuthStep::ExchangeToken {
                 resource_token: "rt_abc".into()
             }
         );
@@ -316,7 +475,7 @@ mod tests {
     fn observe_success_caches_opaque() {
         let captured = Arc::new(Mutex::new(None));
         let captured_cb = Arc::clone(&captured);
-        let mut inj = AAuthInjector {
+        let mut inj = AgentAuth {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
             person_server_url: None,
@@ -328,12 +487,12 @@ mod tests {
         let step = inj
             .observe_response(
                 "https://resource.example",
-                &AuthAttempt::AgentSigned,
+                &AgentAuthAttempt::AgentSigned,
                 StatusCode::OK,
                 &headers(&[("aauth-access", "opaque_tok")]),
             )
             .unwrap();
-        assert_eq!(step, InjectorStep::Finish);
+        assert_eq!(step, AgentAuthStep::Finish);
         assert_eq!(
             inj.opaque_cache
                 .get("https://resource.example")

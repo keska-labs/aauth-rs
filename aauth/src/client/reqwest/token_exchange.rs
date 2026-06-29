@@ -5,7 +5,7 @@ use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 
 use crate::client::injector::InteractionCallback;
-use crate::client::reqwest::deferred::{DeferredOptions, poll_deferred_with};
+use crate::client::reqwest::deferred::{AgentDeferredOptions, poll_deferred_with};
 use crate::client::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
@@ -24,20 +24,156 @@ pub struct TokenExchangeResult {
 
 #[derive(Clone)]
 pub struct TokenExchangeOptions {
-    pub person_server_url: String,
-    pub person_server_metadata: Option<PersonServerMetadata>,
-    pub on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
-    pub resource_token: String,
-    pub justification: Option<String>,
-    pub localhost_callback: Option<String>,
-    pub login_hint: Option<String>,
-    pub tenant: Option<String>,
-    pub domain_hint: Option<String>,
-    pub capabilities: Option<Vec<String>>,
-    pub prompt: Option<String>,
-    pub on_interaction: Option<InteractionCallback>,
-    pub on_clarification: Option<crate::client::injector::ClarificationCallback>,
-    pub max_poll_duration_secs: Option<u64>,
+    pub(crate) person_server_url: String,
+    pub(crate) person_server_metadata: Option<PersonServerMetadata>,
+    pub(crate) on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
+    pub(crate) resource_token: String,
+    pub(crate) justification: Option<String>,
+    pub(crate) localhost_callback: Option<String>,
+    pub(crate) login_hint: Option<String>,
+    pub(crate) tenant: Option<String>,
+    pub(crate) domain_hint: Option<String>,
+    pub(crate) capabilities: Option<Vec<String>>,
+    pub(crate) prompt: Option<String>,
+    pub(crate) on_interaction: Option<InteractionCallback>,
+    pub(crate) on_clarification: Option<crate::client::injector::ClarificationCallback>,
+    pub(crate) max_poll_duration_secs: Option<u64>,
+}
+
+#[derive(Clone)]
+pub struct TokenExchangeOptionsBuilder {
+    person_server_url: String,
+    resource_token: String,
+    person_server_metadata: Option<PersonServerMetadata>,
+    on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
+    justification: Option<String>,
+    localhost_callback: Option<String>,
+    login_hint: Option<String>,
+    tenant: Option<String>,
+    domain_hint: Option<String>,
+    capabilities: Option<Vec<String>>,
+    prompt: Option<String>,
+    on_interaction: Option<InteractionCallback>,
+    on_clarification: Option<crate::client::injector::ClarificationCallback>,
+    max_poll_duration_secs: Option<u64>,
+}
+
+impl TokenExchangeOptions {
+    pub fn builder(
+        person_server_url: impl Into<String>,
+        resource_token: impl Into<String>,
+    ) -> TokenExchangeOptionsBuilder {
+        TokenExchangeOptionsBuilder::new(person_server_url, resource_token)
+    }
+}
+
+impl TokenExchangeOptionsBuilder {
+    pub fn new(
+        person_server_url: impl Into<String>,
+        resource_token: impl Into<String>,
+    ) -> Self {
+        Self {
+            person_server_url: person_server_url.into(),
+            resource_token: resource_token.into(),
+            person_server_metadata: None,
+            on_metadata: None,
+            justification: None,
+            localhost_callback: None,
+            login_hint: None,
+            tenant: None,
+            domain_hint: None,
+            capabilities: None,
+            prompt: None,
+            on_interaction: None,
+            on_clarification: None,
+            max_poll_duration_secs: None,
+        }
+    }
+
+    pub fn person_server_metadata(mut self, metadata: PersonServerMetadata) -> Self {
+        self.person_server_metadata = Some(metadata);
+        self
+    }
+
+    pub fn on_metadata(
+        mut self,
+        callback: Arc<dyn Fn(PersonServerMetadata) + Send + Sync>,
+    ) -> Self {
+        self.on_metadata = Some(callback);
+        self
+    }
+
+    pub fn justification(mut self, justification: impl Into<String>) -> Self {
+        self.justification = Some(justification.into());
+        self
+    }
+
+    pub fn localhost_callback(mut self, url: impl Into<String>) -> Self {
+        self.localhost_callback = Some(url.into());
+        self
+    }
+
+    pub fn login_hint(mut self, login_hint: impl Into<String>) -> Self {
+        self.login_hint = Some(login_hint.into());
+        self
+    }
+
+    pub fn tenant(mut self, tenant: impl Into<String>) -> Self {
+        self.tenant = Some(tenant.into());
+        self
+    }
+
+    pub fn domain_hint(mut self, domain_hint: impl Into<String>) -> Self {
+        self.domain_hint = Some(domain_hint.into());
+        self
+    }
+
+    pub fn capabilities(mut self, capabilities: Vec<String>) -> Self {
+        self.capabilities = Some(capabilities);
+        self
+    }
+
+    pub fn prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.prompt = Some(prompt.into());
+        self
+    }
+
+    pub fn on_interaction(mut self, callback: InteractionCallback) -> Self {
+        self.on_interaction = Some(callback);
+        self
+    }
+
+    pub fn on_clarification(
+        mut self,
+        callback: crate::client::injector::ClarificationCallback,
+    ) -> Self {
+        self.on_clarification = Some(callback);
+        self
+    }
+
+    pub fn max_poll_duration_secs(mut self, secs: u64) -> Self {
+        self.max_poll_duration_secs = Some(secs);
+        self
+    }
+
+    pub fn build(self) -> TokenExchangeOptions {
+        TokenExchangeOptions {
+            person_server_url: self.person_server_url,
+            resource_token: self.resource_token,
+            person_server_metadata: self.person_server_metadata,
+            on_metadata: self.on_metadata,
+            justification: self.justification,
+            localhost_callback: self.localhost_callback,
+            login_hint: self.login_hint,
+            tenant: self.tenant,
+            domain_hint: self.domain_hint,
+            capabilities: self.capabilities,
+            prompt: self.prompt,
+            on_interaction: self.on_interaction,
+            on_clarification: self.on_clarification,
+            max_poll_duration_secs: self.max_poll_duration_secs,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -133,8 +269,10 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             .ok_or_else(|| AAuthError::Message("202 response missing Location header".into()))?
             .to_string();
 
-        let mut interaction_url = None;
-        let mut interaction_code = None;
+        let mut deferred = AgentDeferredOptions::builder(resolve_url(
+            &options.person_server_url,
+            &location,
+        ));
         if let Some(header) = response
             .headers()
             .get("aauth-requirement")
@@ -142,24 +280,23 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
         {
             if let Ok(challenge) = parse_aauth_requirement(header) {
                 if challenge.requirement == RequirementLevel::Interaction {
-                    interaction_url = challenge.url;
-                    interaction_code = challenge.code;
+                    if let (Some(url), Some(code)) = (challenge.url, challenge.code) {
+                        deferred = deferred.interaction(url, code);
+                    }
                 }
             }
         }
+        if let Some(cb) = options.on_interaction {
+            deferred = deferred.on_interaction(cb);
+        }
+        if let Some(cb) = options.on_clarification {
+            deferred = deferred.on_clarification(cb);
+        }
+        if let Some(secs) = options.max_poll_duration_secs {
+            deferred = deferred.max_poll_duration_secs(secs);
+        }
 
-        let result = poll_deferred_with(
-            DeferredOptions {
-                location_url: resolve_url(&options.person_server_url, &location),
-                interaction_url,
-                interaction_code,
-                on_interaction: options.on_interaction,
-                on_clarification: options.on_clarification,
-                max_poll_duration: options.max_poll_duration_secs,
-            },
-            send,
-        )
-        .await?;
+        let result = poll_deferred_with(deferred.build(), send).await?;
 
         if result.response.status().is_success() {
             let parsed: TokenResponseBody = result

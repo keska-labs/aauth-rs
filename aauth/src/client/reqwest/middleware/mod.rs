@@ -1,6 +1,6 @@
-mod aauth;
+mod agent;
 mod signing;
 
-pub use aauth::AAuthMiddleware;
+pub use agent::AgentMiddleware;
 
 pub use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};

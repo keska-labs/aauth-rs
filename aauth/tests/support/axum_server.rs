@@ -8,7 +8,7 @@ use aauth::VerifiedToken;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::server::access::keys::TestAccessAuthJwtMinter;
 use aauth::server::axum::{
-    AAuthLayer, AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
+    ResourceAuthLayer, AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
     ResourceServerState, VerifiedAAuthToken, access_jwks_handler, access_metadata_handler,
     access_pending_poll_handler, access_pending_post_handler, access_token_exchange_handler,
     pending_poll_handler, pending_post_handler, person_jwks_handler,
@@ -234,7 +234,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         }
     };
 
-    let aauth_layer = AAuthLayer::new(
+    let resource_auth_layer = ResourceAuthLayer::new(
         Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
         resource_url.clone(),
         mode,
@@ -286,7 +286,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
 
     let api = Router::new()
         .route("/api/data", get(api_data_handler))
-        .route_layer(aauth_layer);
+        .route_layer(resource_auth_layer);
 
     let mut app = Router::new()
         .merge(api)

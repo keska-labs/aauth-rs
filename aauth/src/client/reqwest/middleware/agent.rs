@@ -5,8 +5,8 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::client::injector::{AAuthClientOptions, AAuthInjector, AuthAttempt, InjectorStep};
-use crate::client::reqwest::deferred::{DeferredOptions, poll_deferred_with};
+use crate::client::injector::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
+use crate::client::reqwest::deferred::{AgentDeferredOptions, poll_deferred_with};
 use crate::client::reqwest::middleware::signing::{SigningMiddleware, sign_and_run};
 use crate::client::reqwest::send::SignedSend;
 use crate::client::reqwest::signed::SigningOptions;
@@ -16,14 +16,14 @@ use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::RequirementLevel;
 
-pub struct AAuthMiddleware {
-    options: AAuthClientOptions,
-    injector: Mutex<AAuthInjector>,
+pub struct AgentMiddleware {
+    options: AgentOptions,
+    injector: Mutex<AgentAuth>,
     signing: SigningMiddleware,
 }
 
-impl AAuthMiddleware {
-    pub fn new(options: AAuthClientOptions) -> Self {
+impl AgentMiddleware {
+    pub fn new(options: AgentOptions) -> Self {
         let signing = SigningMiddleware::new(
             Arc::clone(&options.provider),
             SigningOptions {
@@ -32,7 +32,7 @@ impl AAuthMiddleware {
             },
         );
         Self {
-            injector: Mutex::new(AAuthInjector::from_options(&options)),
+            injector: Mutex::new(AgentAuth::from_options(&options)),
             signing,
             options,
         }
@@ -41,7 +41,7 @@ impl AAuthMiddleware {
     async fn send_wrapped(
         &self,
         req: Request,
-        attempt: AuthAttempt,
+        attempt: AgentAuthAttempt,
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
@@ -54,13 +54,13 @@ impl AAuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
-        self.send_wrapped(req, AuthAttempt::AgentSigned, extensions, next)
+        self.send_wrapped(req, AgentAuthAttempt::AgentSigned, extensions, next)
             .await
     }
 }
 
 struct AgentSend<'a> {
-    middleware: &'a AAuthMiddleware,
+    middleware: &'a AgentMiddleware,
     extensions: &'a mut Extensions,
     next: Next<'a>,
 }
@@ -75,7 +75,7 @@ impl SignedSend for AgentSend<'_> {
 }
 
 #[async_trait::async_trait]
-impl Middleware for AAuthMiddleware {
+impl Middleware for AgentMiddleware {
     async fn handle(
         &self,
         req: Request,
@@ -88,14 +88,14 @@ impl Middleware for AAuthMiddleware {
     }
 }
 
-impl AAuthMiddleware {
+impl AgentMiddleware {
     async fn handle_inner(
         &self,
         req: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
-        let origin = AAuthInjector::resource_origin(req.url().as_str())?;
+        let origin = AgentAuth::resource_origin(req.url().as_str())?;
         {
             let mut injector = self.injector.lock().unwrap();
             injector.seed_opaque(&origin);
@@ -121,19 +121,25 @@ impl AAuthMiddleware {
             };
 
             match step {
-                InjectorStep::Finish => return Ok(resp),
-                InjectorStep::PollDeferred => {
+                AgentAuthStep::Finish => return Ok(resp),
+                AgentAuthStep::PollDeferred => {
                     let (interaction_url, interaction_code) = interaction_from_response(&resp);
                     let location = location_header(&resp)?;
+                    let mut deferred = AgentDeferredOptions::builder(location);
+                    if let (Some(url), Some(code)) = (interaction_url, interaction_code) {
+                        deferred = deferred.interaction(url, code);
+                    }
+                    if let Some(cb) = self.options.on_interaction.clone() {
+                        deferred = deferred.on_interaction(cb);
+                    }
+                    if let Some(cb) = self.options.on_clarification.clone() {
+                        deferred = deferred.on_clarification(cb);
+                    }
+                    if let Some(secs) = self.options.max_poll_duration_secs {
+                        deferred = deferred.max_poll_duration_secs(secs);
+                    }
                     let result = poll_deferred_with(
-                        DeferredOptions {
-                            location_url: location,
-                            interaction_url,
-                            interaction_code,
-                            on_interaction: self.options.on_interaction.clone(),
-                            on_clarification: self.options.on_clarification.clone(),
-                            max_poll_duration: self.options.max_poll_duration_secs,
-                        },
+                        deferred.build(),
                         &mut AgentSend {
                             middleware: self,
                             extensions,
@@ -150,7 +156,7 @@ impl AAuthMiddleware {
                             result.response.status(),
                             result.response.headers(),
                         )?;
-                        matches!(step, InjectorStep::Finish)
+                        matches!(step, AgentAuthStep::Finish)
                     };
 
                     if retry {
@@ -158,9 +164,9 @@ impl AAuthMiddleware {
                     }
                     return Ok(result.response);
                 }
-                InjectorStep::Invalidate(_) => continue,
-                InjectorStep::Continue => continue,
-                InjectorStep::ExchangeToken { resource_token } => {
+                AgentAuthStep::Invalidate(_) => continue,
+                AgentAuthStep::Continue => continue,
+                AgentAuthStep::ExchangeToken { resource_token } => {
                     let material = self.options.provider.key_material().await?;
                     let agent_jwt = agent_jwt_from_signature_key(&material.signature_key)?;
                     let person_server_url = resolve_person_server_url(
@@ -174,23 +180,46 @@ impl AAuthMiddleware {
                         .as_ref()
                         .map(|caps| caps.iter().map(|c| c.as_str().to_string()).collect());
 
+                    let mut exchange = TokenExchangeOptions::builder(
+                        person_server_url.clone(),
+                        resource_token,
+                    );
+                    if let Some(metadata) = self.options.person_server_metadata.clone() {
+                        exchange = exchange.person_server_metadata(metadata);
+                    }
+                    if let Some(on_metadata) = self.options.on_metadata.clone() {
+                        exchange = exchange.on_metadata(on_metadata);
+                    }
+                    if let Some(justification) = self.options.justification.clone() {
+                        exchange = exchange.justification(justification);
+                    }
+                    if let Some(login_hint) = self.options.login_hint.clone() {
+                        exchange = exchange.login_hint(login_hint);
+                    }
+                    if let Some(tenant) = self.options.tenant.clone() {
+                        exchange = exchange.tenant(tenant);
+                    }
+                    if let Some(domain_hint) = self.options.domain_hint.clone() {
+                        exchange = exchange.domain_hint(domain_hint);
+                    }
+                    if let Some(caps) = capabilities {
+                        exchange = exchange.capabilities(caps);
+                    }
+                    if let Some(prompt) = self.options.prompt.clone() {
+                        exchange = exchange.prompt(prompt);
+                    }
+                    if let Some(on_interaction) = self.options.on_interaction.clone() {
+                        exchange = exchange.on_interaction(on_interaction);
+                    }
+                    if let Some(on_clarification) = self.options.on_clarification.clone() {
+                        exchange = exchange.on_clarification(on_clarification);
+                    }
+                    if let Some(secs) = self.options.max_poll_duration_secs {
+                        exchange = exchange.max_poll_duration_secs(secs);
+                    }
+
                     let result = exchange_token_with(
-                        TokenExchangeOptions {
-                            person_server_url: person_server_url.clone(),
-                            person_server_metadata: self.options.person_server_metadata.clone(),
-                            on_metadata: self.options.on_metadata.clone(),
-                            resource_token,
-                            justification: self.options.justification.clone(),
-                            localhost_callback: None,
-                            login_hint: self.options.login_hint.clone(),
-                            tenant: self.options.tenant.clone(),
-                            domain_hint: self.options.domain_hint.clone(),
-                            capabilities,
-                            prompt: self.options.prompt.clone(),
-                            on_interaction: self.options.on_interaction.clone(),
-                            on_clarification: self.options.on_clarification.clone(),
-                            max_poll_duration_secs: self.options.max_poll_duration_secs,
-                        },
+                        exchange.build(),
                         &mut AgentSend {
                             middleware: self,
                             extensions,

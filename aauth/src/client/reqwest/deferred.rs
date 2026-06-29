@@ -17,13 +17,74 @@ const DEFAULT_MAX_POLL_DURATION: u64 = 300;
 const DEFAULT_PREFER_WAIT: u64 = 45;
 
 #[derive(Clone)]
-pub struct DeferredOptions {
-    pub location_url: String,
-    pub interaction_url: Option<String>,
-    pub interaction_code: Option<String>,
-    pub on_interaction: Option<InteractionCallback>,
-    pub on_clarification: Option<ClarificationCallback>,
-    pub max_poll_duration: Option<u64>,
+pub struct AgentDeferredOptions {
+    pub(crate) location_url: String,
+    pub(crate) interaction_url: Option<String>,
+    pub(crate) interaction_code: Option<String>,
+    pub(crate) on_interaction: Option<InteractionCallback>,
+    pub(crate) on_clarification: Option<ClarificationCallback>,
+    pub(crate) max_poll_duration_secs: Option<u64>,
+}
+
+#[derive(Clone)]
+pub struct AgentDeferredOptionsBuilder {
+    location_url: String,
+    interaction_url: Option<String>,
+    interaction_code: Option<String>,
+    on_interaction: Option<InteractionCallback>,
+    on_clarification: Option<ClarificationCallback>,
+    max_poll_duration_secs: Option<u64>,
+}
+
+impl AgentDeferredOptions {
+    pub fn builder(location_url: impl Into<String>) -> AgentDeferredOptionsBuilder {
+        AgentDeferredOptionsBuilder::new(location_url)
+    }
+}
+
+impl AgentDeferredOptionsBuilder {
+    pub fn new(location_url: impl Into<String>) -> Self {
+        Self {
+            location_url: location_url.into(),
+            interaction_url: None,
+            interaction_code: None,
+            on_interaction: None,
+            on_clarification: None,
+            max_poll_duration_secs: None,
+        }
+    }
+
+    pub fn interaction(mut self, url: impl Into<String>, code: impl Into<String>) -> Self {
+        self.interaction_url = Some(url.into());
+        self.interaction_code = Some(code.into());
+        self
+    }
+
+    pub fn on_interaction(mut self, callback: InteractionCallback) -> Self {
+        self.on_interaction = Some(callback);
+        self
+    }
+
+    pub fn on_clarification(mut self, callback: ClarificationCallback) -> Self {
+        self.on_clarification = Some(callback);
+        self
+    }
+
+    pub fn max_poll_duration_secs(mut self, secs: u64) -> Self {
+        self.max_poll_duration_secs = Some(secs);
+        self
+    }
+
+    pub fn build(self) -> AgentDeferredOptions {
+        AgentDeferredOptions {
+            location_url: self.location_url,
+            interaction_url: self.interaction_url,
+            interaction_code: self.interaction_code,
+            on_interaction: self.on_interaction,
+            on_clarification: self.on_clarification,
+            max_poll_duration_secs: self.max_poll_duration_secs,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -32,7 +93,7 @@ pub struct DeferredResult {
     pub error: Option<AAuthProtocolError>,
 }
 
-pub async fn poll_deferred<F, Fut>(options: DeferredOptions, send: F) -> Result<DeferredResult>
+pub async fn poll_deferred<F, Fut>(options: AgentDeferredOptions, send: F) -> Result<DeferredResult>
 where
     F: FnMut(Request) -> Fut + Send,
     Fut: Future<Output = Result<Response>> + Send,
@@ -54,11 +115,11 @@ where
 }
 
 pub(crate) async fn poll_deferred_with<S: SignedSend>(
-    options: DeferredOptions,
+    options: AgentDeferredOptions,
     send: &mut S,
 ) -> Result<DeferredResult> {
     let max_poll_duration = options
-        .max_poll_duration
+        .max_poll_duration_secs
         .unwrap_or(DEFAULT_MAX_POLL_DURATION);
     let deadline = Instant::now() + Duration::from_secs(max_poll_duration);
 

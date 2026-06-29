@@ -18,11 +18,11 @@ aauth-rs/
     │   │   ├── injector.rs   # framework-agnostic auth flow
     │   │   ├── keys.rs       # KeyMaterialProvider, JWT minting
     │   │   ├── resolve.rs    # PS URL resolution from agent `ps` claim
-    │   │   └── reqwest/      # AAuthMiddleware, token exchange (feature "client-reqwest")
+    │   │   └── reqwest/      # AgentMiddleware, token exchange (feature "client-reqwest")
     │   ├── server/
     │   │   ├── deferred/     # PendingStore, deferred response builders
     │   │   ├── policy/       # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
-    │   │   ├── resource/     # verify, resource tokens, ResourceAccessMode, AAuthLayer
+    │   │   ├── resource/     # verify, resource tokens, ResourceAccessMode, ResourceAuthLayer
     │   │   ├── person/       # federation, auth JWT minting, PS route helpers
     │   │   ├── access/       # AS auth JWT minting and route helpers
     │   │   └── axum/         # facade re-exporting resource + person + access axum helpers
@@ -35,14 +35,14 @@ aauth-rs/
 
 | AAuth party | Module |
 |-------------|--------|
-| Agent | `aauth::client` |
+| Agent | `aauth::client` (rename to `aauth::agent` planned) |
 | Resource server | `aauth::server::resource` |
 | Person server | `aauth::server::person` |
 | Access server | `aauth::server::access` |
 
 ## Resource access modes
 
-`ResourceAccessMode` on `AAuthLayer` selects how the resource evaluates requests:
+`ResourceAccessMode` on `ResourceAuthLayer` selects how the resource evaluates requests:
 
 | Mode | Variant | Description |
 |------|---------|-------------|
@@ -69,16 +69,20 @@ Reference policies for tests and examples: `AlwaysGrantPersonPolicy`, `AlwaysGra
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
-The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `client::resolve::resolve_person_server_url` or leave `person_server_url` unset on `AAuthClientOptions` to resolve from the agent token.
+## Naming
+
+Public types use role prefixes: `Agent*` (agent runtime), `Person*` / `Access*` / `Resource*` (server roles), `AAuth*` (protocol wire/errors). Configuration types use builders (`Type::builder(...)`). The agent module is `aauth::client` today; a rename to `aauth::agent` is planned. See [AGENTS.md](AGENTS.md) for full conventions.
+
+The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `client::resolve::resolve_person_server_url` or omit `person_server_url` on [`AgentOptions`](aauth::client::injector::AgentOptions) to resolve from the agent token.
 
 ## Features
 
 | Feature | Default | Description |
 |---------|---------|-------------|
 | `client` | yes | `aauth::client::injector`, `aauth::client::keys` — auth flow and key material |
-| `client-reqwest` | yes | `aauth::client::reqwest` — `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
+| `client-reqwest` | yes | `aauth::client::reqwest` — `AgentMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
 | `server` | yes | `verify_token`, `verify_resource_token`, `create_resource_token`, `PendingStore`, policy traits |
-| `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `ResourceAccessPolicy`, route helpers |
+| `server-axum` | yes | `aauth::server::axum` — `ResourceAuthLayer`, `ResourceAccessPolicy`, route helpers |
 
 Disable defaults to depend on only one side:
 
@@ -91,9 +95,9 @@ aauth = { version = "0.0", default-features = false, features = ["client-reqwest
 ```rust
 use std::sync::Arc;
 
-use aauth::client::injector::AAuthClientOptions;
+use aauth::client::injector::AgentOptions;
 use aauth::client::keys::KeyMaterialProvider;
-use aauth::client::reqwest::{AAuthMiddleware, ClientBuilder};
+use aauth::client::reqwest::{AgentMiddleware, ClientBuilder};
 use aauth::types::KeyMaterial;
 
 #[async_trait::async_trait]
@@ -107,25 +111,11 @@ impl KeyMaterialProvider for MyProvider {
 #[tokio::main]
 async fn main() -> aauth::Result<()> {
     let client = ClientBuilder::new(reqwest::Client::new())
-        .with(AAuthMiddleware::new(AAuthClientOptions {
-            provider: Arc::new(MyProvider),
-            person_server_url: None, // resolved from agent JWT `ps` claim when challenged
-            person_server_metadata: None,
-            on_metadata: None,
-            on_auth_token: None,
-            on_opaque_token: None,
-            opaque_token: None,
-            on_interaction: None,
-            on_clarification: None,
-            justification: None,
-            login_hint: None,
-            tenant: None,
-            domain_hint: None,
-            capabilities: None,
-            mission: None,
-            prompt: None,
-            max_poll_duration_secs: None,
-        }))
+        .with(AgentMiddleware::new(
+            AgentOptions::builder(Arc::new(MyProvider))
+                // person_server_url omitted — resolved from agent JWT `ps` when challenged
+                .build(),
+        ))
         .build();
 
     let response = client

@@ -9,5 +9,5 @@ pub use crate::server::person::axum::{
 };
 pub use crate::server::resource::ResourceAccessMode;
 pub use crate::server::resource::axum::{
-    AAuthLayer, ResourceServerState, VerifiedAAuthToken, resource_pending_poll_handler,
+    ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, resource_pending_poll_handler,
 };

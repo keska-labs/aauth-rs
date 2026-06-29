@@ -5,7 +5,7 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::client::injector::AuthAttempt;
+use crate::client::injector::AgentAuthAttempt;
 use crate::client::keys::KeyMaterialProvider;
 use crate::client::reqwest::signed::{
     SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,
@@ -14,7 +14,7 @@ use crate::client::reqwest::signed::{
 use crate::error::{AAuthError, Result};
 
 #[derive(Clone)]
-pub(crate) struct AuthAttemptKey(pub AuthAttempt);
+pub(crate) struct AgentAuthAttemptKey(pub AgentAuthAttempt);
 
 pub(crate) struct SigningMiddleware {
     provider: Arc<dyn KeyMaterialProvider>,
@@ -29,7 +29,7 @@ impl SigningMiddleware {
     pub(crate) async fn sign_and_run(
         &self,
         mut req: Request,
-        attempt: AuthAttempt,
+        attempt: AgentAuthAttempt,
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
@@ -42,22 +42,22 @@ impl SigningMiddleware {
         apply_capability_mission(&mut req, &self.options);
 
         match &attempt {
-            AuthAttempt::AuthToken(token) => {
+            AgentAuthAttempt::AuthToken(token) => {
                 sign_request_with_auth_token(&mut req, &material, token)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
             }
-            AuthAttempt::OpaqueToken(token) => {
+            AgentAuthAttempt::OpaqueToken(token) => {
                 apply_opaque_token(&mut req, token);
                 sign_request(&mut req, &material)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
             }
-            AuthAttempt::AgentSigned => {
+            AgentAuthAttempt::AgentSigned => {
                 sign_request(&mut req, &material)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
             }
         }
 
-        extensions.insert(AuthAttemptKey(attempt));
+        extensions.insert(AgentAuthAttemptKey(attempt));
         next.run(req, extensions).await
     }
 }
@@ -71,9 +71,9 @@ impl Middleware for SigningMiddleware {
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
         let attempt = extensions
-            .get::<AuthAttemptKey>()
+            .get::<AgentAuthAttemptKey>()
             .cloned()
-            .unwrap_or(AuthAttemptKey(AuthAttempt::AgentSigned))
+            .unwrap_or(AgentAuthAttemptKey(AgentAuthAttempt::AgentSigned))
             .0;
         self.sign_and_run(req, attempt, extensions, next).await
     }
@@ -82,7 +82,7 @@ impl Middleware for SigningMiddleware {
 pub(crate) async fn sign_and_run(
     signing: &SigningMiddleware,
     req: Request,
-    attempt: AuthAttempt,
+    attempt: AgentAuthAttempt,
     extensions: &mut Extensions,
     next: Next<'_>,
 ) -> Result<Response> {

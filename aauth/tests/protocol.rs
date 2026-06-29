@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use aauth::KeyMaterialProvider;
 use aauth::VerifiedToken;
 use aauth::client::reqwest::{
-    AAuthClientOptions, AAuthMiddleware, ClientBuilder, InteractionCallback,
+    AgentOptions, AgentMiddleware, ClientBuilder, InteractionCallback,
 };
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
 use aauth::server::{
@@ -38,11 +38,11 @@ fn test_lock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 fn build_client(
-    options: AAuthClientOptions,
+    options: AgentOptions,
     server: &MockServer,
 ) -> aauth::client::reqwest::ClientWithMiddleware {
     ClientBuilder::new(reqwest::Client::new())
-        .with(AAuthMiddleware::new(options))
+        .with(AgentMiddleware::new(options))
         .with(server.mock_transport())
         .build()
 }
@@ -204,7 +204,7 @@ async fn second_request_reuses_cached_token() {
 
     let options = aauth_options(provider, None, None);
     let client = ClientBuilder::new(reqwest::Client::new())
-        .with(AAuthMiddleware::new(options))
+        .with(AgentMiddleware::new(options))
         .with(CountingMiddleware {
             count: Arc::clone(&call_count),
         })
@@ -315,25 +315,11 @@ async fn deferred_interaction_grant() {
         }
     });
 
-    let options = AAuthClientOptions {
-        provider: Arc::clone(&provider),
-        person_server_url: Some(PERSON_SERVER_URL.into()),
-        person_server_metadata: None,
-        on_metadata: None,
-        on_auth_token: None,
-        on_opaque_token: None,
-        opaque_token: None,
-        on_interaction: Some(on_interaction),
-        on_clarification: None,
-        justification: None,
-        login_hint: None,
-        tenant: None,
-        domain_hint: None,
-        capabilities: None,
-        mission: None,
-        prompt: None,
-        max_poll_duration_secs: Some(5),
-    };
+    let options = AgentOptions::builder(Arc::clone(&provider))
+        .person_server_url(PERSON_SERVER_URL)
+        .on_interaction(on_interaction)
+        .max_poll_duration_secs(5)
+        .build();
     let client = build_client(options, &server);
 
     let response = client
@@ -394,30 +380,20 @@ fn aauth_options(
     provider: Arc<dyn KeyMaterialProvider>,
     justification: Option<String>,
     hints: Option<(String, String, String)>,
-) -> AAuthClientOptions {
-    let (login_hint, tenant, domain_hint) = hints
-        .map(|(l, t, d)| (Some(l), Some(t), Some(d)))
-        .unwrap_or((None, None, None));
-
-    AAuthClientOptions {
-        provider,
-        person_server_url: Some(PERSON_SERVER_URL.into()),
-        person_server_metadata: None,
-        on_metadata: None,
-        on_auth_token: None,
-        on_opaque_token: None,
-        opaque_token: None,
-        on_interaction: None,
-        on_clarification: None,
-        justification,
-        login_hint,
-        tenant,
-        domain_hint,
-        capabilities: None,
-        mission: None,
-        prompt: None,
-        max_poll_duration_secs: Some(5),
+) -> AgentOptions {
+    let mut builder = AgentOptions::builder(provider)
+        .person_server_url(PERSON_SERVER_URL)
+        .max_poll_duration_secs(5);
+    if let Some(justification) = justification {
+        builder = builder.justification(justification);
     }
+    if let Some((login_hint, tenant, domain_hint)) = hints {
+        builder = builder
+            .login_hint(login_hint)
+            .tenant(tenant)
+            .domain_hint(domain_hint);
+    }
+    builder.build()
 }
 
 fn aauth_client(
