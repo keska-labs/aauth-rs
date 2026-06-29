@@ -21,6 +21,7 @@ pub struct PersonOrchestrateConfig {
     pub fetcher: Arc<dyn MetadataFetcher>,
     pub http_client: reqwest::Client,
     pub federation: FederationConfig,
+    pub federation_poll_max_secs: Option<u64>,
 }
 
 pub async fn verify_person_token_request(

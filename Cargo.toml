@@ -43,3 +43,4 @@ uuid = { version = "1", features = ["v4"] }
 tower = "0.5"
 axum = { version = "0.8", features = ["json"] }
 wiremock = "0.6"
+rstest = "0.26.1"

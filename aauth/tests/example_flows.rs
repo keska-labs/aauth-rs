@@ -3,13 +3,17 @@
 mod support;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use aauth::types::{AgentOkResponse, AuthOkResponse};
 use aauth::{OpaqueAccessStore, PendingStore};
+use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
 use support::client::build_client;
 
+#[rstest]
+#[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn identity_based_over_http() {
     let spawned = spawn_test_server(ServerConfig {
@@ -32,6 +36,8 @@ async fn identity_based_over_http() {
     assert_eq!(body.agent, spawned.agent_url);
 }
 
+#[rstest]
+#[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn person_server_managed_over_http() {
     let spawned = spawn_test_server(ServerConfig {
@@ -61,6 +67,8 @@ async fn person_server_managed_over_http() {
     assert_eq!(body.user.as_deref(), Some("user-123"));
 }
 
+#[rstest]
+#[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn resource_managed_over_http() {
     let spawned = spawn_test_server(ServerConfig {
@@ -99,6 +107,8 @@ async fn resource_managed_over_http() {
     assert_eq!(body.agent, spawned.agent_url);
 }
 
+#[rstest]
+#[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn federated_over_http() {
     let spawned = spawn_test_server(ServerConfig {

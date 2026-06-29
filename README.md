@@ -2,7 +2,7 @@
 
 Rust implementation of the [AAuth authorization protocol](https://github.com/dickhardt/AAuth).
 
-This workspace provides the `aauth` crate with protocol primitives, a **client** module for signed requests and token exchange, and a **server** module for token verification and interaction management.
+This workspace provides the `aauth` crate with protocol primitives, a **client** module for signed requests and token exchange, and a **server** module for token verification, pluggable policy traits, and a deferred pending store.
 
 ## ⚠️ WARNING: LLM usage & pre-alpha ⚠️
 This library is currently in pre-alpha and can't in any way be described as satisfactory. It's mainly a LLM translation of the `Javascript` implementation of the `aauth` draft and a start for us to work from. We currently discourage using this, and won't be accepting contributions because our internal plans will make any external contributions moot, but if you check back in a few weeks, we're hopefully in a more acceptable state.
@@ -20,8 +20,9 @@ aauth-rs/
     │   │   ├── resolve.rs    # PS URL resolution from agent `ps` claim
     │   │   └── reqwest/      # AAuthMiddleware, token exchange (feature "client-reqwest")
     │   ├── server/
-    │   │   ├── interaction.rs # shared InteractionManager (PS + resource)
-    │   │   ├── resource/     # verify, resource tokens, ResourceAccessPolicy, AAuthLayer
+    │   │   ├── deferred/     # PendingStore, deferred response builders
+    │   │   ├── policy/       # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
+    │   │   ├── resource/     # verify, resource tokens, ResourceAccessMode, AAuthLayer
     │   │   ├── person/       # federation, auth JWT minting, PS route helpers
     │   │   ├── access/       # AS auth JWT minting and route helpers
     │   │   └── axum/         # facade re-exporting resource + person + access axum helpers
@@ -41,14 +42,37 @@ aauth-rs/
 
 ## Resource access modes
 
-`ResourceAccessPolicy` on `AAuthLayer` selects how the resource evaluates requests:
+`ResourceAccessMode` on `AAuthLayer` selects how the resource evaluates requests:
 
-| Mode | Policy variant | Description |
-|------|----------------|-------------|
+| Mode | Variant | Description |
+|------|---------|-------------|
 | Identity-based | `IdentityBased` | Grant on verified agent or auth token alone |
 | PS-asserted (three-party) | `PsAsserted { require_auth_token, access_server_url: None, person_server_fallback }` | Resource token `aud` = agent `ps` claim (or fallback) |
 | Federated (four-party) | `PsAsserted { require_auth_token, access_server_url: Some(...), ... }` | Resource token `aud` = AS; PS federates to AS |
-| Resource-managed (two-party) | `ResourceManaged { interaction_manager, opaque_store, ... }` | Interaction + opaque `AAuth-Access` tokens |
+
+When the Access Server returns `202` during federation, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready. Payment (`402`) from the AS remains a stub.
+| Resource-managed (two-party) | `ResourceManaged { policy, pending, opaque, ... }` | `ResourceConsentPolicy` + `PendingStore` + opaque `AAuth-Access` tokens |
+
+## Policy and deferred store
+
+Server authorization decisions are pluggable via generic policy traits (monomorphized on axum state, not `Arc<dyn>`):
+
+| Trait | Role |
+|-------|------|
+| `PersonTokenPolicy` | PS token exchange: grant, deny, defer, or federate |
+| `AccessTokenPolicy` | AS token exchange: grant, deny, or defer |
+| `ResourceConsentPolicy` | Resource-managed access: grant opaque, deny, or defer |
+
+Policies are stateless; in-flight deferred requests are persisted in a `PendingStore` implementation (reference: `InMemoryPendingStore`). Deferred responses use shared builders (`build_accepted`, `map_snapshot_to_poll_parts`).
+
+Reference policies for tests and examples: `AlwaysGrantPersonPolicy`, `AlwaysGrantAccessPolicy`, `DeferInteractionPersonPolicy`, `ClarificationThenGrantPersonPolicy`, `DeferInteractionResourcePolicy`.
+
+### Breaking changes (0.0.1)
+
+- Removed: `InteractionManager`, `InteractionManagerOptions`, `PendingRequest`
+- Added: `PendingStore`, `InMemoryPendingStore`, policy traits, `DeferRequirement`, `PendingInput`, `PendingOutcome`
+- `ResourceAccessPolicy` is now a type alias for a concrete `ResourceAccessMode` with default policies; use `ResourceAccessMode<P, S, O>` for custom policy/store types
+- Person/Access axum state is generic over `P: *Policy`, `S: PendingStore`, `M: *JwtMinter`
 
 The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `client::resolve::resolve_person_server_url` or leave `person_server_url` unset on `AAuthClientOptions` to resolve from the agent token.
 
@@ -58,7 +82,7 @@ The agent JWT `ps` claim names the Person Server when not configured explicitly 
 |---------|---------|-------------|
 | `client` | yes | `aauth::client::injector`, `aauth::client::keys` — auth flow and key material |
 | `client-reqwest` | yes | `aauth::client::reqwest` — `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
-| `server` | yes | `verify_token`, `verify_resource_token`, `create_resource_token`, `InteractionManager` |
+| `server` | yes | `verify_token`, `verify_resource_token`, `create_resource_token`, `PendingStore`, policy traits |
 | `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `ResourceAccessPolicy`, route helpers |
 
 Disable defaults to depend on only one side:

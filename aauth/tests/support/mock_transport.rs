@@ -336,6 +336,7 @@ impl MockServerState {
                     }),
                     exchange_request: exchange,
                     agent_token: String::new(),
+                    federation: None,
                 }),
                 PendingSnapshot::waiting(requirement.clone()),
                 DEFAULT_PENDING_TTL_SECS,

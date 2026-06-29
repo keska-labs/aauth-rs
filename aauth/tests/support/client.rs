@@ -6,6 +6,7 @@ use aauth::client::reqwest::{
 use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
 
 use super::axum_server::SpawnedServer;
+use super::timeout::TEST_POLL_MAX_SECS;
 
 pub const AGENT_ID: &str = "aauth:test@example.com";
 
@@ -38,6 +39,7 @@ pub fn build_client(
             capabilities: None,
             mission: None,
             prompt: None,
+            max_poll_duration_secs: Some(TEST_POLL_MAX_SECS),
         }))
         .build()
 }

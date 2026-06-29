@@ -73,6 +73,8 @@ pub struct AAuthClientOptions {
     pub on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
     pub on_interaction: Option<InteractionCallback>,
     pub on_clarification: Option<ClarificationCallback>,
+    /// Max seconds to poll a pending URL before failing (default 300).
+    pub max_poll_duration_secs: Option<u64>,
 }
 
 impl AAuthInjector {

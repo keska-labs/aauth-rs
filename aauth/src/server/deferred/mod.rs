@@ -1,11 +1,19 @@
 mod memory;
 #[cfg(feature = "server-axum")]
+mod parse;
+#[cfg(feature = "server-axum")]
+mod poll;
+#[cfg(feature = "server-axum")]
 mod response;
 mod util;
 
 pub mod types;
 
 pub use memory::InMemoryPendingStore;
+#[cfg(feature = "server-axum")]
+pub use parse::{parse_deferred_response, parse_auth_token_response, resolve_deferred_location, ParsedDeferred};
+#[cfg(feature = "server-axum")]
+pub use poll::{post_pending_input, poll_pending_http, ServerPollOptions, ServerPollOutcome};
 #[cfg(feature = "server-axum")]
 pub use response::{build_accepted, build_payment_required_stub, map_snapshot_to_poll_parts, PollResponse};
 pub use types::*;

@@ -248,3 +248,141 @@ where
         self.inner.resume(ctx, input).await
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct ClarificationThenGrantAccessPolicy {
+    pub sub: String,
+    pub question: String,
+}
+
+#[async_trait::async_trait]
+impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
+    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+        Ok(TokenPolicyDecision::Defer(DeferRequirement::Clarification {
+            question: self.question.clone(),
+            timeout: None,
+        }))
+    }
+
+    async fn resume(
+        &self,
+        ctx: &AccessTokenContext,
+        input: PendingInput,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
+        match input {
+            PendingInput::ClarificationResponse(_) | PendingInput::InteractionCompleted => {
+                Ok(TokenPolicyDecision::Grant(AuthGrant {
+                    sub: self.sub.clone(),
+                    scope: ctx.resource_claims.scope.clone(),
+                }))
+            }
+            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(AAuthProtocolError {
+                error: "access_denied".into(),
+                error_description: Some("Request cancelled".into()),
+                error_uri: None,
+            })),
+            PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
+                "claims submission not expected".into(),
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeferInteractionAccessPolicy<P> {
+    pub inner: P,
+    pub interaction_url: String,
+}
+
+#[async_trait::async_trait]
+impl<P> AccessTokenPolicy for DeferInteractionAccessPolicy<P>
+where
+    P: AccessTokenPolicy + Send + Sync + Clone,
+{
+    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+        Ok(TokenPolicyDecision::Defer(DeferRequirement::Interaction {
+            url: self.interaction_url.clone(),
+            code: generate_code(),
+        }))
+    }
+
+    async fn resume(
+        &self,
+        ctx: &AccessTokenContext,
+        input: PendingInput,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
+        self.inner.resume(ctx, input).await
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeferClaimsAccessPolicy {
+    pub sub: String,
+    pub required_claims: Vec<String>,
+}
+
+#[async_trait::async_trait]
+impl AccessTokenPolicy for DeferClaimsAccessPolicy {
+    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+        Ok(TokenPolicyDecision::Defer(DeferRequirement::Claims {
+            required_claims: self.required_claims.clone(),
+        }))
+    }
+
+    async fn resume(
+        &self,
+        ctx: &AccessTokenContext,
+        input: PendingInput,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
+        match input {
+            PendingInput::ClaimsSubmission(_) | PendingInput::InteractionCompleted => {
+                Ok(TokenPolicyDecision::Grant(AuthGrant {
+                    sub: self.sub.clone(),
+                    scope: ctx.resource_claims.scope.clone(),
+                }))
+            }
+            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(AAuthProtocolError {
+                error: "access_denied".into(),
+                error_description: Some("Request cancelled".into()),
+                error_uri: None,
+            })),
+            PendingInput::ClarificationResponse(_) => Err(PolicyError::Message(
+                "clarification not expected".into(),
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DeferApprovalAccessPolicy {
+    pub sub: String,
+}
+
+#[async_trait::async_trait]
+impl AccessTokenPolicy for DeferApprovalAccessPolicy {
+    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+        Ok(TokenPolicyDecision::Defer(DeferRequirement::Approval))
+    }
+
+    async fn resume(
+        &self,
+        ctx: &AccessTokenContext,
+        input: PendingInput,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
+        match input {
+            PendingInput::InteractionCompleted => Ok(TokenPolicyDecision::Grant(AuthGrant {
+                sub: self.sub.clone(),
+                scope: ctx.resource_claims.scope.clone(),
+            })),
+            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(AAuthProtocolError {
+                error: "access_denied".into(),
+                error_description: Some("Request cancelled".into()),
+                error_uri: None,
+            })),
+            _ => Ok(TokenPolicyDecision::Grant(AuthGrant {
+                sub: self.sub.clone(),
+                scope: ctx.resource_claims.scope.clone(),
+            })),
+        }
+    }
+}

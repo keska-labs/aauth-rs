@@ -15,7 +15,13 @@ categories = ["authentication", "web-programming"]
 [features]
 default = ["client", "client-reqwest", "server", "server-axum"]
 client = []
-client-reqwest = ["client", "dep:reqwest", "dep:reqwest-middleware", "dep:http-body-util", "dep:tokio"]
+client-reqwest = [
+    "client",
+    "dep:reqwest",
+    "dep:reqwest-middleware",
+    "dep:http-body-util",
+    "dep:tokio",
+]
 server = []
 server-axum = ["server", "dep:axum", "dep:tower", "dep:reqwest"]
 
@@ -53,6 +59,7 @@ axum.workspace = true
 tower.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
+rstest.workspace = true
 
 [[example]]
 name = "identity_based"

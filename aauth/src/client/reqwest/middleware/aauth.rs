@@ -132,7 +132,7 @@ impl AAuthMiddleware {
                             interaction_code,
                             on_interaction: self.options.on_interaction.clone(),
                             on_clarification: self.options.on_clarification.clone(),
-                            max_poll_duration: None,
+                            max_poll_duration: self.options.max_poll_duration_secs,
                         },
                         &mut AgentSend {
                             middleware: self,
@@ -189,6 +189,7 @@ impl AAuthMiddleware {
                             prompt: self.options.prompt.clone(),
                             on_interaction: self.options.on_interaction.clone(),
                             on_clarification: self.options.on_clarification.clone(),
+                            max_poll_duration_secs: self.options.max_poll_duration_secs,
                         },
                         &mut AgentSend {
                             middleware: self,

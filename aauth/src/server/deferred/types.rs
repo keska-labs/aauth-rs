@@ -80,6 +80,12 @@ pub enum PendingKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FederationPendingState {
+    pub access_server_url: String,
+    pub as_pending_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonPendingContext {
     pub person_server_url: String,
     pub resource_url: String,
@@ -87,6 +93,8 @@ pub struct PersonPendingContext {
     pub resource_claims: ResourceClaims,
     pub exchange_request: TokenExchangeRequest,
     pub agent_token: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub federation: Option<FederationPendingState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

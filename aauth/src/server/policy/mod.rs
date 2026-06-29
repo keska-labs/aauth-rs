@@ -14,6 +14,7 @@ pub use person::{PersonTokenContext, PersonTokenPolicy};
 pub use resource::{ResourceAccessContext, ResourceConsentPolicy};
 pub use test::{
     AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy, AlwaysGrantResourcePolicy,
-    ClarificationThenGrantPersonPolicy, DeferInteractionPersonPolicy,
-    DeferInteractionResourcePolicy, FixedSubPersonPolicy,
+    ClarificationThenGrantAccessPolicy, ClarificationThenGrantPersonPolicy,
+    DeferApprovalAccessPolicy, DeferClaimsAccessPolicy, DeferInteractionAccessPolicy,
+    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, FixedSubPersonPolicy,
 };

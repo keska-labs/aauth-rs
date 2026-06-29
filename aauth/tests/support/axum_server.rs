@@ -10,14 +10,15 @@ use aauth::server::access::keys::TestAccessAuthJwtMinter;
 use aauth::server::axum::{
     AAuthLayer, AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
     ResourceServerState, VerifiedAAuthToken, access_jwks_handler, access_metadata_handler,
-    access_token_exchange_handler, pending_poll_handler, pending_post_handler, person_jwks_handler,
+    access_pending_poll_handler, access_pending_post_handler, access_token_exchange_handler,
+    pending_poll_handler, pending_post_handler, person_jwks_handler,
     person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
 };
 use aauth::server::person::keys::TestAuthJwtMinter;
 use aauth::OpaqueAccessStore;
 use aauth::PendingStore;
 use aauth::{
-    AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy,
+    AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
     DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, ResourceAccessMode,
     ResourceTokenSigner,
 };
@@ -34,6 +35,12 @@ use tokio::task::JoinHandle;
 mod harness_policy;
 use harness_policy::HarnessPersonPolicy;
 
+#[path = "harness_access_policy.rs"]
+mod harness_access_policy;
+use harness_access_policy::HarnessAccessPolicy;
+
+use super::timeout::TEST_POLL_MAX_SECS;
+
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub require_auth_token: bool,
@@ -41,6 +48,8 @@ pub struct ServerConfig {
     pub deferred_mode: bool,
     pub clarification_on_poll: bool,
     pub federated: bool,
+    pub as_deferred_mode: bool,
+    pub as_clarification: bool,
     pub resource_managed: bool,
 }
 
@@ -52,6 +61,8 @@ impl Default for ServerConfig {
             deferred_mode: false,
             clarification_on_poll: false,
             federated: false,
+            as_deferred_mode: false,
+            as_clarification: false,
             resource_managed: false,
         }
     }
@@ -64,6 +75,7 @@ pub struct SpawnedServer {
     pub person_server_url: String,
     pub resource_url: String,
     pub person_pending: InMemoryPendingStore,
+    pub access_pending: InMemoryPendingStore,
     pub resource_pending: InMemoryPendingStore,
     pub opaque_store: InMemoryOpaqueAccessStore,
     handle: JoinHandle<()>,
@@ -104,7 +116,7 @@ impl Drop for SpawnedServer {
 
 type TestPersonState = PersonServerState<HarnessPersonPolicy, InMemoryPendingStore, TestAuthJwtMinter>;
 type TestAccessState =
-    AccessServerState<AlwaysGrantAccessPolicy, InMemoryPendingStore, TestAccessAuthJwtMinter>;
+    AccessServerState<HarnessAccessPolicy, InMemoryPendingStore, TestAccessAuthJwtMinter>;
 type TestResourceState = ResourceServerState<InMemoryPendingStore, InMemoryOpaqueAccessStore>;
 
 #[derive(Clone)]
@@ -168,6 +180,8 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let resource_pending = InMemoryPendingStore::new();
     let http_client = reqwest::Client::new();
 
+    let access_pending = InMemoryPendingStore::new();
+
     let person_policy = if config.clarification_on_poll {
         HarnessPersonPolicy::Clarify(ClarificationThenGrantPersonPolicy {
             sub: "user-clarified".into(),
@@ -180,6 +194,20 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         })
     } else {
         HarnessPersonPolicy::Grant(AlwaysGrantPersonPolicy::new("user-123"))
+    };
+
+    let access_policy = if config.federated && config.as_clarification {
+        HarnessAccessPolicy::Clarify(aauth::ClarificationThenGrantAccessPolicy {
+            sub: "user-federated".into(),
+            question: "What is your purpose?".into(),
+        })
+    } else if config.federated && config.as_deferred_mode {
+        HarnessAccessPolicy::Defer(DeferInteractionAccessPolicy {
+            inner: aauth::AlwaysGrantAccessPolicy::new("user-federated"),
+            interaction_url: format!("{access_server_url}/interact"),
+        })
+    } else {
+        HarnessAccessPolicy::Grant(aauth::AlwaysGrantAccessPolicy::new("user-federated"))
     };
 
     let mode = if config.resource_managed {
@@ -230,11 +258,12 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
                 pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
                 fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
                 http_client: http_client.clone(),
+                federation_poll_max_secs: Some(TEST_POLL_MAX_SECS),
             },
         },
         access: AccessServerState {
-            policy: AlwaysGrantAccessPolicy::new("user-federated"),
-            pending: InMemoryPendingStore::new(),
+            policy: access_policy,
+            pending: access_pending.clone(),
             minter: keys.access_auth_jwt_minter(),
             config: AccessServerConfig {
                 keys: keys.clone(),
@@ -243,7 +272,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
                 person_server_url: person_server_url.clone(),
                 access_jwks_uri: access_jwks_uri.clone(),
                 pending_base_url: access_server_url.clone(),
-                pending_path: "/as/access/pending".into(),
+                pending_path: "/access/pending".into(),
                 pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
                 fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
             },
@@ -288,6 +317,10 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
             .route(
                 "/as/access/aauth/token",
                 post(access_token_exchange_handler),
+            )
+            .route(
+                "/as/access/pending/{id}",
+                get(access_pending_poll_handler).post(access_pending_post_handler),
             );
     }
 
@@ -307,6 +340,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         person_server_url,
         resource_url,
         person_pending,
+        access_pending,
         resource_pending,
         opaque_store,
         handle,

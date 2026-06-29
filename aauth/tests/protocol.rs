@@ -332,6 +332,7 @@ async fn deferred_interaction_grant() {
         capabilities: None,
         mission: None,
         prompt: None,
+        max_poll_duration_secs: Some(5),
     };
     let client = build_client(options, &server);
 
@@ -415,6 +416,7 @@ fn aauth_options(
         capabilities: None,
         mission: None,
         prompt: None,
+        max_poll_duration_secs: Some(5),
     }
 }
 

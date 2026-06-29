@@ -3,12 +3,25 @@ use std::sync::Arc;
 use crate::error::{AAuthError, Result};
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
+use crate::server::deferred::{
+    parse_deferred_response, DeferRequirement, ParsedDeferred,
+};
 use crate::server::person::keys::AuthJwtMinter;
 use crate::types::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
 
 #[derive(Clone)]
 pub struct FederationConfig {
     pub fetcher: Arc<dyn MetadataFetcher>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FederationOutcome {
+    Complete(TokenResponseBody),
+    Deferred {
+        requirement: DeferRequirement,
+        as_pending_url: String,
+        access_server_url: String,
+    },
 }
 
 pub async fn federate_to_access_server<M: AuthJwtMinter>(
@@ -19,7 +32,7 @@ pub async fn federate_to_access_server<M: AuthJwtMinter>(
     resource_url: &str,
     resource_token: &str,
     agent_token: &str,
-) -> Result<TokenResponseBody> {
+) -> Result<FederationOutcome> {
     let claims = crate::jwt::decode_resource_token_unverified(resource_token)?;
     let access_server_url = claims.aud.trim_end_matches('/').to_string();
     let metadata_url = format!("{access_server_url}/.well-known/aauth-access.json");
@@ -66,9 +79,20 @@ pub async fn federate_to_access_server<M: AuthJwtMinter>(
     }
 
     if status == 202 {
-        return Err(AAuthError::Message(
-            "Access server deferred response during federation (not yet fully handled)".into(),
-        ));
+        let headers = response_headers_to_http(response.headers());
+        let body_bytes = response
+            .bytes()
+            .await
+            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        let ParsedDeferred {
+            location,
+            requirement,
+        } = parse_deferred_response(status, &headers, &body_bytes, &access_server_url)?;
+        return Ok(FederationOutcome::Deferred {
+            requirement,
+            as_pending_url: location,
+            access_server_url,
+        });
     }
 
     if !response.status().is_success() {
@@ -92,10 +116,10 @@ pub async fn federate_to_access_server<M: AuthJwtMinter>(
     )
     .await?;
 
-    Ok(token_body)
+    Ok(FederationOutcome::Complete(token_body))
 }
 
-async fn verify_federated_auth_token(
+pub async fn verify_federated_auth_token(
     auth_token: &str,
     expected_iss: &str,
     expected_aud: &str,
@@ -125,6 +149,19 @@ async fn verify_federated_auth_token(
     let _ = fetcher;
     let _ = auth;
     Ok(())
+}
+
+fn response_headers_to_http(headers: &reqwest::header::HeaderMap) -> http::HeaderMap {
+    let mut map = http::HeaderMap::new();
+    for (name, value) in headers.iter() {
+        if let (Ok(n), Ok(v)) = (
+            http::HeaderName::from_bytes(name.as_str().as_bytes()),
+            http::HeaderValue::from_bytes(value.as_bytes()),
+        ) {
+            map.insert(n, v);
+        }
+    }
+    map
 }
 
 /// Legacy helper used by integration tests.
@@ -167,16 +204,7 @@ pub async fn fulfill_token_exchange(
         });
     }
 
-    let agent_jwt = minter.mint_auth_jwt(
-        agent_url,
-        agent_url,
-        agent_url,
-        None,
-        None,
-    );
-    let _ = agent_jwt;
-
-    federate_to_access_server(
+    match federate_to_access_server(
         client,
         fetcher,
         &minter,
@@ -185,5 +213,11 @@ pub async fn fulfill_token_exchange(
         resource_token,
         &crate::mint_agent_jwt(keys, agent_url, agent_url, Some(person_server_url)),
     )
-    .await
+    .await?
+    {
+        FederationOutcome::Complete(body) => Ok(body),
+        FederationOutcome::Deferred { .. } => Err(AAuthError::Message(
+            "unexpected deferred response from access server in fulfill_token_exchange".into(),
+        )),
+    }
 }

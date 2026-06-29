@@ -37,6 +37,7 @@ pub struct TokenExchangeOptions {
     pub prompt: Option<String>,
     pub on_interaction: Option<InteractionCallback>,
     pub on_clarification: Option<crate::client::injector::ClarificationCallback>,
+    pub max_poll_duration_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -154,7 +155,7 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
                 interaction_code,
                 on_interaction: options.on_interaction,
                 on_clarification: options.on_clarification,
-                max_poll_duration: None,
+                max_poll_duration: options.max_poll_duration_secs,
             },
             send,
         )
