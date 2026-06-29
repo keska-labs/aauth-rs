@@ -49,9 +49,9 @@ aauth-rs/
 | Identity-based | `IdentityBased` | Grant on verified agent or auth token alone |
 | PS-asserted (three-party) | `PsAsserted { require_auth_token, access_server_url: None, person_server_fallback }` | Resource token `aud` = agent `ps` claim (or fallback) |
 | Federated (four-party) | `PsAsserted { require_auth_token, access_server_url: Some(...), ... }` | Resource token `aud` = AS; PS federates to AS |
+| Resource-managed (two-party) | `ResourceManaged { policy, pending, opaque, ... }` | `ResourceConsentPolicy` + `PendingStore` + opaque `AAuth-Access` tokens |
 
 When the Access Server returns `202` during federation, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready. Payment (`402`) from the AS remains a stub.
-| Resource-managed (two-party) | `ResourceManaged { policy, pending, opaque, ... }` | `ResourceConsentPolicy` + `PendingStore` + opaque `AAuth-Access` tokens |
 
 ## Policy and deferred store
 
@@ -67,12 +67,7 @@ Policies are stateless; in-flight deferred requests are persisted in a `PendingS
 
 Reference policies for tests and examples: `AlwaysGrantPersonPolicy`, `AlwaysGrantAccessPolicy`, `DeferInteractionPersonPolicy`, `ClarificationThenGrantPersonPolicy`, `DeferInteractionResourcePolicy`.
 
-### Breaking changes (0.0.1)
-
-- Removed: `InteractionManager`, `InteractionManagerOptions`, `PendingRequest`
-- Added: `PendingStore`, `InMemoryPendingStore`, policy traits, `DeferRequirement`, `PendingInput`, `PendingOutcome`
-- `ResourceAccessPolicy` is now a type alias for a concrete `ResourceAccessMode` with default policies; use `ResourceAccessMode<P, S, O>` for custom policy/store types
-- Person/Access axum state is generic over `P: *Policy`, `S: PendingStore`, `M: *JwtMinter`
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `client::resolve::resolve_person_server_url` or leave `person_server_url` unset on `AAuthClientOptions` to resolve from the agent token.
 
@@ -88,7 +83,7 @@ The agent JWT `ps` claim names the Person Server when not configured explicitly 
 Disable defaults to depend on only one side:
 
 ```toml
-aauth = { version = "0.1", default-features = false, features = ["client-reqwest"] }
+aauth = { version = "0.0", default-features = false, features = ["client-reqwest"] }
 ```
 
 ## Quick example
@@ -129,6 +124,7 @@ async fn main() -> aauth::Result<()> {
             capabilities: None,
             mission: None,
             prompt: None,
+            max_poll_duration_secs: None,
         }))
         .build();
 
@@ -189,6 +185,8 @@ cargo test --all-features
 cargo fmt --all
 cargo clippy --all-features -- -D warnings
 ```
+
+Release notes: [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
