@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use aauth::InMemoryOpaqueAccessStore;
 use aauth::InMemoryAccessPendingStore;
+use aauth::InMemoryOpaqueAccessStore;
 use aauth::InMemoryPersonPendingStore;
 use aauth::InMemoryResourcePendingStore;
 use aauth::OpaqueAccessStore;
@@ -19,6 +19,7 @@ use aauth::server::axum::{
     person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
 };
 use aauth::server::person::keys::TestAuthJwtMinter;
+use aauth::server::resource::{PolicyResourceAccessService, ResourceAccessConfig};
 use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use aauth::{
     AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
@@ -117,12 +118,26 @@ impl Drop for SpawnedServer {
     }
 }
 
-type TestPersonState =
-    PersonServerState<HarnessPersonPolicy, InMemoryPersonPendingStore, TestAuthJwtMinter>;
-type TestAccessState =
-    AccessServerState<HarnessAccessPolicy, InMemoryAccessPendingStore, TestAccessAuthJwtMinter>;
-type TestResourceState =
-    ResourceServerState<InMemoryResourcePendingStore, InMemoryOpaqueAccessStore>;
+type TestPersonState = PersonServerState<
+    aauth::server::person::PolicyPersonTokenService<
+        HarnessPersonPolicy,
+        InMemoryPersonPendingStore,
+        TestAuthJwtMinter,
+    >,
+>;
+type TestAccessState = AccessServerState<
+    aauth::server::access::PolicyAccessTokenService<
+        HarnessAccessPolicy,
+        InMemoryAccessPendingStore,
+        TestAccessAuthJwtMinter,
+    >,
+>;
+type TestResourceService = PolicyResourceAccessService<
+    DeferInteractionResourcePolicy,
+    InMemoryResourcePendingStore,
+    InMemoryOpaqueAccessStore,
+>;
+type TestResourceState = ResourceServerState<TestResourceService>;
 
 #[derive(Clone)]
 struct TestServerState {
@@ -215,17 +230,23 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         HarnessAccessPolicy::Grant(aauth::AlwaysGrantAccessPolicy::new("user-federated"))
     };
 
-    let mode = if config.resource_managed {
-        ResourceAccessMode::ResourceManaged {
-            policy: DeferInteractionResourcePolicy {
-                interaction_url: format!("{resource_url}/interact"),
-            },
-            pending: resource_pending.clone(),
-            opaque: opaque_store.clone(),
+    let resource_service = PolicyResourceAccessService::new(
+        DeferInteractionResourcePolicy {
+            interaction_url: format!("{resource_url}/interact"),
+        },
+        resource_pending.clone(),
+        opaque_store.clone(),
+        ResourceAccessConfig {
             interaction_url: format!("{resource_url}/interact"),
             pending_base_url: resource_url.clone(),
             pending_path: "/resource/pending".into(),
             pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
+        },
+    );
+
+    let mode = if config.resource_managed {
+        ResourceAccessMode::ResourceManaged {
+            service: resource_service.clone(),
         }
     } else {
         ResourceAccessMode::PsAsserted {
@@ -247,11 +268,11 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     );
 
     let test_state = TestServerState {
-        person: PersonServerState {
-            policy: person_policy,
-            pending: person_pending.clone(),
-            minter: keys.auth_jwt_minter(),
-            config: PersonServerConfig {
+        person: PersonServerState::from_policy(
+            person_policy,
+            person_pending.clone(),
+            keys.auth_jwt_minter(),
+            PersonServerConfig {
                 keys: keys.clone(),
                 person_server_url: person_server_url.clone(),
                 resource_url: resource_url.clone(),
@@ -265,12 +286,12 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
                 http_client: http_client.clone(),
                 federation_poll_max_secs: Some(TEST_POLL_MAX_SECS),
             },
-        },
-        access: AccessServerState {
-            policy: access_policy,
-            pending: access_pending.clone(),
-            minter: keys.access_auth_jwt_minter(),
-            config: AccessServerConfig {
+        ),
+        access: AccessServerState::from_policy(
+            access_policy,
+            access_pending.clone(),
+            keys.access_auth_jwt_minter(),
+            AccessServerConfig {
                 keys: keys.clone(),
                 access_server_url: access_server_url.clone(),
                 resource_url: resource_url.clone(),
@@ -281,10 +302,9 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
                 pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
                 fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
             },
-        },
+        ),
         resource: ResourceServerState {
-            pending: resource_pending.clone(),
-            opaque: opaque_store.clone(),
+            service: resource_service,
         },
         agent_jwks_uri: agent_jwks_uri.clone(),
     };

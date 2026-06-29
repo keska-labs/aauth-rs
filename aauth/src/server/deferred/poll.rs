@@ -7,7 +7,7 @@ use crate::error::{AAuthError, Result};
 use crate::jwt::OkpSigningJwk;
 use crate::server::person::keys::mint_person_server_signature_jwt;
 use crate::signature::apply_outbound_signature;
-use crate::types::{AAuthProtocolError, ClarificationResponse, TokenResponseBody};
+use crate::types::{AAuthErrorCode, AAuthProtocolError, ClarificationResponse, TokenResponseBody};
 
 use super::parse::{parse_auth_token_response, parse_deferred_response};
 use super::types::{DeferRequirement, PendingInput};
@@ -173,12 +173,9 @@ pub async fn poll_pending_http(
         }
 
         if status == 403 {
-            let err: AAuthProtocolError =
-                serde_json::from_slice(&body).unwrap_or_else(|_| AAuthProtocolError {
-                    error: "access_denied".into(),
-                    error_description: Some("Access denied".into()),
-                    error_uri: None,
-                });
+            let err: AAuthProtocolError = serde_json::from_slice(&body).unwrap_or_else(|_| {
+                AAuthProtocolError::with_description(AAuthErrorCode::AccessDenied, "Access denied")
+            });
             return Ok(ServerPollOutcome::Error(err));
         }
 

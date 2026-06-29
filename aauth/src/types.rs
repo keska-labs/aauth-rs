@@ -551,18 +551,208 @@ pub struct KeyMaterial {
     pub signature_key: SignatureKey,
 }
 
+/// Spec-defined AAuth protocol error codes.
+///
+/// Wire values match the draft tables for token endpoints, polling, authorization,
+/// HTTP signature verification, interaction callbacks, and interaction endpoints.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#error-response-format
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AAuthErrorCode {
+    // Token endpoint (#token-endpoint-error-codes)
+    InvalidRequest,
+    InvalidAgentToken,
+    ExpiredAgentToken,
+    InvalidResourceToken,
+    ExpiredResourceToken,
+    UserUnreachable,
+    ServerError,
+    // Authorization endpoint (#authorization-endpoint-error-responses)
+    InvalidSignature,
+    InvalidScope,
+    // Polling (#polling-error-codes)
+    Denied,
+    Abandoned,
+    Expired,
+    InvalidCode,
+    SlowDown,
+    // HTTP signature verification (#http-message-signatures)
+    InvalidInput,
+    InvalidKey,
+    UnknownKey,
+    InvalidJwt,
+    ExpiredJwt,
+    // Interaction callback (#interaction-callback-errors)
+    AccessDenied,
+    UserAbandoned,
+    InteractionExpired,
+    TemporarilyUnavailable,
+    // Interaction endpoint (#interaction-endpoint-errors)
+    InteractionUnavailable,
+    /// Extension or future code not listed in the spec.
+    Custom(String),
+}
+
+impl AAuthErrorCode {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::InvalidRequest => "invalid_request",
+            Self::InvalidAgentToken => "invalid_agent_token",
+            Self::ExpiredAgentToken => "expired_agent_token",
+            Self::InvalidResourceToken => "invalid_resource_token",
+            Self::ExpiredResourceToken => "expired_resource_token",
+            Self::UserUnreachable => "user_unreachable",
+            Self::ServerError => "server_error",
+            Self::InvalidSignature => "invalid_signature",
+            Self::InvalidScope => "invalid_scope",
+            Self::Denied => "denied",
+            Self::Abandoned => "abandoned",
+            Self::Expired => "expired",
+            Self::InvalidCode => "invalid_code",
+            Self::SlowDown => "slow_down",
+            Self::InvalidInput => "invalid_input",
+            Self::InvalidKey => "invalid_key",
+            Self::UnknownKey => "unknown_key",
+            Self::InvalidJwt => "invalid_jwt",
+            Self::ExpiredJwt => "expired_jwt",
+            Self::AccessDenied => "access_denied",
+            Self::UserAbandoned => "user_abandoned",
+            Self::InteractionExpired => "interaction_expired",
+            Self::TemporarilyUnavailable => "temporarily_unavailable",
+            Self::InteractionUnavailable => "interaction_unavailable",
+            Self::Custom(code) => code,
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "invalid_request" => Self::InvalidRequest,
+            "invalid_agent_token" => Self::InvalidAgentToken,
+            "expired_agent_token" => Self::ExpiredAgentToken,
+            "invalid_resource_token" => Self::InvalidResourceToken,
+            "expired_resource_token" => Self::ExpiredResourceToken,
+            "user_unreachable" => Self::UserUnreachable,
+            "server_error" => Self::ServerError,
+            "invalid_signature" => Self::InvalidSignature,
+            "invalid_scope" => Self::InvalidScope,
+            "denied" => Self::Denied,
+            "abandoned" => Self::Abandoned,
+            "expired" => Self::Expired,
+            "invalid_code" => Self::InvalidCode,
+            "slow_down" => Self::SlowDown,
+            "invalid_input" => Self::InvalidInput,
+            "invalid_key" => Self::InvalidKey,
+            "unknown_key" => Self::UnknownKey,
+            "invalid_jwt" => Self::InvalidJwt,
+            "expired_jwt" => Self::ExpiredJwt,
+            "access_denied" => Self::AccessDenied,
+            "user_abandoned" => Self::UserAbandoned,
+            "interaction_expired" => Self::InteractionExpired,
+            "temporarily_unavailable" => Self::TemporarilyUnavailable,
+            "interaction_unavailable" => Self::InteractionUnavailable,
+            other => Self::Custom(other.to_string()),
+        }
+    }
+}
+
+impl std::fmt::Display for AAuthErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for AAuthErrorCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for AAuthErrorCode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(Self::from_wire(&s))
+    }
+}
+
+impl FromStr for AAuthErrorCode {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from_wire(s))
+    }
+}
+
 /// Token endpoint or polling error response body.
 ///
 /// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#token-endpoint-error-response-format-error-response-format
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AAuthProtocolError {
     /// Single error code (for example `invalid_request`, `denied`, `expired`).
-    pub error: String,
+    pub error: AAuthErrorCode,
     /// Human-readable description.
     #[serde(default)]
     pub error_description: Option<String>,
     #[serde(default)]
     pub error_uri: Option<String>,
+}
+
+impl AAuthProtocolError {
+    pub fn new(code: AAuthErrorCode) -> Self {
+        Self {
+            error: code,
+            error_description: None,
+            error_uri: None,
+        }
+    }
+
+    pub fn with_description(code: AAuthErrorCode, description: impl Into<String>) -> Self {
+        Self {
+            error: code,
+            error_description: Some(description.into()),
+            error_uri: None,
+        }
+    }
+
+    /// Spec `server_error` — internal failure on token or pending endpoints.
+    pub fn server_error() -> Self {
+        Self::new(AAuthErrorCode::ServerError)
+    }
+
+    /// HTTP status for this error on a pending poll response.
+    ///
+    /// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#polling-error-codes
+    #[cfg(feature = "server-axum")]
+    pub fn polling_status(&self) -> axum::http::StatusCode {
+        use axum::http::StatusCode;
+        match self.error {
+            AAuthErrorCode::Denied | AAuthErrorCode::Abandoned | AAuthErrorCode::AccessDenied => {
+                StatusCode::FORBIDDEN
+            }
+            AAuthErrorCode::Expired | AAuthErrorCode::InteractionExpired => {
+                StatusCode::REQUEST_TIMEOUT
+            }
+            AAuthErrorCode::InvalidCode => StatusCode::GONE,
+            AAuthErrorCode::SlowDown => StatusCode::TOO_MANY_REQUESTS,
+            AAuthErrorCode::ServerError | AAuthErrorCode::TemporarilyUnavailable => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            AAuthErrorCode::Custom(ref code) => match code.as_str() {
+                "denied" | "abandoned" | "access_denied" => StatusCode::FORBIDDEN,
+                "expired" | "interaction_expired" => StatusCode::REQUEST_TIMEOUT,
+                "invalid_code" => StatusCode::GONE,
+                "slow_down" => StatusCode::TOO_MANY_REQUESTS,
+                "server_error" | "temporarily_unavailable" => StatusCode::INTERNAL_SERVER_ERROR,
+                _ => StatusCode::FORBIDDEN,
+            },
+            _ => StatusCode::FORBIDDEN,
+        }
+    }
 }
 
 /// Direct grant (`200`) token endpoint response.

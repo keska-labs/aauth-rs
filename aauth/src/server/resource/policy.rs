@@ -1,14 +1,11 @@
-use crate::server::deferred::{InMemoryResourcePendingStore, PendingStore, ResourcePendingRecord};
-use crate::server::policy::ResourceConsentPolicy;
-use crate::server::resource::opaque::OpaqueAccessStore;
+use crate::server::deferred::InMemoryResourcePendingStore;
+use crate::server::resource::service::{PolicyResourceAccessService, ResourceAccessService};
 
 /// How a resource server evaluates access for incoming agent requests.
 #[derive(Clone)]
-pub enum ResourceAccessMode<P, S, O>
+pub enum ResourceAccessMode<S = ResourceAccessPolicyService>
 where
-    P: ResourceConsentPolicy,
-    S: PendingStore<ResourcePendingRecord>,
-    O: OpaqueAccessStore + Clone,
+    S: ResourceAccessService,
 {
     /// Grant based on verified agent or auth token identity alone.
     IdentityBased,
@@ -19,20 +16,15 @@ where
         person_server_fallback: Option<String>,
     },
     /// Resource manages authorization via interaction and opaque access tokens.
-    ResourceManaged {
-        policy: P,
-        pending: S,
-        opaque: O,
-        interaction_url: String,
-        pending_base_url: String,
-        pending_path: String,
-        pending_ttl_secs: u64,
-    },
+    ResourceManaged { service: S },
 }
 
-/// Type-erased mode for callers that do not need resource-managed generics.
-pub type ResourceAccessPolicy = ResourceAccessMode<
+/// Default resource-managed mode using in-memory policy, pending store, and opaque tokens.
+pub type ResourceAccessPolicyService = PolicyResourceAccessService<
     crate::server::policy::AlwaysGrantResourcePolicy,
     InMemoryResourcePendingStore,
     crate::server::resource::InMemoryOpaqueAccessStore,
 >;
+
+/// Type-erased mode for callers that do not need resource-managed generics.
+pub type ResourceAccessPolicy = ResourceAccessMode<ResourceAccessPolicyService>;

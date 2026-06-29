@@ -68,23 +68,29 @@ pub use server::person::{
 };
 #[cfg(feature = "server")]
 pub use server::{
-    AccessTokenContext, AccessTokenPolicy, AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy,
-    AlwaysGrantResourcePolicy, AuthGrant, AuthJwtMinter, ClaimsSubmission,
-    ClarificationThenGrantAccessPolicy, ClarificationThenGrantPersonPolicy,
-    DEFAULT_PENDING_TTL_SECS, DeferApprovalAccessPolicy, DeferClaimsAccessPolicy,
-    DeferInteractionAccessPolicy, DeferInteractionPersonPolicy, DeferInteractionResourcePolicy,
-    DeferRequirement, Ed25519ResourceTokenSigner, FederationPendingState, FixedSubPersonPolicy,
-    InMemoryAccessPendingStore, InMemoryOpaqueAccessStore, InMemoryPendingStore,
-    InMemoryPersonPendingStore, InMemoryResourcePendingStore, OpaqueAccessStore, PendingInput,
-    PendingOutcome, PendingRecord, PendingSnapshot, PendingStorable, PendingStore,
-    AccessPendingContext, AccessPendingRecord, PersonPendingContext, PersonPendingRecord,
-    ResourcePendingContext, ResourcePendingRecord, PersonTokenContext, PersonTokenDecision,
-    PersonTokenPolicy, PolicyError,
-    ResourceAccessContext, ResourceAccessMode, ResourceAccessPolicy, ResourceConsentDecision,
-    ResourceConsentPolicy, ResourceTokenOptions, ResourceTokenSigner, TestAuthJwtMinter,
-    TokenPolicyDecision, VerifyResourceTokenOptions, VerifyTokenOptions, create_resource_token,
-    generate_pending_id, mint_auth_jwt, pending_location, resolve_resource_token_audience,
-    verify_auth_token_binding, verify_client_auth_token, verify_resource_challenge,
-    verify_resource_token, verify_token,
+    AccessPendingContext, AccessPendingRecord, AccessTokenContext, AccessTokenPolicy,
+    AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy, AlwaysGrantResourcePolicy, AuthGrant,
+    AuthJwtMinter, ClaimsSubmission, ClarificationThenGrantAccessPolicy,
+    ClarificationThenGrantPersonPolicy, DEFAULT_PENDING_TTL_SECS, DeferApprovalAccessPolicy,
+    DeferClaimsAccessPolicy, DeferInteractionAccessPolicy, DeferInteractionPersonPolicy,
+    DeferInteractionResourcePolicy, DeferRequirement, Ed25519ResourceTokenSigner,
+    FederationPendingState, FixedSubPersonPolicy, InMemoryAccessPendingStore,
+    InMemoryOpaqueAccessStore, InMemoryPendingStore, InMemoryPersonPendingStore,
+    InMemoryResourcePendingStore, OpaqueAccessStore, PendingInput, PendingOutcome, PendingRecord,
+    PendingSnapshot, PendingStorable, PendingStore, PersonPendingContext, PersonPendingRecord,
+    PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError, ResourceAccessContext,
+    ResourceAccessMode, ResourceAccessPolicy, ResourceAccessService, ResourceAccessServiceError,
+    ResourceConsentDecision, ResourceConsentPolicy, ResourcePendingContext, ResourcePendingRecord,
+    ResourceTokenOptions, ResourceTokenSigner, TestAuthJwtMinter, TokenPolicyDecision,
+    VerifyResourceTokenOptions, VerifyTokenOptions, create_resource_token, generate_pending_id,
+    mint_auth_jwt, pending_location, resolve_resource_token_audience, verify_auth_token_binding,
+    verify_client_auth_token, verify_resource_challenge, verify_resource_token, verify_token,
+};
+#[cfg(all(feature = "server", feature = "server-axum"))]
+pub use server::{
+    AccessTokenService, AccessTokenServiceError, AuthTokenFlowOutcome, AuthTokenPollOutcome,
+    InternalServiceError, PersonTokenFlowOutcome, PersonTokenService, PersonTokenServiceError,
+    PolicyAccessTokenService, PolicyPersonTokenService, PolicyResourceAccessService,
+    ResourceAccessConfig, ResourceConsentFlowOutcome, ResourcePollOutcome, build_access_context,
 };
 pub use types::*;

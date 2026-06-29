@@ -8,6 +8,7 @@ use crate::types::{AAuthProtocolError, PendingStatus, TokenResponseBody};
 
 use super::types::{DeferRequirement, PendingOutcome, PendingSnapshot};
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct AcceptedResponse {
     pub status: StatusCode,
     pub headers: HeaderMap,
@@ -97,7 +98,7 @@ pub fn map_snapshot_to_poll_parts(snapshot: &PendingSnapshot) -> PollResponse {
             PendingOutcome::AuthToken(body) => PollResponse::OkAuthToken(body.clone()),
             PendingOutcome::OpaqueAccess(token) => PollResponse::OkOpaque(token.clone()),
             PendingOutcome::Error(err) => PollResponse::Error {
-                status: StatusCode::FORBIDDEN,
+                status: err.polling_status(),
                 error: err.clone(),
             },
         };

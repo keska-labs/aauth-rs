@@ -7,25 +7,15 @@ use axum::response::{IntoResponse, Response};
 
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
-use crate::server::deferred::PendingInput;
-use crate::server::deferred::{
-    ClaimsSubmission, DeferRequirement, FederationPendingState, PendingOutcome, PersonPendingContext,
-    PersonPendingRecord, PendingSnapshot, PendingStore, PollResponse, ServerPollOptions,
-    ServerPollOutcome, build_accepted, generate_pending_id, map_snapshot_to_poll_parts,
-    pending_location, poll_pending_http, post_pending_input,
-};
-use crate::server::person::federation::{
-    FederationOutcome, federate_to_access_server, verify_federated_auth_token,
-};
+use crate::server::access::outcome::AuthTokenPollOutcome;
+use crate::server::axum::{InternalServiceError, parse_pending_input};
+use crate::server::deferred::{PendingStore, PersonPendingRecord};
 use crate::server::person::keys::AuthJwtMinter;
-use crate::server::person::orchestrate::{
-    PersonOrchestrateConfig, mint_person_auth, verify_person_token_request,
-};
-use crate::server::policy::{PersonTokenContext, PersonTokenDecision, PersonTokenPolicy};
+use crate::server::person::orchestrate::{PersonOrchestrateConfig, verify_person_token_request};
+use crate::server::person::service::{PersonTokenService, PolicyPersonTokenService};
+use crate::server::policy::PersonTokenPolicy;
 use crate::signature::verify_request_signature;
-use crate::types::{
-    ClarificationResponse, JwksDocument, PersonServerMetadata, TokenExchangeRequest,
-};
+use crate::types::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
 
 #[derive(Clone)]
 pub struct PersonServerConfig {
@@ -66,25 +56,33 @@ impl PersonServerConfig {
 }
 
 #[derive(Clone)]
-pub struct PersonServerState<P, S, M>
+pub struct PersonServerState<S>
 where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
+    S: PersonTokenService,
 {
-    pub policy: P,
-    pub pending: S,
-    pub minter: M,
+    pub service: S,
     pub config: PersonServerConfig,
 }
 
-pub async fn person_metadata_handler<P, S, M>(
-    State(state): State<PersonServerState<P, S, M>>,
-) -> Json<PersonServerMetadata>
+impl<P, S, M> PersonServerState<PolicyPersonTokenService<P, S, M>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
+    M: AuthJwtMinter + Clone,
+{
+    pub fn from_policy(policy: P, pending: S, minter: M, config: PersonServerConfig) -> Self {
+        Self {
+            service: PolicyPersonTokenService::new(policy, pending, minter, config.clone()),
+            config,
+        }
+    }
+}
+
+pub async fn person_metadata_handler<S>(
+    State(state): State<PersonServerState<S>>,
+) -> Json<PersonServerMetadata>
+where
+    S: PersonTokenService,
 {
     Json(PersonServerMetadata {
         issuer: Some(state.config.person_server_url.clone()),
@@ -97,28 +95,22 @@ where
     })
 }
 
-pub async fn person_jwks_handler<P, S, M>(
-    State(state): State<PersonServerState<P, S, M>>,
-) -> Json<JwksDocument>
+pub async fn person_jwks_handler<S>(State(state): State<PersonServerState<S>>) -> Json<JwksDocument>
 where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
+    S: PersonTokenService,
 {
     Json(JwksDocument {
         keys: state.config.keys.person_server.jwk_set(),
     })
 }
 
-pub async fn token_exchange_handler<P, S, M>(
-    State(state): State<PersonServerState<P, S, M>>,
+pub async fn token_exchange_handler<S>(
+    State(state): State<PersonServerState<S>>,
     headers: HeaderMap,
     body: Option<Json<TokenExchangeRequest>>,
 ) -> Response
 where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
+    S: PersonTokenService,
 {
     let orch = state.config.orchestrate();
     let authority = headers
@@ -152,531 +144,40 @@ where
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
-    let decision = match state.policy.evaluate(&ctx).await {
-        Ok(d) => d,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
-    apply_person_decision(&state, &orch, &ctx, decision, &verified_sig.jwt).await
-}
-
-pub async fn pending_poll_handler<P, S, M>(
-    State(state): State<PersonServerState<P, S, M>>,
-    Path(id): Path<String>,
-) -> Response
-where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
-{
-    let record = match state.pending.load(&id).await {
-        Ok(Some(r)) => r,
-        Ok(None) => return StatusCode::GONE.into_response(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
-    if record.is_expired() {
-        let _ = state.pending.remove(&id).await;
-        return StatusCode::GONE.into_response();
+    match state.service.exchange_token(ctx, &verified_sig.jwt).await {
+        Ok(outcome) => outcome.into_response(),
+        Err(e) => InternalServiceError::from(e).into_response(),
     }
-
-    poll_snapshot_to_response(&record.snapshot)
 }
 
-pub async fn pending_post_handler<P, S, M>(
-    State(state): State<PersonServerState<P, S, M>>,
+pub async fn pending_poll_handler<S>(
+    State(state): State<PersonServerState<S>>,
+    Path(id): Path<String>,
+) -> Result<AuthTokenPollOutcome, InternalServiceError>
+where
+    S: PersonTokenService,
+{
+    state
+        .service
+        .poll_pending(&id)
+        .await
+        .map_err(InternalServiceError::from)
+}
+
+pub async fn pending_post_handler<S>(
+    State(state): State<PersonServerState<S>>,
     Path(id): Path<String>,
     body: Option<Json<serde_json::Value>>,
 ) -> Response
 where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
+    S: PersonTokenService,
 {
-    let record = match state.pending.load(&id).await {
-        Ok(Some(r)) => r,
-        Ok(None) => return StatusCode::GONE.into_response(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
-    if record.is_expired() {
-        let _ = state.pending.remove(&id).await;
-        return StatusCode::GONE.into_response();
-    }
-
-    let PersonPendingContext {
-        person_server_url,
-        resource_url,
-        agent_claims,
-        resource_claims,
-        exchange_request,
-        agent_token,
-        federation,
-    } = record.context;
-
     let input = parse_pending_input(body.as_ref().map(|Json(v)| v));
-    let orch = state.config.orchestrate();
 
-    if let Some(fed) = federation {
-        return handle_federated_pending_post(
-            &state,
-            &orch,
-            &id,
-            &fed,
-            &agent_token,
-            &orch.resource_url,
-            input,
-        )
-        .await;
+    match state.service.resume_pending(&id, input).await {
+        Ok(outcome) => outcome.into_response(),
+        Err(e) => InternalServiceError::from(e).into_response(),
     }
-
-    let ctx = PersonTokenContext {
-        person_server_url,
-        resource_url,
-        agent_claims,
-        resource_claims,
-        exchange_request,
-    };
-
-    let decision = match state.policy.resume(&ctx, input).await {
-        Ok(d) => d,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
-    apply_person_pending_decision(&state, &orch, &ctx, &id, decision, &agent_token).await
-}
-
-async fn apply_person_pending_decision<P, S, M>(
-    state: &PersonServerState<P, S, M>,
-    orch: &PersonOrchestrateConfig,
-    ctx: &PersonTokenContext,
-    pending_id: &str,
-    decision: PersonTokenDecision,
-    agent_jwt: &str,
-) -> Response
-where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
-{
-    match decision {
-        PersonTokenDecision::Grant(grant) => {
-            let body = mint_person_auth(&state.minter, orch, &grant, ctx.agent_claims.identifier());
-            let _ = state
-                .pending
-                .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
-                .await;
-            (StatusCode::OK, Json(body)).into_response()
-        }
-        PersonTokenDecision::Federate => {
-            match federate_to_access_server(
-                &orch.http_client,
-                orch,
-                &ctx.exchange_request.resource_token,
-                agent_jwt,
-            )
-            .await
-            {
-                Ok(FederationOutcome::Complete(body)) => {
-                    let _ = state
-                        .pending
-                        .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
-                        .await;
-                    (StatusCode::OK, Json(body)).into_response()
-                }
-                Ok(FederationOutcome::Deferred {
-                    requirement,
-                    as_pending_url,
-                    access_server_url,
-                }) => {
-                    create_federated_deferred_response(
-                        state,
-                        orch,
-                        ctx,
-                        Some(pending_id),
-                        requirement,
-                        FederationPendingState {
-                            access_server_url,
-                            as_pending_url,
-                        },
-                        agent_jwt,
-                    )
-                    .await
-                }
-                Err(_) => StatusCode::UNAUTHORIZED.into_response(),
-            }
-        }
-        PersonTokenDecision::Deny(err) => {
-            let _ = state
-                .pending
-                .complete(pending_id, PendingOutcome::Error(err.clone()))
-                .await;
-            (StatusCode::FORBIDDEN, Json(err)).into_response()
-        }
-        PersonTokenDecision::Defer(requirement) => {
-            update_person_pending_defer(state, orch, pending_id, requirement).await
-        }
-    }
-}
-
-async fn update_person_pending_defer<P, S, M>(
-    state: &PersonServerState<P, S, M>,
-    orch: &PersonOrchestrateConfig,
-    pending_id: &str,
-    requirement: DeferRequirement,
-) -> Response
-where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
-{
-    let Some(mut record) = state.pending.load(pending_id).await.ok().flatten() else {
-        return StatusCode::GONE.into_response();
-    };
-    record.snapshot = PendingSnapshot::waiting(requirement.clone());
-    if state.pending.save(pending_id, record).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    let location = pending_location(&orch.pending_base_url, &orch.pending_path, pending_id);
-    match build_accepted(&location, &requirement) {
-        Ok(accepted) => {
-            let mut response = Response::builder().status(accepted.status);
-            for (k, v) in accepted.headers.iter() {
-                response = response.header(k, v);
-            }
-            response
-                .body(axum::body::Body::from(accepted.body.to_string()))
-                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-        }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-async fn apply_person_decision<P, S, M>(
-    state: &PersonServerState<P, S, M>,
-    orch: &PersonOrchestrateConfig,
-    ctx: &PersonTokenContext,
-    decision: PersonTokenDecision,
-    agent_jwt: &str,
-) -> Response
-where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
-{
-    match decision {
-        PersonTokenDecision::Grant(grant) => {
-            let body = mint_person_auth(&state.minter, orch, &grant, ctx.agent_claims.identifier());
-            (StatusCode::OK, Json(body)).into_response()
-        }
-        PersonTokenDecision::Federate => match federate_to_access_server(
-            &orch.http_client,
-            orch,
-            &ctx.exchange_request.resource_token,
-            agent_jwt,
-        )
-        .await
-        {
-            Ok(FederationOutcome::Complete(body)) => (StatusCode::OK, Json(body)).into_response(),
-            Ok(FederationOutcome::Deferred {
-                requirement,
-                as_pending_url,
-                access_server_url,
-            }) => {
-                create_federated_deferred_response(
-                    state,
-                    orch,
-                    ctx,
-                    None,
-                    requirement,
-                    FederationPendingState {
-                        access_server_url,
-                        as_pending_url,
-                    },
-                    agent_jwt,
-                )
-                .await
-            }
-            Err(_) => StatusCode::UNAUTHORIZED.into_response(),
-        },
-        PersonTokenDecision::Deny(err) => (StatusCode::FORBIDDEN, Json(err)).into_response(),
-        PersonTokenDecision::Defer(requirement) => {
-            create_deferred_person_response(state, orch, ctx, requirement, agent_jwt).await
-        }
-    }
-}
-
-async fn create_federated_deferred_response<P, S, M>(
-    state: &PersonServerState<P, S, M>,
-    orch: &PersonOrchestrateConfig,
-    ctx: &PersonTokenContext,
-    pending_id: Option<&str>,
-    requirement: DeferRequirement,
-    federation: FederationPendingState,
-    agent_jwt: &str,
-) -> Response
-where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
-{
-    let id = pending_id
-        .map(str::to_string)
-        .unwrap_or_else(generate_pending_id);
-    let location = pending_location(&orch.pending_base_url, &orch.pending_path, &id);
-
-    let person_ctx = PersonPendingContext {
-        person_server_url: ctx.person_server_url.clone(),
-        resource_url: ctx.resource_url.clone(),
-        agent_claims: ctx.agent_claims.clone(),
-        resource_claims: ctx.resource_claims.clone(),
-        exchange_request: ctx.exchange_request.clone(),
-        agent_token: agent_jwt.to_string(),
-        federation: Some(federation),
-    };
-
-    if pending_id.is_some() {
-        let Some(mut record) = state.pending.load(&id).await.ok().flatten() else {
-            return StatusCode::GONE.into_response();
-        };
-        record.context = person_ctx;
-        record.snapshot = PendingSnapshot::waiting(requirement.clone());
-        if state.pending.save(&id, record).await.is_err() {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    } else {
-        let record = PersonPendingRecord::new(
-            id.clone(),
-            person_ctx,
-            PendingSnapshot::waiting(requirement.clone()),
-            orch.pending_ttl_secs,
-        );
-        if state.pending.create(record).await.is_err() {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    }
-
-    build_accepted_response(&location, &requirement)
-}
-
-async fn handle_federated_pending_post<P, S, M>(
-    state: &PersonServerState<P, S, M>,
-    orch: &PersonOrchestrateConfig,
-    pending_id: &str,
-    federation: &FederationPendingState,
-    agent_token: &str,
-    resource_url: &str,
-    input: PendingInput,
-) -> Response
-where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
-{
-    if matches!(input, PendingInput::Cancelled) {
-        let err = crate::types::AAuthProtocolError {
-            error: "access_denied".into(),
-            error_description: Some("Request cancelled".into()),
-            error_uri: None,
-        };
-        let _ = state
-            .pending
-            .complete(pending_id, PendingOutcome::Error(err.clone()))
-            .await;
-        return (StatusCode::FORBIDDEN, Json(err)).into_response();
-    }
-
-    let post_outcome = {
-        let signer = crate::server::deferred::OutboundRequestSigner {
-            person_server_url: orch.person_server_url.clone(),
-            signing_jwk: orch.person_server_signing_jwk.clone(),
-            keys: orch.keys.clone(),
-        };
-        match post_pending_input(
-            &orch.http_client,
-            &federation.as_pending_url,
-            &input,
-            Some(&signer),
-        )
-        .await
-        {
-            Ok(outcome) => outcome,
-            Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
-        }
-    };
-
-    let poll_outcome = if let Some(body) = post_outcome {
-        ServerPollOutcome::AuthToken(body)
-    } else {
-        match poll_pending_http(
-            &orch.http_client,
-            ServerPollOptions {
-                location_url: federation.as_pending_url.clone(),
-                max_poll_duration_secs: orch.federation_poll_max_secs,
-                prefer_wait: None,
-            },
-            &federation.access_server_url,
-        )
-        .await
-        {
-            Ok(outcome) => outcome,
-            Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
-        }
-    };
-
-    match poll_outcome {
-        ServerPollOutcome::AuthToken(body) => {
-            if verify_federated_auth_token(
-                &body.auth_token,
-                &federation.access_server_url,
-                resource_url,
-                agent_token,
-                Arc::clone(&orch.fetcher),
-            )
-            .await
-            .is_err()
-            {
-                return StatusCode::UNAUTHORIZED.into_response();
-            }
-            let _ = state
-                .pending
-                .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
-                .await;
-            (StatusCode::OK, Json(body)).into_response()
-        }
-        ServerPollOutcome::Deferred {
-            requirement,
-            location_url,
-        } => {
-            let Some(mut record) = state.pending.load(pending_id).await.ok().flatten() else {
-                return StatusCode::GONE.into_response();
-            };
-            record.snapshot = PendingSnapshot::waiting(requirement.clone());
-            record.context.federation = Some(FederationPendingState {
-                access_server_url: federation.access_server_url.clone(),
-                as_pending_url: location_url,
-            });
-            if state.pending.save(pending_id, record).await.is_err() {
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-            let location = pending_location(&orch.pending_base_url, &orch.pending_path, pending_id);
-            build_accepted_response(&location, &requirement)
-        }
-        ServerPollOutcome::Error(err) => {
-            let _ = state
-                .pending
-                .complete(pending_id, PendingOutcome::Error(err.clone()))
-                .await;
-            (StatusCode::FORBIDDEN, Json(err)).into_response()
-        }
-        ServerPollOutcome::Gone => {
-            let _ = state.pending.remove(pending_id).await;
-            StatusCode::GONE.into_response()
-        }
-    }
-}
-
-fn build_accepted_response(location: &str, requirement: &DeferRequirement) -> Response {
-    match build_accepted(location, requirement) {
-        Ok(accepted) => {
-            let mut response = Response::builder().status(accepted.status);
-            for (k, v) in accepted.headers.iter() {
-                response = response.header(k, v);
-            }
-            response
-                .body(axum::body::Body::from(accepted.body.to_string()))
-                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-        }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-async fn create_deferred_person_response<P, S, M>(
-    state: &PersonServerState<P, S, M>,
-    orch: &PersonOrchestrateConfig,
-    ctx: &PersonTokenContext,
-    requirement: DeferRequirement,
-    agent_jwt: &str,
-) -> Response
-where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter,
-{
-    let id = generate_pending_id();
-    let location = pending_location(&orch.pending_base_url, &orch.pending_path, &id);
-    let record = PersonPendingRecord::new(
-        id,
-        PersonPendingContext {
-            person_server_url: ctx.person_server_url.clone(),
-            resource_url: ctx.resource_url.clone(),
-            agent_claims: ctx.agent_claims.clone(),
-            resource_claims: ctx.resource_claims.clone(),
-            exchange_request: ctx.exchange_request.clone(),
-            agent_token: agent_jwt.to_string(),
-            federation: None,
-        },
-        PendingSnapshot::waiting(requirement.clone()),
-        orch.pending_ttl_secs,
-    );
-
-    if state.pending.create(record).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    match build_accepted(&location, &requirement) {
-        Ok(accepted) => {
-            let mut response = Response::builder().status(accepted.status);
-            for (k, v) in accepted.headers.iter() {
-                response = response.header(k, v);
-            }
-            response
-                .body(axum::body::Body::from(accepted.body.to_string()))
-                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-        }
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-fn poll_snapshot_to_response(snapshot: &PendingSnapshot) -> Response {
-    match map_snapshot_to_poll_parts(snapshot) {
-        PollResponse::OkAuthToken(body) => (StatusCode::OK, Json(body)).into_response(),
-        PollResponse::OkOpaque(token) => {
-            let mut headers = HeaderMap::new();
-            headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
-            (StatusCode::OK, headers).into_response()
-        }
-        PollResponse::Error { status, error } => (status, Json(error)).into_response(),
-        PollResponse::Gone => StatusCode::GONE.into_response(),
-        PollResponse::Accepted { headers, body } => {
-            let mut response = Response::builder().status(StatusCode::ACCEPTED);
-            for (k, v) in headers.iter() {
-                response = response.header(k, v);
-            }
-            if let Some(body) = body {
-                response
-                    .body(axum::body::Body::from(body.to_string()))
-                    .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-            } else {
-                response
-                    .body(axum::body::Body::empty())
-                    .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-            }
-        }
-    }
-}
-
-fn parse_pending_input(body: Option<&serde_json::Value>) -> PendingInput {
-    if let Some(value) = body {
-        if let Ok(clarification) = serde_json::from_value::<ClarificationResponse>(value.clone()) {
-            return PendingInput::ClarificationResponse(clarification.clarification_response);
-        }
-        if let Ok(claims) = serde_json::from_value::<ClaimsSubmission>(value.clone()) {
-            return PendingInput::ClaimsSubmission(claims);
-        }
-    }
-    PendingInput::InteractionCompleted
 }
 
 pub use pending_post_handler as pending_clarification_post_handler;

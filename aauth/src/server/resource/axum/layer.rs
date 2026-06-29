@@ -5,52 +5,43 @@ use std::task::{Context, Poll};
 
 use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
+use axum::response::IntoResponse;
 use tower::{Layer, Service};
 
 use crate::headers::build_aauth_requirement;
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
-use crate::server::deferred::{
-    DeferRequirement, PendingSnapshot, PendingStore, ResourcePendingContext, ResourcePendingRecord,
-    build_accepted, generate_pending_id, pending_location,
-};
-use crate::server::policy::{
-    ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy,
-};
+use crate::server::policy::ResourceAccessContext;
 use crate::server::resource::audience::resolve_resource_token_audience;
 use crate::server::resource::keys::ResourceTokenSigner;
-use crate::server::resource::opaque::OpaqueAccessStore;
 use crate::server::resource::policy::ResourceAccessMode;
+use crate::server::resource::service::ResourceAccessService;
 use crate::server::resource::{
-    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_auth_token_binding,
-    verify_token,
+    ResourceConsentFlowOutcome, ResourceTokenOptions, VerifyTokenOptions, create_resource_token,
+    verify_auth_token_binding, verify_token,
 };
 use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
 use crate::types::AAuthChallenge;
 
 #[derive(Clone)]
-pub struct ResourceAuthLayer<P, S, O>
+pub struct ResourceAuthLayer<RAS>
 where
-    P: ResourceConsentPolicy,
-    S: PendingStore<ResourcePendingRecord>,
-    O: OpaqueAccessStore + Clone,
+    RAS: ResourceAccessService,
 {
     pub fetcher: Arc<dyn MetadataFetcher>,
     pub resource_url: String,
-    pub mode: ResourceAccessMode<P, S, O>,
+    pub mode: ResourceAccessMode<RAS>,
     pub resource_token_signer: Arc<dyn ResourceTokenSigner>,
 }
 
-impl<P, S, O> ResourceAuthLayer<P, S, O>
+impl<RAS> ResourceAuthLayer<RAS>
 where
-    P: ResourceConsentPolicy,
-    S: PendingStore<ResourcePendingRecord>,
-    O: OpaqueAccessStore + Clone,
+    RAS: ResourceAccessService,
 {
     pub fn new(
         fetcher: Arc<dyn MetadataFetcher>,
         resource_url: impl Into<String>,
-        mode: ResourceAccessMode<P, S, O>,
+        mode: ResourceAccessMode<RAS>,
         resource_token_signer: Arc<dyn ResourceTokenSigner>,
     ) -> Self {
         Self {
@@ -62,13 +53,11 @@ where
     }
 }
 
-impl<S, P, St, O> Layer<S> for ResourceAuthLayer<P, St, O>
+impl<S, RAS> Layer<S> for ResourceAuthLayer<RAS>
 where
-    P: ResourceConsentPolicy,
-    St: PendingStore<ResourcePendingRecord>,
-    O: OpaqueAccessStore + Clone,
+    RAS: ResourceAccessService,
 {
-    type Service = ResourceAuthService<S, P, St, O>;
+    type Service = ResourceAuthService<S, RAS>;
 
     fn layer(&self, inner: S) -> Self::Service {
         ResourceAuthService {
@@ -82,28 +71,24 @@ where
 }
 
 #[derive(Clone)]
-pub struct ResourceAuthService<S, P, St, O>
+pub struct ResourceAuthService<S, RAS>
 where
-    P: ResourceConsentPolicy,
-    St: PendingStore<ResourcePendingRecord>,
-    O: OpaqueAccessStore + Clone,
+    RAS: ResourceAccessService,
 {
     inner: S,
     fetcher: Arc<dyn MetadataFetcher>,
     resource_url: String,
-    mode: ResourceAccessMode<P, St, O>,
+    mode: ResourceAccessMode<RAS>,
     resource_token_signer: Arc<dyn ResourceTokenSigner>,
 }
 
-impl<S, B, P, St, O> Service<Request<B>> for ResourceAuthService<S, P, St, O>
+impl<S, B, RAS> Service<Request<B>> for ResourceAuthService<S, RAS>
 where
     S: Service<Request<B>, Response = Response<Body>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: std::fmt::Display + Send + 'static,
     B: Send + 'static,
-    P: ResourceConsentPolicy + Clone + Send + Sync + 'static,
-    St: PendingStore<ResourcePendingRecord> + Clone + Send + Sync + 'static,
-    O: OpaqueAccessStore + Clone + Send + Sync + 'static,
+    RAS: ResourceAccessService + Clone + Send + Sync + 'static,
 {
     type Response = Response<Body>;
     type Error = S::Error;
@@ -146,10 +131,10 @@ where
                 Err(e) => return Ok(unauthorized(e.to_string())),
             };
 
-            if let ResourceAccessMode::ResourceManaged { opaque, .. } = &mode {
+            if let ResourceAccessMode::ResourceManaged { service } = &mode {
                 if let Some(opaque_token) = extract_aauth_access(req.headers()) {
                     let agent_id = agent_sub_from_jwt(&verified_sig.jwt);
-                    if opaque.validate(&opaque_token, &agent_id) {
+                    if service.validate_opaque(&opaque_token, &agent_id) {
                         if let Ok(VerifiedToken::Agent(agent)) =
                             VerifiedToken::decode_unverified(&verified_sig.jwt)
                         {
@@ -235,70 +220,22 @@ where
                     req.extensions_mut().insert(verified);
                     inner.call(req).await
                 }
-                (
-                    ResourceAccessMode::ResourceManaged {
-                        policy,
-                        pending,
-                        opaque,
-                        interaction_url,
-                        pending_base_url,
-                        pending_path,
-                        pending_ttl_secs,
-                    },
-                    VerifiedToken::Agent(agent),
-                ) => {
+                (ResourceAccessMode::ResourceManaged { service }, VerifiedToken::Agent(agent)) => {
                     let ctx = ResourceAccessContext {
                         resource_url: resource_url.clone(),
                         agent_claims: agent.clone(),
                         scope: None,
                     };
 
-                    match policy.evaluate(&ctx).await {
-                        Ok(ResourceConsentDecision::GrantOpaque) => {
-                            let token = opaque.issue(agent.identifier());
-                            let mut response = Response::builder().status(StatusCode::OK);
-                            response = response.header("AAuth-Access", token.as_str());
+                    match service.consent_for_agent(ctx).await {
+                        Ok(ResourceConsentFlowOutcome::Deferred(accepted)) => {
+                            let mut response = Response::builder().status(accepted.status);
+                            for (k, v) in accepted.headers.iter() {
+                                response = response.header(k, v);
+                            }
                             Ok(response.body(Body::empty()).expect("valid response"))
                         }
-                        Ok(ResourceConsentDecision::Deny(err)) => Ok(Response::builder()
-                            .status(StatusCode::FORBIDDEN)
-                            .body(Body::from(err.error))
-                            .expect("valid response")),
-                        Ok(ResourceConsentDecision::Defer(mut requirement)) => {
-                            if let DeferRequirement::Interaction { url, code } = &mut requirement {
-                                if url.is_empty() {
-                                    *url = interaction_url.clone();
-                                }
-                                if code.is_empty() {
-                                    *code = crate::interaction_code::generate_code();
-                                }
-                            }
-                            let id = generate_pending_id();
-                            let location = pending_location(pending_base_url, pending_path, &id);
-                            let record = ResourcePendingRecord::new(
-                                id,
-                                ResourcePendingContext {
-                                    resource_url: resource_url.clone(),
-                                    agent_claims: agent.clone(),
-                                    scope: None,
-                                },
-                                PendingSnapshot::waiting(requirement.clone()),
-                                *pending_ttl_secs,
-                            );
-                            if pending.create(record).await.is_err() {
-                                return Ok(unauthorized("pending store error".into()));
-                            }
-                            match build_accepted(&location, &requirement) {
-                                Ok(accepted) => {
-                                    let mut response = Response::builder().status(accepted.status);
-                                    for (k, v) in accepted.headers.iter() {
-                                        response = response.header(k, v);
-                                    }
-                                    Ok(response.body(Body::empty()).expect("valid response"))
-                                }
-                                Err(e) => Ok(unauthorized(e.to_string())),
-                            }
-                        }
+                        Ok(outcome) => Ok(outcome.into_response()),
                         Err(e) => Ok(unauthorized(e.to_string())),
                     }
                 }

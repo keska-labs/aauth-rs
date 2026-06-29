@@ -185,7 +185,9 @@ impl std::fmt::Display for TokenExchangeError {
             write!(
                 f,
                 "{}",
-                err.error_description.as_deref().unwrap_or(&err.error)
+                err.error_description
+                    .as_deref()
+                    .unwrap_or(err.error.as_str())
             )
         } else {
             write!(f, "Token exchange failed with status {}", self.status)

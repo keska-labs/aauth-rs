@@ -1,6 +1,6 @@
 use crate::interaction_code::generate_code;
 use crate::server::deferred::{DeferRequirement, PendingInput};
-use crate::types::AAuthProtocolError;
+use crate::types::{AAuthErrorCode, AAuthProtocolError};
 
 use super::access::{AccessTokenContext, AccessTokenPolicy};
 use super::decision::{
@@ -43,11 +43,12 @@ impl PersonTokenPolicy for AlwaysGrantPersonPolicy {
             PendingInput::InteractionCompleted | PendingInput::ClarificationResponse(_) => {
                 self.evaluate(ctx).await
             }
-            PendingInput::Cancelled => Ok(PersonTokenDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(PersonTokenDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
                 "claims submission not expected".into(),
             )),
@@ -106,11 +107,12 @@ impl AccessTokenPolicy for AlwaysGrantAccessPolicy {
             PendingInput::InteractionCompleted | PendingInput::ClarificationResponse(_) => {
                 self.evaluate(ctx).await
             }
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             PendingInput::ClaimsSubmission(_) => self.evaluate(ctx).await,
         }
     }
@@ -135,11 +137,12 @@ impl ResourceConsentPolicy for AlwaysGrantResourcePolicy {
     ) -> Result<ResourceConsentDecision, PolicyError> {
         match input {
             PendingInput::InteractionCompleted => Ok(ResourceConsentDecision::GrantOpaque),
-            PendingInput::Cancelled => Ok(ResourceConsentDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(ResourceConsentDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             _ => Ok(ResourceConsentDecision::GrantOpaque),
         }
     }
@@ -171,11 +174,12 @@ impl ResourceConsentPolicy for DeferInteractionResourcePolicy {
     ) -> Result<ResourceConsentDecision, PolicyError> {
         match input {
             PendingInput::InteractionCompleted => Ok(ResourceConsentDecision::GrantOpaque),
-            PendingInput::Cancelled => Ok(ResourceConsentDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(ResourceConsentDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             _ => Ok(ResourceConsentDecision::GrantOpaque),
         }
     }
@@ -217,11 +221,12 @@ impl PersonTokenPolicy for ClarificationThenGrantPersonPolicy {
                     Ok(PersonTokenDecision::Federate)
                 }
             }
-            PendingInput::Cancelled => Ok(PersonTokenDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(PersonTokenDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
                 "claims submission not expected".into(),
             )),
@@ -291,11 +296,12 @@ impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
                     scope: ctx.resource_claims.scope.clone(),
                 }))
             }
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
                 "claims submission not expected".into(),
             )),
@@ -362,11 +368,12 @@ impl AccessTokenPolicy for DeferClaimsAccessPolicy {
                     scope: ctx.resource_claims.scope.clone(),
                 }))
             }
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             PendingInput::ClarificationResponse(_) => {
                 Err(PolicyError::Message("clarification not expected".into()))
             }
@@ -398,11 +405,12 @@ impl AccessTokenPolicy for DeferApprovalAccessPolicy {
                 sub: self.sub.clone(),
                 scope: ctx.resource_claims.scope.clone(),
             })),
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(AAuthProtocolError {
-                error: "access_denied".into(),
-                error_description: Some("Request cancelled".into()),
-                error_uri: None,
-            })),
+            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+                AAuthProtocolError::with_description(
+                    AAuthErrorCode::AccessDenied,
+                    "Request cancelled",
+                ),
+            )),
             _ => Ok(TokenPolicyDecision::Grant(AuthGrant {
                 sub: self.sub.clone(),
                 scope: ctx.resource_claims.scope.clone(),

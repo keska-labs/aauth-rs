@@ -51,10 +51,10 @@ aauth-rs/
     │   ├── server/
     │   │   ├── deferred/   # PendingStore, deferred response builders, federation poll helpers
     │   │   ├── policy/     # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
-    │   │   ├── resource/   # verify, resource tokens, ResourceAccessMode, ResourceAuthLayer
-    │   │   ├── person/     # federation, auth JWT minting, PS route helpers
-    │   │   ├── access/     # AS auth JWT minting and route helpers
-    │   │   └── axum/       # facade re-exporting resource + person + access axum helpers
+    │   │   ├── access/     # AuthTokenFlowOutcome, AccessTokenService, AS axum routes
+    │   │   ├── person/     # PersonTokenFlowOutcome, PersonTokenService, federation, PS axum routes
+    │   │   ├── resource/   # ResourceConsentFlowOutcome, ResourceAccessService, ResourceAuthLayer
+    │   │   └── axum/       # respond.rs (IntoResponse, InternalServiceError); facade re-exports
     │   ├── signature.rs    # shared HTTP Signature build + verify
     │   └── …               # headers, JWT helpers, metadata cache, types
     └── tests/              # protocol integration tests (TypeScript e2e parity)
@@ -94,21 +94,31 @@ Deferred responses (`202 Accepted` + `Location` + optional `AAuth-Requirement`) 
 | Identity-based | `IdentityBased` | 2 | Grant on verified agent or auth token alone |
 | PS-asserted | `PsAsserted { access_server_url: None, ... }` | 3 | Resource token `aud` = agent `ps` claim; PS mints auth token |
 | Federated | `PsAsserted { access_server_url: Some(...), ... }` | 4 | Resource token `aud` = AS; PS federates token exchange to AS |
-| Resource-managed | `ResourceManaged { policy, pending, opaque, ... }` | 2 | Resource owns consent via `ResourceConsentPolicy`; issues opaque `AAuth-Access` tokens |
+| Resource-managed | `ResourceManaged { service, ... }` | 2 | Resource owns consent via `ResourceAccessService` (default: `PolicyResourceAccessService`); issues opaque `AAuth-Access` tokens |
 
 When the Access Server returns `202` during federation, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready (`server/person/federation.rs`, `server/deferred/poll.rs`). Payment (`402`) from the AS remains a stub.
 
-### Server policy and deferred store
+### Server policy, services, and deferred store
 
-Authorization decisions are pluggable via generic policy traits (monomorphized on axum state, not `Arc<dyn>`):
+Authorization decisions are pluggable via generic policy traits. Flow orchestration (policy evaluation, pending store, token minting) lives in **role service traits**; axum handlers verify signatures/JWTs then call the service and map outcomes via `IntoResponse`:
 
-| Trait | Role | Decisions |
-|-------|------|-----------|
+| Trait | Role | Methods |
+|-------|------|---------|
+| `PersonTokenService` | PS token exchange / pending | `exchange_token`, `poll_pending`, `resume_pending` |
+| `AccessTokenService` | AS token exchange / pending | `exchange_token`, `poll_pending`, `resume_pending` |
+| `ResourceAccessService` | RS resource-managed consent | `consent_for_agent`, `poll_pending`, `validate_opaque` |
+
+Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`, `PolicyResourceAccessService`) wrap the policy traits below plus `PendingStore` and JWT minters. Service `Err` maps to spec `500` + `{ "error": "server_error" }` via `InternalServiceError`; protocol outcomes (`AuthTokenFlowOutcome`, etc.) map to 200/202/403/410/502 in `server/axum/respond.rs`.
+
+| Policy trait | Role | Decisions |
+|--------------|------|-----------|
 | `PersonTokenPolicy` | PS token exchange | grant, deny, defer, federate |
 | `AccessTokenPolicy` | AS token exchange | grant, deny, defer |
 | `ResourceConsentPolicy` | Resource-managed access | grant opaque, deny, defer |
 
 Policies are **stateless**. In-flight deferred requests are persisted in a `PendingStore` (`InMemoryPendingStore` for tests). Shared deferred helpers: `build_accepted`, `map_snapshot_to_poll_parts`, pending poll/post route handlers in `server/deferred/`.
+
+Axum state types hold a single service field: `PersonServerState<S>`, `AccessServerState<S>`, `ResourceServerState<S>`. Use `PersonServerState::from_policy(...)` for the default policy-backed setup.
 
 Reference test policies: `AlwaysGrantPersonPolicy`, `AlwaysGrantAccessPolicy`, `DeferInteractionPersonPolicy`, `ClarificationThenGrantPersonPolicy`, `DeferInteractionResourcePolicy`, `ClarificationThenGrantAccessPolicy`.
 
@@ -121,7 +131,7 @@ Public types follow a **role prefix** that matches AAuth protocol parties:
 | Prefix | Role | Examples |
 |--------|------|----------|
 | `Agent*` | Agent runtime (signed requests, token exchange, deferred polling) | `AgentOptions`, `AgentMiddleware`, `AgentAuth`, `AgentDeferredOptions` |
-| `Person*` / `Access*` | Person Server and Access Server | `PersonServerState`, `AccessTokenPolicy` |
+| `Person*` / `Access*` | Person Server and Access Server | `PersonServerState`, `PersonTokenService`, `AccessTokenPolicy` |
 | `Resource*` | Resource Server | `ResourceAuthLayer`, `ResourceAccessMode`, `ResourceConsentPolicy` |
 | `AAuth*` | Protocol-wide wire format, headers, and errors | `AAuthError`, `AAuthRequirementParams` |
 

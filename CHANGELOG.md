@@ -21,13 +21,21 @@ Changes since [0.0.1].
 - `PendingStatus` moved to `aauth::types` (wire `status` on pending response bodies).
 - `TokenExchangeRequest.capabilities` is `Option<Vec<Capability>>` instead of `Option<Vec<String>>`.
 - `ClarificationChallenge.status` and `ClaimsChallenge.status` use `PendingStatus` instead of `String` / `Option<String>`.
+- `PersonServerState<S>`, `AccessServerState<S>`, and `ResourceServerState<S>` hold a single role service (`PersonTokenService`, `AccessTokenService`, `ResourceAccessService`) instead of separate policy, pending store, and minter fields; use `PersonServerState::from_policy` / `AccessServerState::from_policy` or construct `Policy*TokenService` directly.
+- `ResourceAccessMode::ResourceManaged` holds a `ResourceAccessService` instead of inline `policy`, `pending`, and `opaque` fields.
+- Token and pending endpoint internal failures return `500` with JSON `{ "error": "server_error" }` per spec (via `InternalServiceError`), replacing bare empty `500` responses.
+- Flow outcome types live under each role module (`server/access/outcome`, `server/person/outcome`, `server/resource/outcome`) instead of `server/service`.
+- `AAuthProtocolError.error` is now `AAuthErrorCode` (spec-defined variants + `Custom(String)`); unknown codes deserialize into `Custom`.
 
 ### Added
 
 - Spec-linked doc comments on protocol payload types with per-field documentation from the AAuth draft.
 - `ResourceInteractionClaim` and optional `interaction` claim on `ResourceClaims`.
 - Spec-aligned optional fields: `parent_agent` on `AgentClaims`, nested `act` on `ActClaim`, `upstream_token` / `subagent_token` / `platform` / `device` on `TokenExchangeRequest`, `timeout` / `options` on `ClarificationChallenge`. (`PersonTokenPolicy`, `AccessTokenPolicy`, `ResourceConsentPolicy`) and `PendingStore` / `InMemoryPendingStore` for deferred flows (`DeferRequirement`, `PendingInput`, `PendingOutcome`).
-- Generic Person/Access axum state (`PersonServerState<P, S, M>`, `AccessServerState<P, S, M>`) and `ResourceAccessMode<P, S, O>`.
+- Role service traits and default policy-backed implementations: `PersonTokenService` / `PolicyPersonTokenService`, `AccessTokenService` / `PolicyAccessTokenService`, `ResourceAccessService` / `PolicyResourceAccessService`.
+- Flow outcome types with axum `IntoResponse`: `AuthTokenFlowOutcome`, `AuthTokenPollOutcome`, `PersonTokenFlowOutcome`, `ResourceConsentFlowOutcome`, `ResourcePollOutcome`.
+- `AAuthErrorCode` enum for spec token/polling/signature/interaction error codes, with `Custom(String)` for extensions.
+- `InternalServiceError` and `AAuthProtocolError::server_error()` for spec-shaped infrastructure failures on token/pending endpoints.
 - Shared deferred helpers: `build_accepted`, `map_snapshot_to_poll_parts`, pending poll/post route handlers.
 - **Federation deferred loop**: when the Access Server returns `202` during PS→AS token exchange, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready (`FederationOutcome`, `FederationPendingState`, `parse_deferred_response`, `post_pending_input`, `poll_pending_http`).
 - Access Server pending routes and reference policies: `ClarificationThenGrantAccessPolicy`, `DeferInteractionAccessPolicy`, `DeferClaimsAccessPolicy`, `DeferApprovalAccessPolicy`.
