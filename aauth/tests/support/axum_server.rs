@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use aauth::TestKeys;
@@ -46,12 +45,11 @@ impl Default for ServerConfig {
     }
 }
 
+#[allow(dead_code)]
 pub struct SpawnedServer {
-    pub addr: SocketAddr,
     pub keys: TestKeys,
     pub agent_url: String,
     pub person_server_url: String,
-    pub access_server_url: String,
     pub resource_url: String,
     pub interaction_manager: Arc<InteractionManager>,
     pub resource_interaction_manager: Arc<InteractionManager>,
@@ -252,11 +250,9 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     });
 
     SpawnedServer {
-        addr,
         keys,
         agent_url,
         person_server_url,
-        access_server_url,
         resource_url,
         interaction_manager: person_interaction_manager,
         resource_interaction_manager,
