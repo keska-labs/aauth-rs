@@ -22,9 +22,10 @@ use crate::server::resource::keys::ResourceTokenSigner;
 use crate::server::resource::opaque::OpaqueAccessStore;
 use crate::server::resource::policy::ResourceAccessMode;
 use crate::server::resource::{
-    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_token,
+    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_auth_token_binding,
+    verify_token,
 };
-use crate::signature::verify_request_signature;
+use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
 use crate::types::RequirementLevel;
 
 #[derive(Clone)]
@@ -122,16 +123,33 @@ where
         Box::pin(async move {
             let (method, authority, path) = request_signature_parts(&req);
 
-            let verified_sig =
-                match verify_request_signature(&method, &authority, &path, req.headers()) {
-                    Ok(v) => v,
-                    Err(e) => return Ok(unauthorized(e.to_string())),
-                };
+            let opaque_retry = matches!(&mode, ResourceAccessMode::ResourceManaged { .. })
+                && extract_aauth_access(req.headers()).is_some();
+
+            let sig_options = if opaque_retry {
+                SignatureVerifyOptions {
+                    require_authorization: true,
+                    ..SignatureVerifyOptions::default()
+                }
+            } else {
+                SignatureVerifyOptions::default()
+            };
+
+            let verified_sig = match verify_request_signature_with_options(
+                &method,
+                &authority,
+                &path,
+                req.headers(),
+                &sig_options,
+            ) {
+                Ok(v) => v,
+                Err(e) => return Ok(unauthorized(e.to_string())),
+            };
 
             if let ResourceAccessMode::ResourceManaged { opaque, .. } = &mode {
                 if let Some(opaque_token) = extract_aauth_access(req.headers()) {
-                    let agent_iss = agent_iss_from_jwt(&verified_sig.jwt);
-                    if opaque.validate(&opaque_token, &agent_iss) {
+                    let agent_id = agent_sub_from_jwt(&verified_sig.jwt);
+                    if opaque.validate(&opaque_token, &agent_id) {
                         if let Ok(VerifiedToken::Agent(agent)) =
                             VerifiedToken::decode_unverified(&verified_sig.jwt)
                         {
@@ -153,6 +171,12 @@ where
                 Ok(v) => v,
                 Err(e) => return Ok(unauthorized(e.to_string())),
             };
+
+            if let VerifiedToken::Auth(ref auth) = verified {
+                if let Err(e) = verify_auth_token_binding(auth, &resource_url) {
+                    return Ok(unauthorized(e.to_string()));
+                }
+            }
 
             match (&mode, &verified) {
                 (ResourceAccessMode::IdentityBased, _) => {
@@ -180,7 +204,7 @@ where
                         ResourceTokenOptions {
                             resource: resource_url,
                             audience,
-                            agent: agent.iss.clone(),
+                            agent: agent.identifier().to_string(),
                             agent_jkt: verified_sig.thumbprint,
                             scope: None,
                             mission: None,
@@ -235,7 +259,7 @@ where
 
                     match policy.evaluate(&ctx).await {
                         Ok(ResourceConsentDecision::GrantOpaque) => {
-                            let token = opaque.issue(&agent.iss);
+                            let token = opaque.issue(agent.identifier());
                             let mut response = Response::builder().status(StatusCode::OK);
                             response = response.header("AAuth-Access", token.as_str());
                             Ok(response.body(Body::empty()).expect("valid response"))
@@ -292,9 +316,10 @@ where
     }
 }
 
-fn agent_iss_from_jwt(jwt: &str) -> String {
+fn agent_sub_from_jwt(jwt: &str) -> String {
     VerifiedToken::decode_unverified(jwt)
-        .map(|t| t.iss().to_string())
+        .ok()
+        .and_then(|t| t.agent_identifier().map(str::to_string))
         .unwrap_or_default()
 }
 

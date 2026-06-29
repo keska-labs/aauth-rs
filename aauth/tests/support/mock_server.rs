@@ -48,4 +48,8 @@ impl MockServer {
     pub fn pending_store(&self) -> InMemoryPendingStore {
         self.state.pending.clone()
     }
+
+    pub fn metadata_fetcher(&self) -> Arc<dyn aauth::MetadataFetcher> {
+        self.state.metadata_fetcher()
+    }
 }

@@ -15,5 +15,6 @@ pub use opaque::{InMemoryOpaqueAccessStore, OpaqueAccessStore};
 pub use policy::{ResourceAccessMode, ResourceAccessPolicy};
 pub use token::{ResourceTokenOptions, create_resource_token};
 pub use verify::{
-    VerifyResourceTokenOptions, VerifyTokenOptions, verify_resource_token, verify_token,
+    VerifyResourceTokenOptions, VerifyTokenOptions, verify_auth_token_binding,
+    verify_client_auth_token, verify_resource_challenge, verify_resource_token, verify_token,
 };

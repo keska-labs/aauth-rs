@@ -74,6 +74,7 @@ pub struct SpawnedServer {
     pub agent_url: String,
     pub person_server_url: String,
     pub resource_url: String,
+    pub metadata_fetcher: Arc<dyn MetadataFetcher>,
     pub person_pending: InMemoryPendingStore,
     pub access_pending: InMemoryPendingStore,
     pub resource_pending: InMemoryPendingStore,
@@ -97,9 +98,9 @@ impl SpawnedServer {
         }
     }
 
-    pub async fn resolve_resource_pending(&self, agent_iss: &str) {
+    pub async fn resolve_resource_pending(&self, agent_id: &str) {
         if let Some(id) = self.resource_pending.last_created.lock().unwrap().clone() {
-            let opaque = self.opaque_store.issue(agent_iss);
+            let opaque = self.opaque_store.issue(agent_id);
             let _ = self
                 .resource_pending
                 .complete(&id, PendingOutcome::OpaqueAccess(opaque))
@@ -340,6 +341,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         agent_url,
         person_server_url,
         resource_url,
+        metadata_fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
         person_pending,
         access_pending,
         resource_pending,
@@ -360,7 +362,7 @@ async fn api_data_handler(token: VerifiedAAuthToken) -> Json<serde_json::Value> 
         VerifiedToken::Agent(agent) => Json(
             serde_json::to_value(AgentOkResponse {
                 status: "ok".into(),
-                agent: agent.iss,
+                agent: agent.identifier().to_string(),
             })
             .expect("serialize"),
         ),

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::jwt::{AgentClaims, ResourceClaims};
 use crate::types::{AAuthProtocolError, TokenExchangeRequest, TokenResponseBody};
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#requirement-values
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeferRequirement {
     Interaction {
@@ -22,6 +23,7 @@ pub enum DeferRequirement {
     },
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PendingStatus {
@@ -29,6 +31,7 @@ pub enum PendingStatus {
     Interacting,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#deferred-responses
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PendingOutcome {
     AuthToken(TokenResponseBody),
@@ -36,6 +39,7 @@ pub enum PendingOutcome {
     Error(AAuthProtocolError),
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingSnapshot {
     pub status: PendingStatus,
@@ -63,6 +67,7 @@ impl PendingSnapshot {
     }
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#claims-required-requirement-claims
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClaimsSubmission {
     pub sub: String,
@@ -74,6 +79,7 @@ pub struct ClaimsSubmission {
     pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#agent-response-to-clarification
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PendingInput {
     ClarificationResponse(String),

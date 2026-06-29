@@ -32,6 +32,7 @@ pub fn parse_mission_header(header_value: &str) -> Result<Mission> {
     Ok(Mission { approver, s256 })
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure
 #[derive(Debug, Clone, Default)]
 pub struct AAuthRequirementParams<'a> {
     pub resource_token: Option<&'a str>,

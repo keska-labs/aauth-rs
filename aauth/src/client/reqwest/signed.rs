@@ -8,7 +8,7 @@ use reqwest::Request;
 use crate::error::{AAuthError, Result};
 use crate::headers::{build_capabilities_header, build_mission_header};
 use crate::jwt::OkpSigningJwk;
-use crate::signature::build_signature_base;
+use crate::signature::build_signature_base_with_extras;
 use crate::types::{Capability, KeyMaterial, Mission, SignatureKey};
 
 #[derive(Debug, Clone, Default)]
@@ -65,16 +65,47 @@ pub fn sign_request(request: &mut Request, material: &KeyMaterial) -> Result<()>
         .unwrap()
         .as_secs();
 
-    let signature_input =
-        format!("sig=(\"@method\" \"@authority\" \"@path\" \"signature-key\");created={created}");
+    let authorization = request
+        .headers()
+        .get(AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .filter(|v| v.starts_with("AAuth "))
+        .map(str::to_string);
+
+    let mut covered = vec![
+        "@method".to_string(),
+        "@authority".to_string(),
+        "@path".to_string(),
+        "signature-key".to_string(),
+    ];
+    let mut extras = Vec::new();
+    if let Some(ref auth) = authorization {
+        covered.push("authorization".to_string());
+        extras.push(("authorization".to_string(), auth.clone()));
+    }
+
+    let signature_input = format!(
+        "sig=({});created={created}",
+        covered
+            .iter()
+            .map(|c| format!("\"{c}\""))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
     let url = request.url();
-    let signature_base = build_signature_base(
+    let extra_refs: Vec<(&str, &str)> = extras
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    let signature_base = build_signature_base_with_extras(
         request.method().as_str(),
         url.authority(),
         url.path(),
         &signature_key,
         created,
-    );
+        &extra_refs,
+    )
+    .0;
     let signature_bytes = signing_key.sign(signature_base.as_bytes());
     let signature = URL_SAFE_NO_PAD.encode(signature_bytes.to_bytes());
 

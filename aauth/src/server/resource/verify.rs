@@ -3,7 +3,7 @@ use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, decode_header};
 
 use crate::error::{AAuthError, Result, TokenError};
-use crate::jwt::{ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint};
+use crate::jwt::{AuthClaims, ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint};
 use crate::metadata::MetadataFetcher;
 use crate::types::JwtTyp;
 
@@ -128,6 +128,87 @@ pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Resul
     })
 }
 
+fn normalize_server_url(url: &str) -> String {
+    url.trim_end_matches('/').to_lowercase()
+}
+
+/// Verify auth token `aud` binding for resource access.
+pub fn verify_auth_token_binding(auth: &AuthClaims, resource_url: &str) -> Result<()> {
+    if normalize_server_url(&auth.aud) != normalize_server_url(resource_url) {
+        return Err(TokenError::new(
+            JwtTyp::Auth.verify_error_code(),
+            "auth token aud mismatch",
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// Verify an auth token returned from token exchange before caching.
+pub async fn verify_client_auth_token(
+    jwt: &str,
+    resource_url: &str,
+    agent_sub: &str,
+    agent_jkt: &str,
+    fetcher: Arc<dyn MetadataFetcher>,
+) -> Result<AuthClaims> {
+    let verified = verify_token(VerifyTokenOptions {
+        jwt: jwt.to_string(),
+        http_signature_thumbprint: agent_jkt.to_string(),
+        fetcher,
+    })
+    .await?;
+
+    let auth = match verified {
+        VerifiedToken::Auth(c) => c,
+        _ => {
+            return Err(TokenError::new(
+                JwtTyp::Auth.verify_error_code(),
+                "expected auth token",
+            )
+            .into());
+        }
+    };
+
+    verify_auth_token_binding(&auth, resource_url)?;
+    if auth.agent != agent_sub {
+        return Err(TokenError::new(
+            JwtTyp::Auth.verify_error_code(),
+            "auth token agent mismatch",
+        )
+        .into());
+    }
+
+    Ok(auth)
+}
+
+/// Verify a resource token from a `401` challenge before token exchange.
+pub async fn verify_resource_challenge(
+    jwt: &str,
+    resource_url: &str,
+    agent_sub: &str,
+    agent_jkt: &str,
+    fetcher: Arc<dyn MetadataFetcher>,
+) -> Result<ResourceClaims> {
+    verify_resource_token(VerifyResourceTokenOptions {
+        jwt: jwt.to_string(),
+        expected_agent: Some(agent_sub.to_string()),
+        expected_agent_jkt: Some(agent_jkt.to_string()),
+        fetcher,
+    })
+    .await
+    .and_then(|claims| {
+        if normalize_server_url(&claims.iss) != normalize_server_url(resource_url) {
+            return Err(TokenError::new(
+                JwtTyp::Resource.verify_error_code(),
+                "resource token iss mismatch",
+            )
+            .into());
+        }
+        Ok(claims)
+    })
+}
+
 async fn fetch_decoding_key(
     iss: &str,
     dwk: &str,
@@ -159,5 +240,5 @@ async fn fetch_decoding_key(
         .find(&kid)
         .ok_or_else(|| AAuthError::Message(format!("unknown kid: {kid}")))?;
 
-    DecodingKey::from_jwk(jwk).map_err(|e| AAuthError::Message(e.to_string()).into())
+    DecodingKey::from_jwk(jwk).map_err(|e| AAuthError::Message(e.to_string()))
 }

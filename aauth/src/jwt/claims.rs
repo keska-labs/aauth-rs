@@ -5,7 +5,7 @@ use crate::types::{JwtTyp, Mission};
 
 use super::decode::{decode_unverified, decode_verified, verified_validation};
 
-/// Ed25519 public JWK (`cnf.jwk`, JWKS entries).
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#jwks-discovery-and-caching-jwks-discovery
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OkpJwk {
     pub kty: String,
@@ -15,7 +15,7 @@ pub struct OkpJwk {
     pub kid: Option<String>,
 }
 
-/// Ed25519 private JWK for HTTP request signing.
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#keying-material
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OkpSigningJwk {
     pub kty: String,
@@ -37,17 +37,19 @@ impl OkpSigningJwk {
     }
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#agent-token-structure
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CnfClaim {
     pub jwk: OkpJwk,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#delegation-chain
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActClaim {
-    pub sub: String,
+    pub agent: String,
 }
 
-/// Agent token payload (`aa-agent+jwt`).
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#agent-token-agent-tokens
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentClaims {
     pub iss: String,
@@ -61,7 +63,14 @@ pub struct AgentClaims {
     pub ps: Option<String>,
 }
 
-/// Auth token payload (`aa-auth+jwt`).
+impl AgentClaims {
+    /// Agent identifier (`aauth:local@domain`) — use for resource/auth token `agent` claims.
+    pub fn identifier(&self) -> &str {
+        &self.sub
+    }
+}
+
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#auth-token-auth-tokens
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthClaims {
     pub iss: String,
@@ -69,7 +78,8 @@ pub struct AuthClaims {
     pub aud: String,
     pub jti: String,
     pub agent: String,
-    pub act: ActClaim,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub act: Option<ActClaim>,
     pub cnf: CnfClaim,
     pub iat: i64,
     pub exp: i64,
@@ -95,7 +105,7 @@ impl AuthClaims {
     }
 }
 
-/// Resource token payload (`aa-resource+jwt`).
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#resource-token-structure
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourceClaims {
     pub iss: String,
@@ -197,6 +207,14 @@ impl VerifiedToken {
         match self {
             Self::Agent(_) => "agent",
             Self::Auth(_) => "auth",
+        }
+    }
+
+    /// Agent identifier from an agent JWT, when the verified token is an agent token.
+    pub fn agent_identifier(&self) -> Option<&str> {
+        match self {
+            Self::Agent(c) => Some(c.identifier()),
+            Self::Auth(_) => None,
         }
     }
 }

@@ -1,5 +1,7 @@
 //! Reqwest client setup shared by integration tests and runnable examples.
 
+use std::sync::Arc;
+
 use aauth::client::reqwest::{
     AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
@@ -21,7 +23,9 @@ pub fn build_client(
     let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID, ps);
     let provider = provider.unwrap_or_else(|| create_key_provider(&spawned.keys, agent_jwt));
 
-    let mut builder = AgentOptions::builder(provider).max_poll_duration_secs(TEST_POLL_MAX_SECS);
+    let mut builder = AgentOptions::builder(provider)
+        .max_poll_duration_secs(TEST_POLL_MAX_SECS)
+        .metadata_fetcher(Arc::clone(&spawned.metadata_fetcher));
     if let Some(url) = person_server_url {
         builder = builder.person_server_url(url);
     }

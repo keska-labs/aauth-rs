@@ -10,7 +10,7 @@ use aauth::{OpaqueAccessStore, PendingStore};
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
-use support::client::build_client;
+use support::client::{build_client, AGENT_ID};
 
 #[rstest]
 #[timeout(Duration::from_secs(1))]
@@ -33,7 +33,7 @@ async fn identity_based_over_http() {
     assert!(response.status().is_success());
     let body: AgentOkResponse = response.json().await.expect("json");
     assert_eq!(body.status, "ok");
-    assert_eq!(body.agent, spawned.agent_url);
+    assert_eq!(body.agent, AGENT_ID);
 }
 
 #[rstest]
@@ -79,11 +79,9 @@ async fn resource_managed_over_http() {
 
     let resource_pending_cb = spawned.resource_pending.clone();
     let opaque_store_cb = spawned.opaque_store.clone();
-    let agent_url = spawned.agent_url.clone();
-
     let on_interaction = Arc::new(move |_url: String, _code: String| {
         let pending = resource_pending_cb.clone();
-        let opaque = opaque_store_cb.issue(&agent_url);
+        let opaque = opaque_store_cb.issue(AGENT_ID);
         let pending_id = resource_pending_cb.last_created.lock().unwrap().clone();
         tokio::spawn(async move {
             if let Some(id) = pending_id {
@@ -104,7 +102,7 @@ async fn resource_managed_over_http() {
     assert!(response.status().is_success());
     let body: AgentOkResponse = response.json().await.expect("json");
     assert_eq!(body.status, "ok");
-    assert_eq!(body.agent, spawned.agent_url);
+    assert_eq!(body.agent, AGENT_ID);
 }
 
 #[rstest]

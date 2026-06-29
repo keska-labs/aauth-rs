@@ -6,6 +6,8 @@ use http::{HeaderMap, StatusCode};
 
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
+#[cfg(feature = "server")]
+use crate::metadata::MetadataFetcher;
 use crate::types::{Capability, Mission, PersonServerMetadata, RequirementLevel};
 
 pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
@@ -77,6 +79,9 @@ pub struct AgentOptions {
     pub(crate) on_clarification: Option<ClarificationCallback>,
     /// Max seconds to poll a pending URL before failing (default 300).
     pub(crate) max_poll_duration_secs: Option<u64>,
+    /// When set (requires `server` feature), resource and auth tokens are verified before use.
+    #[cfg(feature = "server")]
+    pub(crate) metadata_fetcher: Option<Arc<dyn MetadataFetcher>>,
 }
 
 /// Builder for [`AgentOptions`]. Only `provider` is required.
@@ -99,6 +104,8 @@ pub struct AgentOptionsBuilder {
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<ClarificationCallback>,
     max_poll_duration_secs: Option<u64>,
+    #[cfg(feature = "server")]
+    metadata_fetcher: Option<Arc<dyn MetadataFetcher>>,
 }
 
 impl AgentOptions {
@@ -127,6 +134,8 @@ impl AgentOptionsBuilder {
             on_interaction: None,
             on_clarification: None,
             max_poll_duration_secs: None,
+            #[cfg(feature = "server")]
+            metadata_fetcher: None,
         }
     }
 
@@ -213,6 +222,12 @@ impl AgentOptionsBuilder {
         self
     }
 
+    #[cfg(feature = "server")]
+    pub fn metadata_fetcher(mut self, fetcher: Arc<dyn MetadataFetcher>) -> Self {
+        self.metadata_fetcher = Some(fetcher);
+        self
+    }
+
     pub fn build(self) -> AgentOptions {
         AgentOptions {
             provider: self.provider,
@@ -232,6 +247,8 @@ impl AgentOptionsBuilder {
             on_interaction: self.on_interaction,
             on_clarification: self.on_clarification,
             max_poll_duration_secs: self.max_poll_duration_secs,
+            #[cfg(feature = "server")]
+            metadata_fetcher: self.metadata_fetcher,
         }
     }
 }

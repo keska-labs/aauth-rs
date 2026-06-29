@@ -101,9 +101,7 @@ where
     };
 
     if verify_request_signature("POST", &authority, "/as/access/aauth/token", &headers).is_err() {
-        if request.agent_token.is_empty() {
-            return StatusCode::UNAUTHORIZED.into_response();
-        }
+        return StatusCode::UNAUTHORIZED.into_response();
     }
 
     let ctx = match build_access_context(&state.config, &request) {
@@ -316,7 +314,7 @@ fn mint_access_auth<M: AccessAuthJwtMinter>(
     let auth_jwt = minter.mint_access_auth_jwt(
         &config.access_server_url,
         &config.resource_url,
-        &ctx.agent_claims.iss,
+        ctx.agent_claims.identifier(),
         Some(&grant.sub),
         grant
             .scope

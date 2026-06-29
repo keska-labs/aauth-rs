@@ -59,6 +59,8 @@ impl PersonServerConfig {
                 fetcher: Arc::clone(&self.fetcher),
             },
             federation_poll_max_secs: self.federation_poll_max_secs,
+            keys: self.keys.clone(),
+            person_server_signing_jwk: self.keys.person_server.signing_jwk(),
         }
     }
 }
@@ -137,8 +139,14 @@ where
     };
 
     let resource_token = request.resource_token.clone();
-    let ctx = match verify_person_token_request(&orch, &verified_sig.jwt, &resource_token, request)
-        .await
+    let ctx = match verify_person_token_request(
+        &orch,
+        &verified_sig.jwt,
+        &verified_sig.thumbprint,
+        &resource_token,
+        request,
+    )
+    .await
     {
         Ok(c) => c,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
@@ -256,7 +264,7 @@ where
 {
     match decision {
         PersonTokenDecision::Grant(grant) => {
-            let body = mint_person_auth(&state.minter, orch, &grant, &ctx.agent_claims.iss);
+            let body = mint_person_auth(&state.minter, orch, &grant, ctx.agent_claims.identifier());
             let _ = state
                 .pending
                 .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
@@ -266,10 +274,7 @@ where
         PersonTokenDecision::Federate => {
             match federate_to_access_server(
                 &orch.http_client,
-                Arc::clone(&orch.fetcher),
-                &state.minter,
-                &orch.person_server_url,
-                &orch.resource_url,
+                orch,
                 &ctx.exchange_request.resource_token,
                 agent_jwt,
             )
@@ -365,15 +370,12 @@ where
 {
     match decision {
         PersonTokenDecision::Grant(grant) => {
-            let body = mint_person_auth(&state.minter, orch, &grant, &ctx.agent_claims.iss);
+            let body = mint_person_auth(&state.minter, orch, &grant, ctx.agent_claims.identifier());
             (StatusCode::OK, Json(body)).into_response()
         }
         PersonTokenDecision::Federate => match federate_to_access_server(
             &orch.http_client,
-            Arc::clone(&orch.fetcher),
-            &state.minter,
-            &orch.person_server_url,
-            &orch.resource_url,
+            orch,
             &ctx.exchange_request.resource_token,
             agent_jwt,
         )
@@ -489,11 +491,24 @@ where
         return (StatusCode::FORBIDDEN, Json(err)).into_response();
     }
 
-    let post_outcome =
-        match post_pending_input(&orch.http_client, &federation.as_pending_url, &input).await {
+    let post_outcome = {
+        let signer = crate::server::deferred::OutboundRequestSigner {
+            person_server_url: orch.person_server_url.clone(),
+            signing_jwk: orch.person_server_signing_jwk.clone(),
+            keys: orch.keys.clone(),
+        };
+        match post_pending_input(
+            &orch.http_client,
+            &federation.as_pending_url,
+            &input,
+            Some(&signer),
+        )
+        .await
+        {
             Ok(outcome) => outcome,
             Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
-        };
+        }
+    };
 
     let poll_outcome = if let Some(body) = post_outcome {
         ServerPollOutcome::AuthToken(body)

@@ -1,7 +1,7 @@
 use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
-use crate::jwt::{ActClaim, AuthClaims, CnfClaim};
+use crate::jwt::{AuthClaims, CnfClaim};
 use crate::keys::TestKeys;
 use crate::types::JwtTyp;
 
@@ -47,7 +47,7 @@ impl AccessAuthJwtMinter for TestAccessAuthJwtMinter {
             aud: aud.into(),
             jti: Uuid::new_v4().to_string(),
             agent: agent.into(),
-            act: ActClaim { sub: agent.into() },
+            act: None,
             cnf: CnfClaim {
                 jwk: self.keys.agent_ephemeral.public_jwk(),
             },

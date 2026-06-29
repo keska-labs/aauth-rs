@@ -15,7 +15,10 @@ pub use parse::{
     ParsedDeferred, parse_auth_token_response, parse_deferred_response, resolve_deferred_location,
 };
 #[cfg(feature = "server-axum")]
-pub use poll::{ServerPollOptions, ServerPollOutcome, poll_pending_http, post_pending_input};
+pub use poll::{
+    OutboundRequestSigner, ServerPollOptions, ServerPollOutcome, poll_pending_http,
+    post_pending_input,
+};
 #[cfg(feature = "server-axum")]
 pub use response::{
     PollResponse, build_accepted, build_payment_required_stub, map_snapshot_to_poll_parts,

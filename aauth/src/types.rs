@@ -9,7 +9,7 @@ use crate::jwt::OkpSigningJwk;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParseStrError;
 
-/// AAuth JWT `typ` header values (`aa-*+jwt`).
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#jwt-type-registrations
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JwtTyp {
     Agent,
@@ -67,6 +67,7 @@ mod jwt_typ_tests {
     }
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#requirement-values
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RequirementLevel {
@@ -113,6 +114,7 @@ impl FromStr for RequirementLevel {
     }
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-capabilities-request-header-aauth-capabilities
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Capability {
@@ -150,6 +152,7 @@ impl FromStr for Capability {
     }
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AAuthChallenge {
     pub requirement: RequirementLevel,
@@ -158,13 +161,14 @@ pub struct AAuthChallenge {
     pub code: Option<String>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-mission-request-header
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mission {
     pub approver: String,
     pub s256: String,
 }
 
-/// Person Server metadata (`/.well-known/aauth-person.json`).
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#person-server-metadata-ps-metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonServerMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -237,7 +241,7 @@ mod metadata_tests {
     }
 }
 
-/// Access Server metadata (`/.well-known/aauth-access.json`).
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#access-server-metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessServerMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -258,7 +262,7 @@ impl AccessServerMetadata {
     }
 }
 
-/// Resource metadata (`/.well-known/aauth-resource.json`).
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#resource-metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceServerMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -271,12 +275,14 @@ pub struct ResourceServerMetadata {
     pub name: Option<String>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#jwks-discovery-and-caching-jwks-discovery
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JwksDocument {
     #[serde(flatten)]
     pub keys: JwkSet,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#agent-provider-metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetadataDocument {
     pub jwks_uri: String,
@@ -296,6 +302,7 @@ pub struct AuthOkResponse {
     pub user: Option<String>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#ps-to-as-token-request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessTokenExchangeRequest {
     pub resource_token: String,
@@ -306,17 +313,20 @@ pub struct AccessTokenExchangeRequest {
     pub subagent_token: Option<String>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#claims-required-requirement-claims
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimsChallenge {
     pub status: String,
     pub required_claims: Vec<String>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingStatusBody {
     pub status: String,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#agent-token-request
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenExchangeRequest {
     pub resource_token: String,
@@ -336,29 +346,35 @@ pub struct TokenExchangeRequest {
     pub prompt: Option<String>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#clarification-required-requirement-clarification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClarificationChallenge {
     pub clarification: String,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#clarification-response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClarificationResponse {
     pub clarification_response: String,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#keying-material
 #[derive(Debug, Clone)]
 pub struct SignatureKeyJwt {
     pub jwt: String,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#keying-material
 #[derive(Debug, Clone)]
 pub struct SignatureKeyJktJwt {
     pub jwt: String,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#keying-material
 #[derive(Debug, Clone, Copy)]
 pub struct SignatureKeyHwk;
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#keying-material
 #[derive(Debug, Clone)]
 pub enum SignatureKey {
     Jwt(SignatureKeyJwt),
@@ -366,12 +382,14 @@ pub enum SignatureKey {
     Hwk(SignatureKeyHwk),
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#keying-material
 #[derive(Debug, Clone)]
 pub struct KeyMaterial {
     pub signing_jwk: OkpSigningJwk,
     pub signature_key: SignatureKey,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#token-endpoint-error-response-format-error-response-format
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AAuthProtocolError {
     pub error: String,
@@ -381,6 +399,7 @@ pub struct AAuthProtocolError {
     pub error_uri: Option<String>,
 }
 
+/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#ps-response
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenResponseBody {
     pub auth_token: String,

@@ -1,5 +1,6 @@
 use anyhow::anyhow;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use http::Extensions;
 use reqwest::{Request, Response};
@@ -14,6 +15,9 @@ use crate::client::reqwest::token_exchange::{TokenExchangeOptions, exchange_toke
 use crate::client::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
+use crate::jwt::{VerifiedToken, jwk_thumbprint};
+#[cfg(feature = "server")]
+use crate::server::resource::{verify_client_auth_token, verify_resource_challenge};
 use crate::types::RequirementLevel;
 
 pub struct AgentMiddleware {
@@ -169,6 +173,28 @@ impl AgentMiddleware {
                 AgentAuthStep::ExchangeToken { resource_token } => {
                     let material = self.options.provider.key_material().await?;
                     let agent_jwt = agent_jwt_from_signature_key(&material.signature_key)?;
+                    let agent_sub = match VerifiedToken::decode_unverified(agent_jwt)? {
+                        VerifiedToken::Agent(agent) => agent.identifier().to_string(),
+                        _ => {
+                            return Err(AAuthError::Message(
+                                "token exchange requires agent token".into(),
+                            ));
+                        }
+                    };
+                    let agent_jkt = jwk_thumbprint(&material.signing_jwk.public_jwk())?;
+
+                    #[cfg(feature = "server")]
+                    if let Some(fetcher) = &self.options.metadata_fetcher {
+                        verify_resource_challenge(
+                            &resource_token,
+                            &origin,
+                            &agent_sub,
+                            &agent_jkt,
+                            Arc::clone(fetcher),
+                        )
+                        .await?;
+                    }
+
                     let person_server_url = resolve_person_server_url(
                         self.options.person_server_url.as_deref(),
                         agent_jwt,
@@ -225,6 +251,18 @@ impl AgentMiddleware {
                         },
                     )
                     .await?;
+
+                    #[cfg(feature = "server")]
+                    if let Some(fetcher) = &self.options.metadata_fetcher {
+                        verify_client_auth_token(
+                            &result.auth_token,
+                            &origin,
+                            &agent_sub,
+                            &agent_jkt,
+                            Arc::clone(fetcher),
+                        )
+                        .await?;
+                    }
 
                     {
                         let mut injector = self.injector.lock().unwrap();

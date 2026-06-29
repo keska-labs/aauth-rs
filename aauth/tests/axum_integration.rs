@@ -12,7 +12,7 @@ use aauth::{PendingStore, create_key_provider, create_test_keys, mint_agent_jwt,
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
-use support::client::{AGENT_ID, build_client};
+use support::client::{build_client, AGENT_ID};
 
 #[rstest]
 #[timeout(Duration::from_secs(1))]
@@ -84,7 +84,6 @@ async fn deferred_interaction_over_http() {
     let keys_cb = spawned.keys.clone();
     let resource_url = spawned.resource_url.clone();
     let person_server_url = spawned.person_server_url.clone();
-    let agent_url = spawned.agent_url.clone();
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
@@ -92,7 +91,7 @@ async fn deferred_interaction_over_http() {
             &keys_cb,
             &person_server_url,
             &resource_url,
-            &agent_url,
+            AGENT_ID,
             Some("user-deferred"),
             None,
         );

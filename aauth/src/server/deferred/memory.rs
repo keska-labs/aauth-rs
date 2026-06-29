@@ -28,6 +28,10 @@ impl InMemoryPendingStore {
         self.inner.lock().unwrap().len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn last_id(&self) -> Option<String> {
         self.inner.lock().unwrap().keys().next().cloned()
     }

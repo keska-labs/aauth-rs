@@ -22,11 +22,14 @@ pub struct PersonOrchestrateConfig {
     pub http_client: reqwest::Client,
     pub federation: FederationConfig,
     pub federation_poll_max_secs: Option<u64>,
+    pub keys: crate::keys::TestKeys,
+    pub person_server_signing_jwk: crate::jwt::OkpSigningJwk,
 }
 
 pub async fn verify_person_token_request(
     config: &PersonOrchestrateConfig,
     agent_jwt: &str,
+    agent_jkt: &str,
     resource_token: &str,
     exchange_request: TokenExchangeRequest,
 ) -> Result<PersonTokenContext> {
@@ -41,8 +44,8 @@ pub async fn verify_person_token_request(
 
     let resource_claims = verify_resource_token(VerifyResourceTokenOptions {
         jwt: resource_token.to_string(),
-        expected_agent: Some(agent.iss.clone()),
-        expected_agent_jkt: None,
+        expected_agent: Some(agent.identifier().to_string()),
+        expected_agent_jkt: Some(agent_jkt.to_string()),
         fetcher: Arc::clone(&config.fetcher),
     })
     .await?;
@@ -60,12 +63,12 @@ pub fn mint_person_auth<M: AuthJwtMinter>(
     minter: &M,
     config: &PersonOrchestrateConfig,
     grant: &AuthGrant,
-    agent_iss: &str,
+    agent_sub: &str,
 ) -> crate::types::TokenResponseBody {
     let auth_jwt = minter.mint_auth_jwt(
         &config.person_server_url,
         &config.resource_url,
-        agent_iss,
+        agent_sub,
         Some(&grant.sub),
         grant.scope.as_deref(),
     );

@@ -33,5 +33,6 @@ pub use resource::keys::{Ed25519ResourceTokenSigner, ResourceTokenSigner};
 pub use resource::{
     InMemoryOpaqueAccessStore, OpaqueAccessStore, ResourceAccessMode, ResourceAccessPolicy,
     ResourceTokenOptions, VerifyResourceTokenOptions, VerifyTokenOptions, create_resource_token,
-    resolve_resource_token_audience, verify_resource_token, verify_token,
+    resolve_resource_token_audience, verify_auth_token_binding, verify_client_auth_token,
+    verify_resource_challenge, verify_resource_token, verify_token,
 };

@@ -1,7 +1,7 @@
 use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
-use crate::jwt::{ActClaim, AuthClaims, CnfClaim};
+use crate::jwt::{AgentClaims, AuthClaims, CnfClaim};
 use crate::keys::TestKeys;
 use crate::types::JwtTyp;
 
@@ -47,7 +47,7 @@ impl AuthJwtMinter for TestAuthJwtMinter {
             aud: aud.into(),
             jti: Uuid::new_v4().to_string(),
             agent: agent.into(),
-            act: ActClaim { sub: agent.into() },
+            act: None,
             cnf: CnfClaim {
                 jwk: self.keys.agent_ephemeral.public_jwk(),
             },
@@ -83,4 +83,36 @@ pub fn mint_auth_jwt(
 ) -> String {
     keys.auth_jwt_minter()
         .mint_auth_jwt(iss, aud, agent, sub, scope)
+}
+
+/// Mint a short-lived agent JWT for the Person Server to use in outbound HTTP signatures.
+pub fn mint_person_server_signature_jwt(keys: &TestKeys, person_server_url: &str) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let claims = AgentClaims {
+        iss: person_server_url.into(),
+        dwk: "aauth-person.json".into(),
+        sub: person_server_url.into(),
+        jti: Uuid::new_v4().to_string(),
+        cnf: CnfClaim {
+            jwk: keys.person_server.public_jwk(),
+        },
+        iat: now,
+        exp: now + 3600,
+        ps: None,
+    };
+
+    let mut header = Header::new(Algorithm::EdDSA);
+    header.typ = Some(JwtTyp::Agent.as_str().into());
+    header.kid = keys.person_server.kid().map(str::to_string);
+
+    encode(
+        &header,
+        &claims,
+        &keys.person_server.encoding_key(),
+    )
+    .expect("sign person server signature jwt")
 }

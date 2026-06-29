@@ -1,10 +1,17 @@
 use std::sync::Arc;
 
+use http::HeaderMap;
+use url::Url;
+
 use crate::error::{AAuthError, Result};
 use crate::jwt::VerifiedToken;
+use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 use crate::server::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response};
-use crate::server::person::keys::AuthJwtMinter;
+use crate::server::person::keys::mint_person_server_signature_jwt;
+use crate::server::person::orchestrate::PersonOrchestrateConfig;
+use crate::server::resource::{VerifyTokenOptions, verify_token};
+use crate::signature::apply_outbound_signature;
 use crate::types::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
 
 #[derive(Clone)]
@@ -22,12 +29,9 @@ pub enum FederationOutcome {
     },
 }
 
-pub async fn federate_to_access_server<M: AuthJwtMinter>(
+pub async fn federate_to_access_server(
     client: &reqwest::Client,
-    fetcher: Arc<dyn MetadataFetcher>,
-    _minter: &M,
-    _person_server_url: &str,
-    resource_url: &str,
+    orch: &PersonOrchestrateConfig,
     resource_token: &str,
     agent_token: &str,
 ) -> Result<FederationOutcome> {
@@ -60,10 +64,32 @@ pub async fn federate_to_access_server<M: AuthJwtMinter>(
         subagent_token: None,
     };
 
-    let response = client
+    let (authority, path) = url_authority_path(&metadata.token_endpoint)?;
+    let body_json =
+        serde_json::to_string(&body).map_err(|e| AAuthError::Message(e.to_string()))?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        http::HeaderName::from_static("content-type"),
+        http::HeaderValue::from_static("application/json"),
+    );
+    apply_outbound_signature(
+        &mut headers,
+        "POST",
+        &authority,
+        &path,
+        &mint_person_server_signature_jwt(&orch.keys, &orch.person_server_url),
+        &orch.person_server_signing_jwk,
+        None,
+    )?;
+
+    let mut request = client
         .post(&metadata.token_endpoint)
-        .header("content-type", "application/json")
-        .json(&body)
+        .body(body_json);
+    for (name, value) in headers.iter() {
+        request = request.header(name, value);
+    }
+
+    let response = request
         .send()
         .await
         .map_err(|e| AAuthError::Message(e.to_string()))?;
@@ -108,9 +134,9 @@ pub async fn federate_to_access_server<M: AuthJwtMinter>(
     verify_federated_auth_token(
         &token_body.auth_token,
         &access_server_url,
-        resource_url,
+        &orch.resource_url,
         agent_token,
-        fetcher,
+        Arc::clone(&orch.fetcher),
     )
     .await?;
 
@@ -129,7 +155,16 @@ pub async fn verify_federated_auth_token(
         _ => return Err(AAuthError::Message("expected agent token".into())),
     };
 
-    let auth = match VerifiedToken::decode_unverified(auth_token)? {
+    let agent_jkt = crate::jwt::jwk_thumbprint(&agent.cnf.jwk)?;
+
+    let verified = verify_token(VerifyTokenOptions {
+        jwt: auth_token.to_string(),
+        http_signature_thumbprint: agent_jkt,
+        fetcher,
+    })
+    .await?;
+
+    let auth = match verified {
         VerifiedToken::Auth(c) => c,
         _ => return Err(AAuthError::Message("expected auth token from AS".into())),
     };
@@ -140,13 +175,25 @@ pub async fn verify_federated_auth_token(
     if auth.aud.trim_end_matches('/') != expected_aud.trim_end_matches('/') {
         return Err(AAuthError::Message("auth token aud mismatch".into()));
     }
-    if auth.agent != agent.iss {
+    if auth.agent != agent.identifier() {
         return Err(AAuthError::Message("auth token agent mismatch".into()));
     }
 
-    let _ = fetcher;
-    let _ = auth;
     Ok(())
+}
+
+fn url_authority_path(url: &str) -> Result<(String, String)> {
+    let parsed = Url::parse(url).map_err(|e| AAuthError::Message(e.to_string()))?;
+    let authority = parsed
+        .host_str()
+        .ok_or_else(|| AAuthError::Message("token endpoint missing host".into()))?
+        .to_string();
+    let authority = match parsed.port() {
+        Some(port) => format!("{authority}:{port}"),
+        None => authority,
+    };
+    let path = parsed.path().to_string();
+    Ok((authority, path))
 }
 
 fn response_headers_to_http(headers: &reqwest::header::HeaderMap) -> http::HeaderMap {
@@ -164,10 +211,10 @@ fn response_headers_to_http(headers: &reqwest::header::HeaderMap) -> http::Heade
 
 /// Legacy helper used by integration tests.
 pub async fn fulfill_token_exchange(
-    keys: &crate::keys::TestKeys,
+    keys: &TestKeys,
     person_server_url: &str,
     resource_url: &str,
-    agent_url: &str,
+    agent_id: &str,
     resource_token: &str,
     fetcher: Arc<dyn MetadataFetcher>,
     client: &reqwest::Client,
@@ -178,7 +225,7 @@ pub async fn fulfill_token_exchange(
     let claims = crate::server::resource::verify_resource_token(
         crate::server::resource::VerifyResourceTokenOptions {
             jwt: resource_token.to_string(),
-            expected_agent: Some(agent_url.to_string()),
+            expected_agent: Some(agent_id.to_string()),
             expected_agent_jkt: None,
             fetcher: Arc::clone(&fetcher),
         },
@@ -192,7 +239,7 @@ pub async fn fulfill_token_exchange(
         let auth_jwt = minter.mint_auth_jwt(
             person_server_url,
             resource_url,
-            agent_url,
+            agent_id,
             Some("user-123"),
             claims.scope.as_deref(),
         );
@@ -202,14 +249,33 @@ pub async fn fulfill_token_exchange(
         });
     }
 
+    let orch = PersonOrchestrateConfig {
+        person_server_url: person_server_url.to_string(),
+        resource_url: resource_url.to_string(),
+        interaction_url: String::new(),
+        pending_base_url: person_server_url.to_string(),
+        pending_path: "/pending".into(),
+        pending_ttl_secs: 300,
+        fetcher: Arc::clone(&fetcher),
+        http_client: client.clone(),
+        federation: FederationConfig {
+            fetcher: Arc::clone(&fetcher),
+        },
+        federation_poll_max_secs: None,
+        keys: keys.clone(),
+        person_server_signing_jwk: keys.person_server.signing_jwk(),
+    };
+
     match federate_to_access_server(
         client,
-        fetcher,
-        &minter,
-        person_server_url,
-        resource_url,
+        &orch,
         resource_token,
-        &crate::mint_agent_jwt(keys, agent_url, agent_url, Some(person_server_url)),
+        &crate::mint_agent_jwt(
+            keys,
+            person_server_url,
+            agent_id,
+            Some(person_server_url),
+        ),
     )
     .await?
     {

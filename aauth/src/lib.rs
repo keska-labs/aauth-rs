@@ -80,6 +80,7 @@ pub use server::{
     ResourceConsentDecision, ResourceConsentPolicy, ResourceTokenOptions, ResourceTokenSigner,
     TestAuthJwtMinter, TokenPolicyDecision, VerifyResourceTokenOptions, VerifyTokenOptions,
     create_resource_token, generate_pending_id, mint_auth_jwt, pending_location,
-    resolve_resource_token_audience, verify_resource_token, verify_token,
+    resolve_resource_token_audience, verify_auth_token_binding, verify_client_auth_token,
+    verify_resource_challenge, verify_resource_token, verify_token,
 };
 pub use types::*;

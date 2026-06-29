@@ -24,6 +24,8 @@ use http_body_util::BodyExt;
 use reqwest::{Request, Response, ResponseBuilderExt, Url};
 use reqwest_middleware::{Error, Middleware, Next};
 
+use super::client::AGENT_ID;
+
 use aauth::{TestKeys, mint_auth_jwt};
 
 pub struct MockTransport {
@@ -162,9 +164,13 @@ impl MockServerState {
 
         let fetcher = Arc::new(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
-            person: self.keys.person_metadata_fetcher(&self.person_server_url),
+            person: self
+                .keys
+                .person_metadata_fetcher(&self.person_server_url),
+            resource: self.keys.resource_metadata_fetcher(&self.resource_url),
             agent_jwks_uri: format!("{}/jwks", self.agent_url),
             person_jwks_uri: format!("{}/jwks", self.person_server_url),
+            resource_jwks_uri: format!("{}/jwks", self.resource_url),
         });
 
         let verified = verify_token(VerifyTokenOptions {
@@ -212,7 +218,7 @@ impl MockServerState {
                     ResourceTokenOptions {
                         resource: self.resource_url.clone(),
                         audience,
-                        agent: agent.iss.clone(),
+                        agent: agent.identifier().to_string(),
                         agent_jkt: self.keys.agent_ephemeral.thumbprint().to_string(),
                         scope: None,
                         mission: None,
@@ -243,7 +249,7 @@ impl MockServerState {
             VerifiedToken::Agent(agent) => {
                 let body = AgentOkResponse {
                     status: "ok".into(),
-                    agent: agent.iss,
+                    agent: agent.identifier().to_string(),
                 };
                 Ok(Response::from(
                     http::Response::builder()
@@ -309,7 +315,7 @@ impl MockServerState {
                     agent_claims: aauth::jwt::AgentClaims {
                         iss: self.agent_url.clone(),
                         dwk: "aauth-agent.json".into(),
-                        sub: self.agent_url.clone(),
+                        sub: AGENT_ID.into(),
                         jti: "mock".into(),
                         cnf: aauth::jwt::CnfClaim {
                             jwk: self.keys.agent_ephemeral.public_jwk(),
@@ -326,7 +332,7 @@ impl MockServerState {
                         dwk: "aauth-resource.json".into(),
                         aud: self.person_server_url.clone(),
                         jti: "mock".into(),
-                        agent: self.agent_url.clone(),
+                        agent: AGENT_ID.into(),
                         agent_jkt: String::new(),
                         iat: 0,
                         exp: u64::MAX,
@@ -359,7 +365,7 @@ impl MockServerState {
             &self.keys,
             &self.person_server_url,
             &self.resource_url,
-            &self.agent_url,
+            &AGENT_ID,
             Some("user-123"),
             None,
         );
@@ -452,23 +458,47 @@ impl MockServerState {
 struct DualMetadataFetcher {
     agent: StaticMetadataFetcher,
     person: StaticMetadataFetcher,
+    resource: StaticMetadataFetcher,
     agent_jwks_uri: String,
     person_jwks_uri: String,
+    resource_jwks_uri: String,
+}
+
+impl MockServerState {
+    pub fn metadata_fetcher(&self) -> Arc<dyn MetadataFetcher> {
+        Arc::new(DualMetadataFetcher {
+            agent: self.keys.agent_metadata_fetcher(&self.agent_url),
+            person: self
+                .keys
+                .person_metadata_fetcher(&self.person_server_url),
+            resource: self.keys.resource_metadata_fetcher(&self.resource_url),
+            agent_jwks_uri: format!("{}/jwks", self.agent_url),
+            person_jwks_uri: format!("{}/jwks", self.person_server_url),
+            resource_jwks_uri: format!("{}/jwks", self.resource_url),
+        })
+    }
 }
 
 #[async_trait]
 impl MetadataFetcher for DualMetadataFetcher {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String> {
-        if dwk == "aauth-agent.json" {
-            self.agent.resolve_jwks_uri(iss, dwk).await
-        } else {
-            self.person.resolve_jwks_uri(iss, dwk).await
+        let _ = iss;
+        match dwk {
+            "aauth-agent.json" => self.agent.resolve_jwks_uri(iss, dwk).await,
+            "aauth-person.json" => self.person.resolve_jwks_uri(iss, dwk).await,
+            "aauth-resource.json" => self.resource.resolve_jwks_uri(iss, dwk).await,
+            _ => Err(aauth::AAuthError::Token {
+                code: "metadata_fetch_failed".into(),
+                message: format!("unknown dwk: {dwk}"),
+            }),
         }
     }
 
     async fn fetch_jwks(&self, jwks_uri: &str) -> Result<jsonwebtoken::jwk::JwkSet> {
         if jwks_uri == self.agent_jwks_uri {
             self.agent.fetch_jwks(jwks_uri).await
+        } else if jwks_uri == self.resource_jwks_uri {
+            self.resource.fetch_jwks(jwks_uri).await
         } else {
             self.person.fetch_jwks(jwks_uri).await
         }

@@ -4,6 +4,9 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use tokio::time::sleep;
 
 use crate::error::{AAuthError, Result};
+use crate::jwt::OkpSigningJwk;
+use crate::server::person::keys::mint_person_server_signature_jwt;
+use crate::signature::apply_outbound_signature;
 use crate::types::{AAuthProtocolError, ClarificationResponse, TokenResponseBody};
 
 use super::parse::{parse_auth_token_response, parse_deferred_response};
@@ -11,6 +14,19 @@ use super::types::{DeferRequirement, PendingInput};
 
 const DEFAULT_MAX_POLL_DURATION_SECS: u64 = 300;
 const DEFAULT_PREFER_WAIT: u64 = 45;
+
+#[derive(Clone)]
+pub struct OutboundRequestSigner {
+    pub person_server_url: String,
+    pub signing_jwk: OkpSigningJwk,
+    pub keys: crate::keys::TestKeys,
+}
+
+impl OutboundRequestSigner {
+    pub fn signature_jwt(&self) -> String {
+        mint_person_server_signature_jwt(&self.keys, &self.person_server_url)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ServerPollOptions {
@@ -44,6 +60,7 @@ pub async fn post_pending_input(
     client: &reqwest::Client,
     url: &str,
     input: &PendingInput,
+    signer: Option<&OutboundRequestSigner>,
 ) -> Result<Option<TokenResponseBody>> {
     let (body, content_type) = match input {
         PendingInput::ClarificationResponse(answer) => (
@@ -63,6 +80,30 @@ pub async fn post_pending_input(
     };
 
     let mut request = client.post(url).header("content-type", content_type);
+    if let Some(signer) = signer {
+        let parsed = url::Url::parse(url).map_err(|e| AAuthError::Message(e.to_string()))?;
+        let authority = parsed
+            .host_str()
+            .ok_or_else(|| AAuthError::Message("pending url missing host".into()))?;
+        let authority = match parsed.port() {
+            Some(port) => format!("{authority}:{port}"),
+            None => authority.to_string(),
+        };
+        let path = parsed.path().to_string();
+        let mut headers = HeaderMap::new();
+        apply_outbound_signature(
+            &mut headers,
+            "POST",
+            &authority,
+            &path,
+            &signer.signature_jwt(),
+            &signer.signing_jwk,
+            None,
+        )?;
+        for (name, value) in headers.iter() {
+            request = request.header(name, value);
+        }
+    }
     request = request.body(body);
 
     let response = request
@@ -111,7 +152,7 @@ pub async fn poll_pending_http(
             .map_err(|e| AAuthError::Message(e.to_string()))?;
 
         let status = response.status().as_u16();
-        let headers = response_headers_to_http(&response.headers());
+        let headers = response_headers_to_http(response.headers());
         let retry_after = parse_retry_after(&headers);
         let body = response
             .bytes()
@@ -246,6 +287,7 @@ mod tests {
             &client,
             &format!("{}/pending/abc", mock.uri()),
             &PendingInput::InteractionCompleted,
+            None,
         )
         .await
         .expect("post");

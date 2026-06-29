@@ -118,7 +118,7 @@ async fn verify_token_auth_jwt() {
         &keys,
         PERSON_SERVER_URL,
         RESOURCE_URL,
-        AGENT_URL,
+        AGENT_ID,
         Some("user-456"),
         Some("files.read"),
     );
@@ -136,7 +136,7 @@ async fn verify_token_auth_jwt() {
         VerifiedToken::Auth(auth) => {
             assert_eq!(auth.iss, PERSON_SERVER_URL);
             assert_eq!(auth.dwk, "aauth-person.json");
-            assert_eq!(auth.agent, AGENT_URL);
+            assert_eq!(auth.agent, AGENT_ID);
             assert_eq!(auth.sub.as_deref(), Some("user-456"));
             assert_eq!(auth.scope.as_deref(), Some("files.read"));
         }
@@ -198,7 +198,12 @@ async fn second_request_reuses_cached_token() {
     let call_count = Arc::new(Mutex::new(0usize));
     let server = MockServer::new(mock_config(&keys, false, None, None));
 
-    let options = aauth_options(provider, None, None);
+    let options = aauth_options(
+        provider,
+        server.metadata_fetcher(),
+        None,
+        None,
+    );
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(AgentMiddleware::new(options))
         .with(CountingMiddleware {
@@ -282,7 +287,7 @@ async fn deferred_interaction_grant() {
                 &keys_cb,
                 PERSON_SERVER_URL,
                 RESOURCE_URL,
-                AGENT_URL,
+                AGENT_ID,
                 Some("user-deferred"),
                 None,
             );
@@ -369,12 +374,14 @@ fn mock_config(
 
 fn aauth_options(
     provider: Arc<dyn KeyMaterialProvider>,
+    fetcher: Arc<dyn aauth::MetadataFetcher>,
     justification: Option<String>,
     hints: Option<(String, String, String)>,
 ) -> AgentOptions {
     let mut builder = AgentOptions::builder(provider)
         .person_server_url(PERSON_SERVER_URL)
-        .max_poll_duration_secs(5);
+        .max_poll_duration_secs(5)
+        .metadata_fetcher(fetcher);
     if let Some(justification) = justification {
         builder = builder.justification(justification);
     }
@@ -394,7 +401,12 @@ fn aauth_client(
     hints: Option<(String, String, String)>,
 ) -> aauth::client::reqwest::ClientWithMiddleware {
     build_client(
-        aauth_options(Arc::clone(&provider), justification, hints),
+        aauth_options(
+            Arc::clone(&provider),
+            server.metadata_fetcher(),
+            justification,
+            hints,
+        ),
         server,
     )
 }
