@@ -1,6 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey};
 use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
@@ -9,12 +8,8 @@ use reqwest::Request;
 use crate::error::{AAuthError, Result};
 use crate::headers::{build_capabilities_header, build_mission_header};
 use crate::jwt::OkpSigningJwk;
+use crate::signature::build_signature_base;
 use crate::types::{Capability, KeyMaterial, Mission, SignatureKey};
-
-#[async_trait]
-pub trait KeyMaterialProvider: Send + Sync {
-    async fn key_material(&self) -> Result<KeyMaterial>;
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct SigningOptions {
@@ -57,11 +52,11 @@ pub fn sign_request(request: &mut Request, material: &KeyMaterial) -> Result<()>
             ));
         }
     };
-    let jwt = format!("sig=jwt;jwt=\"{token}\"");
+    let signature_key = format!("sig=jwt;jwt=\"{token}\"");
 
     request.headers_mut().insert(
         HeaderName::from_static("signature-key"),
-        HeaderValue::from_str(&jwt).map_err(|e| AAuthError::Message(e.to_string()))?,
+        HeaderValue::from_str(&signature_key).map_err(|e| AAuthError::Message(e.to_string()))?,
     );
 
     let signing_key = signing_key_from_jwk(&material.signing_jwk)?;
@@ -72,7 +67,14 @@ pub fn sign_request(request: &mut Request, material: &KeyMaterial) -> Result<()>
 
     let signature_input =
         format!("sig=(\"@method\" \"@authority\" \"@path\" \"signature-key\");created={created}");
-    let signature_base = build_signature_base(request, &jwt, created);
+    let url = request.url();
+    let signature_base = build_signature_base(
+        request.method().as_str(),
+        url.authority(),
+        url.path(),
+        &signature_key,
+        created,
+    );
     let signature_bytes = signing_key.sign(signature_base.as_bytes());
     let signature = URL_SAFE_NO_PAD.encode(signature_bytes.to_bytes());
 
@@ -101,19 +103,6 @@ pub fn sign_request_with_auth_token(
     sign_request(request, &auth_material)
 }
 
-fn build_signature_base(request: &Request, signature_key: &str, created: u64) -> String {
-    let url = request.url();
-    let authority = url.authority();
-    let path = url.path();
-    format!(
-        "\"@method\": {}\n\"@authority\": {}\n\"@path\": {}\n\"signature-key\": {}\n\"@signature-params\": (\"@method\" \"@authority\" \"@path\" \"signature-key\");created={created}",
-        request.method().as_str().to_lowercase(),
-        authority,
-        path,
-        signature_key,
-    )
-}
-
 fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<SigningKey> {
     let bytes = URL_SAFE_NO_PAD
         .decode(&jwk.d)
@@ -122,23 +111,4 @@ fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<SigningKey> {
         .try_into()
         .map_err(|_| AAuthError::Message("invalid Ed25519 private key length".into()))?;
     Ok(SigningKey::from_bytes(&key_bytes))
-}
-
-#[cfg(test)]
-mod tests {
-    use http::Method;
-    use reqwest::Url;
-
-    use super::*;
-
-    #[test]
-    fn signature_base_includes_components() {
-        let mut request =
-            Request::new(Method::GET, Url::parse("https://resource.example/api/data").unwrap());
-        let base = build_signature_base(&request, "sig=jwt;jwt=\"abc\"", 1);
-        assert!(base.contains("@method"));
-        assert!(base.contains("@authority"));
-        assert!(base.contains("@path"));
-        assert!(base.contains("signature-key"));
-    }
 }

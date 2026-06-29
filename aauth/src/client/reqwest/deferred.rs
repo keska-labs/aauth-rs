@@ -5,7 +5,8 @@ use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 use tokio::time::sleep;
 
-use crate::client::send::SignedSend;
+use crate::client::injector::{ClarificationCallback, InteractionCallback};
+use crate::client::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::{
@@ -24,14 +25,6 @@ pub struct DeferredOptions {
     pub on_clarification: Option<ClarificationCallback>,
     pub max_poll_duration: Option<u64>,
 }
-
-pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
-
-pub type ClarificationCallback = std::sync::Arc<
-    dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = String> + Send>>
-        + Send
-        + Sync,
->;
 
 #[derive(Debug)]
 pub struct DeferredResult {

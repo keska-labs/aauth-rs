@@ -13,12 +13,15 @@ keywords = ["aauth", "oauth", "authentication", "http-signatures"]
 categories = ["authentication", "web-programming"]
 
 [features]
-default = ["client", "server"]
+default = ["client", "server", "server-axum"]
 client = ["dep:reqwest", "dep:reqwest-middleware", "dep:http-body-util", "dep:tokio"]
 server = []
+server-axum = ["server", "dep:axum", "dep:tower"]
 
 [dependencies]
 async-trait.workspace = true
+axum = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
 base64.workspace = true
 bytes.workspace = true
 ed25519-dalek.workspace = true
@@ -45,14 +48,16 @@ reqwest.workspace = true
 reqwest-middleware.workspace = true
 http-body-util.workspace = true
 anyhow.workspace = true
+axum.workspace = true
+tower.workspace = true
 
 [[example]]
-name = "verify_agent_token"
-required-features = ["server"]
+name = "direct_agent_grant"
+required-features = ["client", "server", "server-axum"]
 
 [[example]]
-name = "client_direct_grant"
-required-features = ["client", "server"]
+name = "auth_token_challenge"
+required-features = ["client", "server", "server-axum"]
 
 [package.metadata.docs.rs]
 all-features = true

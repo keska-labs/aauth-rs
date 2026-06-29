@@ -14,22 +14,29 @@ aauth-rs/
 ├── Cargo.toml          # workspace root
 └── aauth/
     ├── src/
-    │   ├── client/     # AAuthMiddleware, token exchange, signing helpers
-    │   ├── server/     # verify_token, resource tokens, InteractionManager
-    │   └── …           # shared headers, JWT helpers, metadata cache
-    └── tests/          # protocol integration tests (TypeScript e2e parity)
+    │   ├── client/
+    │   │   ├── injector.rs   # framework-agnostic auth flow
+    │   │   ├── keys.rs       # KeyMaterialProvider, JWT minting
+    │   │   └── reqwest/      # AAuthMiddleware, token exchange (feature "client")
+    │   ├── server/
+    │   │   ├── verify.rs, interaction.rs, …
+    │   │   └── axum/         # AAuthLayer, route helpers (feature "server-axum")
+    │   ├── signature.rs      # shared HTTP Signature build + verify
+    │   └── …                 # headers, JWT helpers, metadata cache
+    └── tests/                # protocol integration tests (TypeScript e2e parity)
 ```
 
 ## Features
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `client` | yes | `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
+| `client` | yes | `aauth::client::reqwest` — `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
 | `server` | yes | `verify_token`, `create_resource_token`, `InteractionManager` |
+| `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `VerifiedAAuthToken`, auth-server route helpers |
 
 Disable defaults to depend on only one side:
 
-```toml 
+```toml
 aauth = { version = "0.1", default-features = false, features = ["client"] }
 ```
 
@@ -38,7 +45,9 @@ aauth = { version = "0.1", default-features = false, features = ["client"] }
 ```rust
 use std::sync::Arc;
 
-use aauth::client::{AAuthClientOptions, AAuthMiddleware, ClientBuilder, KeyMaterialProvider};
+use aauth::client::injector::AAuthClientOptions;
+use aauth::client::keys::KeyMaterialProvider;
+use aauth::client::reqwest::{AAuthMiddleware, ClientBuilder};
 use aauth::types::KeyMaterial;
 
 #[async_trait::async_trait]
@@ -88,11 +97,11 @@ Key material is injected via `KeyMaterialProvider` (equivalent to the TypeScript
 ## Examples
 
 ```bash
-# Verify an agent JWT (server only)
-cargo run --example verify_agent_token --features server
+# Direct agent grant: axum resource server + reqwest client
+cargo run --example direct_agent_grant
 
-# Signed fetch against an in-process mock resource (client + server)
-cargo run --example client_direct_grant
+# Full 401 auth-token challenge with token exchange
+cargo run --example auth_token_challenge
 ```
 
 Build all examples in CI:
@@ -111,7 +120,6 @@ cargo build --examples --all-features
 - `aauth-local-keys` crate (OS keychain, hardware keys, bootstrap CLI)
 - MCP bridges and CLI tools
 - AS federation / four-party `claims` exchange
-- Production HTTP signature verification middleware for axum/actix
 
 ## Development
 

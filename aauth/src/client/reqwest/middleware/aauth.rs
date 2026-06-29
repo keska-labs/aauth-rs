@@ -5,12 +5,12 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::client::deferred::{DeferredOptions, poll_deferred_with};
 use crate::client::injector::{AAuthClientOptions, AAuthInjector, AuthAttempt, InjectorStep};
-use crate::client::middleware::signing::{SigningMiddleware, sign_and_run};
-use crate::client::send::SignedSend;
-use crate::client::signed::SigningOptions;
-use crate::client::token_exchange::{TokenExchangeOptions, exchange_token_with};
+use crate::client::reqwest::deferred::{DeferredOptions, poll_deferred_with};
+use crate::client::reqwest::middleware::signing::{SigningMiddleware, sign_and_run};
+use crate::client::reqwest::send::SignedSend;
+use crate::client::reqwest::signed::SigningOptions;
+use crate::client::reqwest::token_exchange::{TokenExchangeOptions, exchange_token_with};
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::RequirementLevel;

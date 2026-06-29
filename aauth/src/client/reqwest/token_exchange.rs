@@ -4,8 +4,9 @@ use std::sync::Arc;
 use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 
-use crate::client::deferred::{DeferredOptions, InteractionCallback, poll_deferred_with};
-use crate::client::send::SignedSend;
+use crate::client::injector::InteractionCallback;
+use crate::client::reqwest::deferred::{DeferredOptions, poll_deferred_with};
+use crate::client::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::{
@@ -35,7 +36,7 @@ pub struct TokenExchangeOptions {
     pub capabilities: Option<Vec<String>>,
     pub prompt: Option<String>,
     pub on_interaction: Option<InteractionCallback>,
-    pub on_clarification: Option<crate::client::deferred::ClarificationCallback>,
+    pub on_clarification: Option<crate::client::injector::ClarificationCallback>,
 }
 
 #[derive(Debug, Clone)]

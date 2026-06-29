@@ -4,7 +4,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use aauth::VerifiedToken;
 use aauth::clear_metadata_cache;
-use aauth::client::{AAuthClientOptions, AAuthMiddleware, ClientBuilder, KeyMaterialProvider};
+use aauth::client::reqwest::{
+    AAuthClientOptions, AAuthMiddleware, ClientBuilder, InteractionCallback,
+};
+use aauth::KeyMaterialProvider;
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
 use aauth::server::{
     InteractionManager, InteractionManagerOptions, VerifyTokenOptions, verify_token,
@@ -37,7 +40,7 @@ fn test_lock() -> std::sync::MutexGuard<'static, ()> {
 fn build_client(
     options: AAuthClientOptions,
     server: &MockServer,
-) -> aauth::client::ClientWithMiddleware {
+) -> aauth::client::reqwest::ClientWithMiddleware {
     ClientBuilder::new(reqwest::Client::new())
         .with(AAuthMiddleware::new(options))
         .with(server.mock_transport())
@@ -302,7 +305,7 @@ async fn deferred_interaction_grant() {
     let keys_cb = keys.clone();
     let pending_id_capture_cb = Arc::clone(&pending_id_capture);
 
-    let on_interaction: aauth::InteractionCallback = Arc::new(move |url, code| {
+    let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
         if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
             let auth_jwt = mint_auth_jwt(
@@ -434,7 +437,7 @@ fn aauth_client(
     server: &MockServer,
     justification: Option<String>,
     hints: Option<(String, String, String)>,
-) -> aauth::client::ClientWithMiddleware {
+) -> aauth::client::reqwest::ClientWithMiddleware {
     build_client(
         aauth_options(Arc::clone(&provider), justification, hints),
         server,

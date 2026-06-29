@@ -8,7 +8,13 @@ use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::{AuthServerMetadata, Capability, Mission, RequirementLevel};
 
-use super::deferred::{ClarificationCallback, InteractionCallback};
+pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
+
+pub type ClarificationCallback = std::sync::Arc<
+    dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = String> + Send>>
+        + Send
+        + Sync,
+>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthAttempt {
@@ -52,7 +58,7 @@ pub struct AAuthInjector {
 
 #[derive(Clone)]
 pub struct AAuthClientOptions {
-    pub provider: Arc<dyn super::KeyMaterialProvider>,
+    pub provider: Arc<dyn super::keys::KeyMaterialProvider>,
     pub auth_server_url: Option<String>,
     pub auth_server_metadata: Option<AuthServerMetadata>,
     pub opaque_token: Option<String>,

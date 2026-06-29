@@ -2,10 +2,9 @@
 //!
 //! # Features
 //!
-//! - `client` — signed HTTP requests, token exchange, and protocol-aware fetch
+//! - `client` — signed HTTP requests, token exchange, and protocol-aware fetch (`client::reqwest`)
 //! - `server` — token verification, resource token creation, interaction management
-//!
-//! Both features are enabled by default.
+//! - `server-axum` — axum middleware and route helpers (`server::axum`)
 
 pub mod error;
 pub mod headers;
@@ -13,6 +12,7 @@ pub mod interaction_code;
 pub mod jwt;
 pub mod keys;
 pub mod metadata;
+pub mod signature;
 pub mod types;
 
 #[cfg(feature = "client")]
@@ -23,8 +23,8 @@ pub mod server;
 
 #[cfg(feature = "client")]
 pub use client::keys::{
-    AgentJwtMinter, StaticKeyMaterialProvider, TestAgentJwtMinter, create_key_provider,
-    mint_agent_jwt,
+    AgentJwtMinter, KeyMaterialProvider, StaticKeyMaterialProvider, TestAgentJwtMinter,
+    create_key_provider, mint_agent_jwt,
 };
 pub use error::{AAuthError, Result, TokenError};
 pub use headers::{
@@ -49,14 +49,6 @@ pub use server::keys::{
     mint_auth_jwt,
 };
 pub use types::*;
-
-#[cfg(feature = "client")]
-pub use client::{
-    AAuthClientOptions, AAuthInjector, AAuthMiddleware, AuthAttempt, ClarificationCallback,
-    ClientBuilder, ClientWithMiddleware, DeferredOptions, DeferredResult, InjectorStep,
-    InteractionCallback, KeyMaterialProvider, TokenExchangeError, TokenExchangeOptions,
-    TokenExchangeResult, exchange_token, poll_deferred,
-};
 
 #[cfg(feature = "server")]
 pub use server::{

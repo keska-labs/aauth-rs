@@ -6,8 +6,9 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
 use crate::client::injector::AuthAttempt;
-use crate::client::signed::{
-    KeyMaterialProvider, SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,
+use crate::client::keys::KeyMaterialProvider;
+use crate::client::reqwest::signed::{
+    SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,
     sign_request_with_auth_token,
 };
 use crate::error::{AAuthError, Result};

@@ -3,6 +3,9 @@ pub mod keys;
 mod resource_token;
 mod verify;
 
+#[cfg(feature = "server-axum")]
+pub mod axum;
+
 pub use interaction::{InteractionManager, InteractionManagerOptions, PendingRequest};
 pub use keys::{AuthJwtMinter, Ed25519ResourceTokenSigner, ResourceTokenSigner, TestAuthJwtMinter};
 pub use resource_token::{ResourceTokenOptions, create_resource_token};

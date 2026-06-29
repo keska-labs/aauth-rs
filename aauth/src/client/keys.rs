@@ -4,11 +4,15 @@ use async_trait::async_trait;
 use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
-use crate::client::KeyMaterialProvider;
 use crate::error::Result;
 use crate::jwt::{AgentClaims, CnfClaim};
 use crate::keys::TestKeys;
 use crate::types::{JwtTyp, KeyMaterial, SignatureKey, SignatureKeyJwt};
+
+#[async_trait]
+pub trait KeyMaterialProvider: Send + Sync {
+    async fn key_material(&self) -> Result<KeyMaterial>;
+}
 
 pub trait AgentJwtMinter: Send + Sync {
     fn mint_agent_jwt(&self, agent_url: &str, sub: &str) -> String;
