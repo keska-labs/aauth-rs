@@ -183,9 +183,9 @@ pub struct ResourcePendingContext {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PendingContext {
-    Person(PersonPendingContext),
-    Access(AccessPendingContext),
-    Resource(ResourcePendingContext),
+    Person(Box<PersonPendingContext>),
+    Access(Box<AccessPendingContext>),
+    Resource(Box<ResourcePendingContext>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

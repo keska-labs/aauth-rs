@@ -213,7 +213,7 @@ where
         agent_token,
         federation,
     } = match record.context {
-        PendingContext::Person(c) => c,
+        PendingContext::Person(c) => *c,
         _ => return StatusCode::BAD_REQUEST.into_response(),
     };
 
@@ -443,7 +443,7 @@ where
         let Some(mut record) = state.pending.load(&id).await.ok().flatten() else {
             return StatusCode::GONE.into_response();
         };
-        record.context = PendingContext::Person(person_ctx);
+        record.context = PendingContext::Person(Box::new(person_ctx));
         record.snapshot = PendingSnapshot::waiting(requirement.clone());
         if state.pending.save(&id, record).await.is_err() {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -452,7 +452,7 @@ where
         let record = PendingRecord::new(
             id.clone(),
             PendingKind::PersonToken,
-            PendingContext::Person(person_ctx),
+            PendingContext::Person(Box::new(person_ctx)),
             PendingSnapshot::waiting(requirement.clone()),
             orch.pending_ttl_secs,
         );
@@ -615,7 +615,7 @@ where
     let record = PendingRecord::new(
         id,
         PendingKind::PersonToken,
-        PendingContext::Person(PersonPendingContext {
+        PendingContext::Person(Box::new(PersonPendingContext {
             person_server_url: ctx.person_server_url.clone(),
             resource_url: ctx.resource_url.clone(),
             agent_claims: ctx.agent_claims.clone(),
@@ -623,7 +623,7 @@ where
             exchange_request: ctx.exchange_request.clone(),
             agent_token: agent_jwt.to_string(),
             federation: None,
-        }),
+        })),
         PendingSnapshot::waiting(requirement.clone()),
         orch.pending_ttl_secs,
     );

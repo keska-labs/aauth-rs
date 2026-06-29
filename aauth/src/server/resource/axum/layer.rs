@@ -278,11 +278,11 @@ where
                             let record = PendingRecord::new(
                                 id,
                                 PendingKind::ResourceAccess,
-                                PendingContext::Resource(ResourcePendingContext {
+                                PendingContext::Resource(Box::new(ResourcePendingContext {
                                     resource_url: resource_url.clone(),
                                     agent_claims: agent.clone(),
                                     scope: None,
-                                }),
+                                })),
                                 PendingSnapshot::waiting(requirement.clone()),
                                 *pending_ttl_secs,
                             );

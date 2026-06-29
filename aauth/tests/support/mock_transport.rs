@@ -307,7 +307,7 @@ impl MockServerState {
             let record = PendingRecord::new(
                 id,
                 PendingKind::PersonToken,
-                PendingContext::Person(PersonPendingContext {
+                PendingContext::Person(Box::new(PersonPendingContext {
                     person_server_url: self.person_server_url.clone(),
                     resource_url: self.resource_url.clone(),
                     agent_claims: aauth::jwt::AgentClaims {
@@ -342,7 +342,7 @@ impl MockServerState {
                     exchange_request: exchange,
                     agent_token: String::new(),
                     federation: None,
-                }),
+                })),
                 PendingSnapshot::waiting(requirement.clone()),
                 DEFAULT_PENDING_TTL_SECS,
             );

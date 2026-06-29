@@ -162,7 +162,7 @@ where
     }
 
     let ctx = match record.context {
-        PendingContext::Access(c) => access_context_from_pending(c),
+        PendingContext::Access(c) => access_context_from_pending(*c),
         _ => return StatusCode::BAD_REQUEST.into_response(),
     };
 
@@ -347,7 +347,7 @@ where
     let record = PendingRecord::new(
         id,
         PendingKind::AccessToken,
-        PendingContext::Access(AccessPendingContext {
+        PendingContext::Access(Box::new(AccessPendingContext {
             access_server_url: ctx.access_server_url.clone(),
             resource_url: ctx.resource_url.clone(),
             person_server_url: ctx.person_server_url.clone(),
@@ -355,7 +355,7 @@ where
             resource_claims: ctx.resource_claims.clone(),
             resource_token: ctx.resource_token.clone(),
             agent_token: ctx.agent_token.clone(),
-        }),
+        })),
         PendingSnapshot::waiting(requirement.clone()),
         ttl,
     );
