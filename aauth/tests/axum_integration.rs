@@ -17,7 +17,7 @@ const AGENT_ID: &str = "aauth:test@example.com";
 
 fn build_client(
     spawned: &SpawnedServer,
-    auth_server_url: Option<String>,
+    person_server_url: Option<String>,
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<ClarificationCallback>,
     provider: Option<std::sync::Arc<dyn aauth::KeyMaterialProvider>>,
@@ -28,8 +28,8 @@ fn build_client(
     ClientBuilder::new(reqwest::Client::new())
         .with(AAuthMiddleware::new(AAuthClientOptions {
             provider,
-            auth_server_url,
-            auth_server_metadata: None,
+            person_server_url,
+            person_server_metadata: None,
             on_metadata: None,
             on_auth_token: None,
             on_opaque_token: None,
@@ -80,7 +80,7 @@ async fn auth_token_challenge_over_http() {
 
     let client = build_client(
         &spawned,
-        Some(spawned.auth_server_url.clone()),
+        Some(spawned.person_server_url.clone()),
         None,
         None,
         None,
@@ -125,14 +125,14 @@ async fn deferred_interaction_over_http() {
     })
     .await;
 
-    let interaction_url = format!("{}/interact", spawned.auth_server_url);
+    let interaction_url = format!("{}/interact", spawned.person_server_url);
     let received = Arc::new(Mutex::new(None));
     let received_cb = Arc::clone(&received);
     let manager_cb = Arc::clone(&spawned.interaction_manager);
     let keys_cb = spawned.keys.clone();
     let pending_id_capture_cb = Arc::clone(&spawned.pending_id_capture);
     let resource_url = spawned.resource_url.clone();
-    let auth_server_url = spawned.auth_server_url.clone();
+    let person_server_url = spawned.person_server_url.clone();
     let agent_url = spawned.agent_url.clone();
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
@@ -140,7 +140,7 @@ async fn deferred_interaction_over_http() {
         if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
             let auth_jwt = mint_auth_jwt(
                 &keys_cb,
-                &auth_server_url,
+                &person_server_url,
                 &resource_url,
                 &agent_url,
                 Some("user-deferred"),
@@ -158,7 +158,7 @@ async fn deferred_interaction_over_http() {
 
     let client = build_client(
         &spawned,
-        Some(spawned.auth_server_url.clone()),
+        Some(spawned.person_server_url.clone()),
         Some(on_interaction),
         None,
         None,
@@ -197,7 +197,7 @@ async fn clarification_deferred_over_http() {
     let keys_cb = spawned.keys.clone();
     let pending_id_capture_cb = Arc::clone(&spawned.pending_id_capture);
     let resource_url = spawned.resource_url.clone();
-    let auth_server_url = spawned.auth_server_url.clone();
+    let person_server_url = spawned.person_server_url.clone();
     let agent_url = spawned.agent_url.clone();
 
     let on_clarification: ClarificationCallback = Arc::new(move |prompt| {
@@ -212,7 +212,7 @@ async fn clarification_deferred_over_http() {
         if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
             let auth_jwt = mint_auth_jwt(
                 &keys_cb,
-                &auth_server_url,
+                &person_server_url,
                 &resource_url,
                 &agent_url,
                 Some("user-clarified"),
@@ -230,7 +230,7 @@ async fn clarification_deferred_over_http() {
 
     let client = build_client(
         &spawned,
-        Some(spawned.auth_server_url.clone()),
+        Some(spawned.person_server_url.clone()),
         Some(on_interaction),
         Some(on_clarification),
         None,

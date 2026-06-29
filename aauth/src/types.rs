@@ -165,7 +165,14 @@ pub struct Mission {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthServerMetadata {
+pub struct PersonServerMetadata {
+    pub token_endpoint: String,
+    #[serde(default)]
+    pub jwks_uri: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessServerMetadata {
     pub token_endpoint: String,
     #[serde(default)]
     pub jwks_uri: Option<String>,

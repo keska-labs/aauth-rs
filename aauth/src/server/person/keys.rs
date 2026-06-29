@@ -1,9 +1,8 @@
-use async_trait::async_trait;
 use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
-use crate::jwt::{ActClaim, AuthClaims, CnfClaim, ResourceClaims};
-use crate::keys::{Ed25519KeyPair, TestKeys};
+use crate::jwt::{ActClaim, AuthClaims, CnfClaim};
+use crate::keys::TestKeys;
 use crate::types::JwtTyp;
 
 pub trait AuthJwtMinter: Send + Sync {
@@ -62,52 +61,20 @@ impl AuthJwtMinter for TestAuthJwtMinter {
 
         let mut header = Header::new(Algorithm::EdDSA);
         header.typ = Some(JwtTyp::Auth.as_str().into());
-        header.kid = self.keys.auth_server.kid().map(str::to_string);
+        header.kid = self.keys.person_server.kid().map(str::to_string);
 
-        encode(&header, &claims, &self.keys.auth_server.encoding_key()).expect("sign auth jwt")
+        encode(
+            &header,
+            &claims,
+            &self.keys.person_server.encoding_key(),
+        )
+        .expect("sign auth jwt")
     }
 }
 
 impl TestKeys {
     pub fn auth_jwt_minter(&self) -> TestAuthJwtMinter {
         TestAuthJwtMinter::new(self.clone())
-    }
-
-    pub fn resource_token_signer(&self) -> Ed25519ResourceTokenSigner {
-        Ed25519ResourceTokenSigner::new(self.resource.clone())
-    }
-}
-
-#[async_trait]
-pub trait ResourceTokenSigner: Send + Sync {
-    async fn sign_resource_token(
-        &self,
-        header: Header,
-        claims: ResourceClaims,
-    ) -> Result<String, String>;
-}
-
-pub struct Ed25519ResourceTokenSigner {
-    key: Ed25519KeyPair,
-}
-
-impl Ed25519ResourceTokenSigner {
-    pub fn new(key: Ed25519KeyPair) -> Self {
-        Self { key }
-    }
-}
-
-#[async_trait]
-impl ResourceTokenSigner for Ed25519ResourceTokenSigner {
-    async fn sign_resource_token(
-        &self,
-        mut header: Header,
-        claims: ResourceClaims,
-    ) -> Result<String, String> {
-        if header.kid.is_none() {
-            header.kid = self.key.kid().map(str::to_string);
-        }
-        encode(&header, &claims, &self.key.encoding_key()).map_err(|e| e.to_string())
     }
 }
 

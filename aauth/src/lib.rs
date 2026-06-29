@@ -6,6 +6,13 @@
 //! - `client-reqwest` — reqwest middleware and token exchange (`client::reqwest`)
 //! - `server` — token verification, resource token creation, interaction management
 //! - `server-axum` — axum middleware and route helpers (`server::axum`)
+//!
+//! # Protocol roles
+//!
+//! - **Agent** — [`client`]
+//! - **Resource server** — [`server::resource`]
+//! - **Person server** — [`server::person`]
+//! - **Access server** — [`server::access`] (stub; four-party federation not yet implemented)
 
 pub mod error;
 pub mod headers;
@@ -39,18 +46,13 @@ pub use jwt::{
 };
 pub use keys::{
     Ed25519KeyPair, OkpSigningKey, TestKeys, create_test_keys, static_agent_metadata_fetcher,
-    static_auth_metadata_fetcher,
+    static_person_metadata_fetcher,
 };
 pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
 #[cfg(feature = "server")]
-pub use server::keys::{
-    AuthJwtMinter, Ed25519ResourceTokenSigner, ResourceTokenSigner, TestAuthJwtMinter,
-    mint_auth_jwt,
+pub use server::{
+    AuthJwtMinter, Ed25519ResourceTokenSigner, InteractionManager, InteractionManagerOptions,
+    PendingRequest, ResourceTokenOptions, ResourceTokenSigner, TestAuthJwtMinter,
+    VerifyTokenOptions, create_resource_token, mint_auth_jwt, verify_token,
 };
 pub use types::*;
-
-#[cfg(feature = "server")]
-pub use server::{
-    InteractionManager, InteractionManagerOptions, PendingRequest, ResourceTokenOptions,
-    VerifyTokenOptions, create_resource_token, verify_token,
-};

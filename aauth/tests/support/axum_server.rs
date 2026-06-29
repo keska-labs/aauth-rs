@@ -6,16 +6,16 @@ use aauth::TestKeys;
 use aauth::VerifiedToken;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::server::axum::{
-    AAuthLayer, AuthServerState, VerifiedAAuthToken, jwks_handler, pending_clarification_post_handler,
-    pending_poll_handler, person_metadata_handler, token_exchange_deferred_handler,
-    token_exchange_handler,
+    AAuthLayer, PersonServerState, VerifiedAAuthToken, pending_clarification_post_handler,
+    pending_poll_handler, person_jwks_handler, person_metadata_handler,
+    token_exchange_deferred_handler, token_exchange_handler,
 };
 use aauth::server::{InteractionManager, InteractionManagerOptions, ResourceTokenSigner};
 use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use async_trait::async_trait;
 use axum::Json;
 use axum::Router;
-use axum::extract::State;
+use axum::extract::{FromRef, State};
 use axum::routing::{get, post};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
@@ -43,7 +43,7 @@ pub struct SpawnedServer {
     pub addr: SocketAddr,
     pub keys: TestKeys,
     pub agent_url: String,
-    pub auth_server_url: String,
+    pub person_server_url: String,
     pub resource_url: String,
     pub interaction_manager: Arc<InteractionManager>,
     pub pending_id_capture: Arc<Mutex<Option<String>>>,
@@ -56,6 +56,19 @@ impl Drop for SpawnedServer {
     }
 }
 
+/// Combined test harness state: person-server routes plus agent well-known endpoints.
+#[derive(Clone)]
+struct TestServerState {
+    person: PersonServerState,
+    agent_jwks_uri: String,
+}
+
+impl FromRef<TestServerState> for PersonServerState {
+    fn from_ref(input: &TestServerState) -> PersonServerState {
+        input.person.clone()
+    }
+}
+
 pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let keys = aauth::create_test_keys();
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -64,16 +77,16 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let addr = listener.local_addr().expect("local addr");
     let base_url = format!("http://{addr}");
     let agent_url = base_url.clone();
-    let auth_server_url = base_url.clone();
+    let person_server_url = base_url.clone();
     let resource_url = base_url.clone();
     let agent_jwks_uri = format!("{base_url}/agent/jwks");
-    let auth_jwks_uri = format!("{base_url}/auth/jwks");
+    let person_jwks_uri = format!("{base_url}/auth/jwks");
 
     let fetcher: Arc<DualMetadataFetcher> = Arc::new(DualMetadataFetcher {
         agent: StaticMetadataFetcher::new(agent_jwks_uri.clone(), keys.agent_root.jwk_set()),
-        auth: StaticMetadataFetcher::new(auth_jwks_uri.clone(), keys.auth_server.jwk_set()),
+        person: StaticMetadataFetcher::new(person_jwks_uri.clone(), keys.person_server.jwk_set()),
         agent_jwks_uri: agent_jwks_uri.clone(),
-        auth_jwks_uri: auth_jwks_uri.clone(),
+        person_jwks_uri: person_jwks_uri.clone(),
     });
 
     let resource_token_signer: Arc<dyn ResourceTokenSigner> =
@@ -82,14 +95,14 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let aauth_layer = AAuthLayer::new(
         fetcher,
         resource_url.clone(),
-        auth_server_url.clone(),
+        person_server_url.clone(),
         config.require_auth_token,
         resource_token_signer,
     );
 
     let interaction_manager = Arc::new(InteractionManager::new(InteractionManagerOptions {
-        base_url: auth_server_url.clone(),
-        interaction_url: format!("{auth_server_url}/interact"),
+        base_url: person_server_url.clone(),
+        interaction_url: format!("{person_server_url}/interact"),
         pending_path: None,
         ttl: None,
     }));
@@ -97,22 +110,24 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let pending_id_capture = Arc::new(Mutex::new(None));
     let clarification_state = Arc::new(Mutex::new(HashMap::new()));
 
-    let auth_state = AuthServerState {
-        keys: keys.clone(),
-        auth_server_url: auth_server_url.clone(),
-        resource_url: resource_url.clone(),
-        agent_url: agent_url.clone(),
-        agent_jwks_uri: agent_jwks_uri.clone(),
-        auth_jwks_uri: auth_jwks_uri.clone(),
-        interaction_manager: Arc::clone(&interaction_manager),
-        deferred_mode: config.deferred_mode,
-        pending_id_capture: Some(Arc::clone(&pending_id_capture)),
-        clarification_state: if config.clarification_on_poll {
-            Some(Arc::clone(&clarification_state))
-        } else {
-            None
+    let test_state = TestServerState {
+        person: PersonServerState {
+            keys: keys.clone(),
+            person_server_url: person_server_url.clone(),
+            resource_url: resource_url.clone(),
+            agent_url: agent_url.clone(),
+            person_jwks_uri: person_jwks_uri.clone(),
+            interaction_manager: Arc::clone(&interaction_manager),
+            deferred_mode: config.deferred_mode,
+            pending_id_capture: Some(Arc::clone(&pending_id_capture)),
+            clarification_state: if config.clarification_on_poll {
+                Some(Arc::clone(&clarification_state))
+            } else {
+                None
+            },
+            clarification_prompt: config.clarification_on_poll,
         },
-        clarification_prompt: config.clarification_on_poll,
+        agent_jwks_uri: agent_jwks_uri.clone(),
     };
 
     let api = Router::new()
@@ -133,7 +148,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
 
         app = app
             .route("/.well-known/aauth-person.json", get(person_metadata_handler))
-            .route("/auth/jwks", get(jwks_handler))
+            .route("/auth/jwks", get(person_jwks_handler))
             .route("/aauth/token", token_handler)
             .route(
                 "/pending/{id}",
@@ -141,7 +156,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
             );
     }
 
-    let app = app.with_state(auth_state);
+    let app = app.with_state(test_state);
 
     let handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("serve");
@@ -151,7 +166,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         addr,
         keys,
         agent_url,
-        auth_server_url,
+        person_server_url,
         resource_url,
         interaction_manager,
         pending_id_capture,
@@ -179,7 +194,7 @@ async fn api_data_handler(token: VerifiedAAuthToken) -> Json<serde_json::Value> 
 }
 
 async fn agent_metadata_handler(
-    State(state): State<AuthServerState>,
+    State(state): State<TestServerState>,
 ) -> Json<MetadataDocument> {
     Json(MetadataDocument {
         jwks_uri: state.agent_jwks_uri,
@@ -187,18 +202,18 @@ async fn agent_metadata_handler(
     })
 }
 
-async fn agent_jwks_handler(State(state): State<AuthServerState>) -> Json<JwksDocument> {
+async fn agent_jwks_handler(State(state): State<TestServerState>) -> Json<JwksDocument> {
     Json(JwksDocument {
-        keys: state.keys.agent_root.jwk_set(),
+        keys: state.person.keys.agent_root.jwk_set(),
     })
 }
 
 #[derive(Clone)]
 struct DualMetadataFetcher {
     agent: StaticMetadataFetcher,
-    auth: StaticMetadataFetcher,
+    person: StaticMetadataFetcher,
     agent_jwks_uri: String,
-    auth_jwks_uri: String,
+    person_jwks_uri: String,
 }
 
 #[async_trait]
@@ -208,15 +223,15 @@ impl MetadataFetcher for DualMetadataFetcher {
         if dwk == "aauth-agent.json" {
             self.agent.resolve_jwks_uri(iss, dwk).await
         } else {
-            self.auth.resolve_jwks_uri(iss, dwk).await
+            self.person.resolve_jwks_uri(iss, dwk).await
         }
     }
 
     async fn fetch_jwks(&self, jwks_uri: &str) -> aauth::Result<jsonwebtoken::jwk::JwkSet> {
         if jwks_uri == self.agent_jwks_uri {
             self.agent.fetch_jwks(jwks_uri).await
-        } else if jwks_uri == self.auth_jwks_uri {
-            self.auth.fetch_jwks(jwks_uri).await
+        } else if jwks_uri == self.person_jwks_uri {
+            self.person.fetch_jwks(jwks_uri).await
         } else {
             Err(aauth::AAuthError::Token {
                 code: "metadata_fetch_failed".into(),

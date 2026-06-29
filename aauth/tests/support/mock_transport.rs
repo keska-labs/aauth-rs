@@ -10,7 +10,7 @@ use aauth::server::{
     verify_token,
 };
 use aauth::types::{
-    AgentOkResponse, AuthOkResponse, AuthServerMetadata, JwksDocument, MetadataDocument,
+    AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument, PersonServerMetadata,
     RequirementLevel, TokenExchangeRequest, TokenResponseBody,
 };
 use async_trait::async_trait;
@@ -29,7 +29,7 @@ pub struct MockTransport {
 pub struct MockServerState {
     pub keys: TestKeys,
     pub resource_url: String,
-    pub auth_server_url: String,
+    pub person_server_url: String,
     pub agent_url: String,
     pub require_auth_token: bool,
     pub deferred_mode: bool,
@@ -67,11 +67,11 @@ impl MockServerState {
             return self.handle_resource(&url, req).await;
         }
 
-        let person_metadata = format!("{}/.well-known/aauth-person.json", self.auth_server_url);
+        let person_metadata = format!("{}/.well-known/aauth-person.json", self.person_server_url);
         if url == person_metadata {
-            let body = AuthServerMetadata {
-                token_endpoint: format!("{}/aauth/token", self.auth_server_url),
-                jwks_uri: Some(format!("{}/jwks", self.auth_server_url)),
+            let body = PersonServerMetadata {
+                token_endpoint: format!("{}/aauth/token", self.person_server_url),
+                jwks_uri: Some(format!("{}/jwks", self.person_server_url)),
             };
             return Ok(Response::from(
                 http::Response::builder()
@@ -83,12 +83,12 @@ impl MockServerState {
             ));
         }
 
-        let token_endpoint = format!("{}/aauth/token", self.auth_server_url);
+        let token_endpoint = format!("{}/aauth/token", self.person_server_url);
         if url == token_endpoint {
             return self.handle_token_post(&url, req).await;
         }
 
-        if url.starts_with(&format!("{}/pending/", self.auth_server_url)) {
+        if url.starts_with(&format!("{}/pending/", self.person_server_url)) {
             return self.handle_pending(&url).await;
         }
 
@@ -123,10 +123,10 @@ impl MockServerState {
             ));
         }
 
-        let auth_jwks = format!("{}/jwks", self.auth_server_url);
-        if url == auth_jwks {
+        let person_jwks = format!("{}/jwks", self.person_server_url);
+        if url == person_jwks {
             let body = JwksDocument {
-                keys: self.keys.auth_server.jwk_set(),
+                keys: self.keys.person_server.jwk_set(),
             };
             return Ok(Response::from(
                 http::Response::builder()
@@ -153,9 +153,9 @@ impl MockServerState {
 
         let fetcher = Arc::new(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
-            auth: self.keys.auth_metadata_fetcher(&self.auth_server_url),
+            person: self.keys.person_metadata_fetcher(&self.person_server_url),
             agent_jwks_uri: format!("{}/jwks", self.agent_url),
-            auth_jwks_uri: format!("{}/jwks", self.auth_server_url),
+            person_jwks_uri: format!("{}/jwks", self.person_server_url),
         });
 
         let verified = verify_token(VerifyTokenOptions {
@@ -198,7 +198,7 @@ impl MockServerState {
                 let resource_token = create_resource_token(
                     ResourceTokenOptions {
                         resource: self.resource_url.clone(),
-                        auth_server: self.auth_server_url.clone(),
+                        audience: self.person_server_url.clone(),
                         agent: agent.iss.clone(),
                         agent_jkt: self.keys.agent_ephemeral.thumbprint().to_string(),
                         scope: None,
@@ -288,7 +288,7 @@ impl MockServerState {
 
         let auth_jwt = mint_auth_jwt(
             &self.keys,
-            &self.auth_server_url,
+            &self.person_server_url,
             &self.resource_url,
             &self.agent_url,
             Some("user-123"),
@@ -379,9 +379,9 @@ impl MockServerState {
 
 struct DualMetadataFetcher {
     agent: StaticMetadataFetcher,
-    auth: StaticMetadataFetcher,
+    person: StaticMetadataFetcher,
     agent_jwks_uri: String,
-    auth_jwks_uri: String,
+    person_jwks_uri: String,
 }
 
 #[async_trait]
@@ -390,7 +390,7 @@ impl MetadataFetcher for DualMetadataFetcher {
         if dwk == "aauth-agent.json" {
             self.agent.resolve_jwks_uri(iss, dwk).await
         } else {
-            self.auth.resolve_jwks_uri(iss, dwk).await
+            self.person.resolve_jwks_uri(iss, dwk).await
         }
     }
 
@@ -398,7 +398,7 @@ impl MetadataFetcher for DualMetadataFetcher {
         if jwks_uri == self.agent_jwks_uri {
             self.agent.fetch_jwks(jwks_uri).await
         } else {
-            self.auth.fetch_jwks(jwks_uri).await
+            self.person.fetch_jwks(jwks_uri).await
         }
     }
 }

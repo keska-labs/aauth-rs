@@ -28,8 +28,8 @@ async fn main() -> aauth::Result<()> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(AAuthMiddleware::new(AAuthClientOptions {
             provider,
-            auth_server_url: None,
-            auth_server_metadata: None,
+            person_server_url: None,
+            person_server_metadata: None,
             on_metadata: None,
             on_auth_token: None,
             on_opaque_token: None,

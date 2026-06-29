@@ -10,8 +10,8 @@ use tower::{Layer, Service};
 use crate::headers::{AAuthRequirementParams, build_aauth_requirement};
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
-use crate::server::keys::ResourceTokenSigner;
-use crate::server::{
+use crate::server::resource::keys::ResourceTokenSigner;
+use crate::server::resource::{
     ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_token,
 };
 use crate::signature::verify_request_signature;
@@ -21,7 +21,7 @@ use crate::types::RequirementLevel;
 pub struct AAuthLayer<F: MetadataFetcher> {
     pub fetcher: Arc<F>,
     pub resource_url: String,
-    pub auth_server_url: String,
+    pub person_server_url: String,
     pub require_auth_token: bool,
     pub resource_token_signer: Arc<dyn ResourceTokenSigner>,
 }
@@ -30,14 +30,14 @@ impl<F: MetadataFetcher> AAuthLayer<F> {
     pub fn new(
         fetcher: Arc<F>,
         resource_url: impl Into<String>,
-        auth_server_url: impl Into<String>,
+        person_server_url: impl Into<String>,
         require_auth_token: bool,
         resource_token_signer: Arc<dyn ResourceTokenSigner>,
     ) -> Self {
         Self {
             fetcher,
             resource_url: resource_url.into(),
-            auth_server_url: auth_server_url.into(),
+            person_server_url: person_server_url.into(),
             require_auth_token,
             resource_token_signer,
         }
@@ -52,7 +52,7 @@ impl<S, F: MetadataFetcher + Clone + 'static> Layer<S> for AAuthLayer<F> {
             inner,
             fetcher: Arc::clone(&self.fetcher),
             resource_url: self.resource_url.clone(),
-            auth_server_url: self.auth_server_url.clone(),
+            person_server_url: self.person_server_url.clone(),
             require_auth_token: self.require_auth_token,
             resource_token_signer: Arc::clone(&self.resource_token_signer),
         }
@@ -64,7 +64,7 @@ pub struct AAuthService<S, F: MetadataFetcher> {
     inner: S,
     fetcher: Arc<F>,
     resource_url: String,
-    auth_server_url: String,
+    person_server_url: String,
     require_auth_token: bool,
     resource_token_signer: Arc<dyn ResourceTokenSigner>,
 }
@@ -88,7 +88,7 @@ where
     fn call(&mut self, mut req: Request<B>) -> Self::Future {
         let fetcher = Arc::clone(&self.fetcher);
         let resource_url = self.resource_url.clone();
-        let auth_server_url = self.auth_server_url.clone();
+        let person_server_url = self.person_server_url.clone();
         let require_auth_token = self.require_auth_token;
         let resource_token_signer = Arc::clone(&self.resource_token_signer);
         let mut inner = self.inner.clone();
@@ -122,7 +122,7 @@ where
                     let resource_token = match create_resource_token(
                         ResourceTokenOptions {
                             resource: resource_url,
-                            auth_server: auth_server_url,
+                            audience: person_server_url,
                             agent: agent.iss,
                             agent_jkt: verified_sig.thumbprint,
                             scope: None,

@@ -122,7 +122,7 @@ impl OkpSigningKey for Ed25519KeyPair {
 pub struct TestKeys {
     pub agent_root: Ed25519KeyPair,
     pub agent_ephemeral: Ed25519KeyPair,
-    pub auth_server: Ed25519KeyPair,
+    pub person_server: Ed25519KeyPair,
     pub resource: Ed25519KeyPair,
 }
 
@@ -131,7 +131,7 @@ impl TestKeys {
         Self {
             agent_root: Ed25519KeyPair::generate_with_kid("agent-root-1"),
             agent_ephemeral: Ed25519KeyPair::generate(),
-            auth_server: Ed25519KeyPair::generate_with_kid("auth-1"),
+            person_server: Ed25519KeyPair::generate_with_kid("auth-1"),
             resource: Ed25519KeyPair::generate_with_kid("resource-1"),
         }
     }
@@ -140,10 +140,10 @@ impl TestKeys {
         StaticMetadataFetcher::new(format!("{agent_url}/jwks"), self.agent_root.jwk_set())
     }
 
-    pub fn auth_metadata_fetcher(&self, auth_server_url: &str) -> StaticMetadataFetcher {
+    pub fn person_metadata_fetcher(&self, person_server_url: &str) -> StaticMetadataFetcher {
         StaticMetadataFetcher::new(
-            format!("{auth_server_url}/jwks"),
-            self.auth_server.jwk_set(),
+            format!("{person_server_url}/jwks"),
+            self.person_server.jwk_set(),
         )
     }
 }
@@ -156,9 +156,9 @@ pub fn static_agent_metadata_fetcher(keys: &TestKeys, agent_url: &str) -> Static
     keys.agent_metadata_fetcher(agent_url)
 }
 
-pub fn static_auth_metadata_fetcher(
+pub fn static_person_metadata_fetcher(
     keys: &TestKeys,
-    auth_server_url: &str,
+    person_server_url: &str,
 ) -> StaticMetadataFetcher {
-    keys.auth_metadata_fetcher(auth_server_url)
+    keys.person_metadata_fetcher(person_server_url)
 }

@@ -10,7 +10,7 @@ use super::mock_transport::{MockServerState, MockTransport};
 pub struct MockServerConfig {
     pub keys: TestKeys,
     pub resource_url: String,
-    pub auth_server_url: String,
+    pub person_server_url: String,
     pub agent_url: String,
     pub sub: String,
     pub require_auth_token: bool,
@@ -30,8 +30,8 @@ impl MockServer {
             if config.deferred_mode {
                 Some(Arc::new(InteractionManager::new(
                     InteractionManagerOptions {
-                        base_url: config.auth_server_url.clone(),
-                        interaction_url: format!("{}/interact", config.auth_server_url),
+                        base_url: config.person_server_url.clone(),
+                        interaction_url: format!("{}/interact", config.person_server_url),
                         pending_path: None,
                         ttl: None,
                     },
@@ -44,7 +44,7 @@ impl MockServer {
         let state = Arc::new(MockServerState {
             keys: config.keys,
             resource_url: config.resource_url,
-            auth_server_url: config.auth_server_url,
+            person_server_url: config.person_server_url,
             agent_url: config.agent_url,
             require_auth_token: config.require_auth_token,
             deferred_mode: config.deferred_mode,

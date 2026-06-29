@@ -145,10 +145,10 @@ impl AAuthMiddleware {
                 InjectorStep::Invalidate(_) => continue,
                 InjectorStep::Continue => continue,
                 InjectorStep::ExchangeToken { resource_token } => {
-                    let auth_server_url =
-                        self.options.auth_server_url.clone().ok_or_else(|| {
+                    let person_server_url =
+                        self.options.person_server_url.clone().ok_or_else(|| {
                             AAuthError::Message(
-                                "auth-token challenge received but no auth_server_url configured"
+                                "auth-token challenge received but no person_server_url configured"
                                     .into(),
                             )
                         })?;
@@ -161,8 +161,8 @@ impl AAuthMiddleware {
 
                     let result = exchange_token_with(
                         TokenExchangeOptions {
-                            auth_server_url: auth_server_url.clone(),
-                            auth_server_metadata: self.options.auth_server_metadata.clone(),
+                            person_server_url: person_server_url.clone(),
+                            person_server_metadata: self.options.person_server_metadata.clone(),
                             on_metadata: self.options.on_metadata.clone(),
                             resource_token,
                             justification: self.options.justification.clone(),
@@ -187,7 +187,7 @@ impl AAuthMiddleware {
                         let mut injector = self.injector.lock().unwrap();
                         injector.record_auth_token(
                             &origin,
-                            &auth_server_url,
+                            &person_server_url,
                             result.auth_token,
                             result.expires_in,
                             self.options.on_auth_token.as_ref(),

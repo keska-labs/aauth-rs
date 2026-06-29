@@ -7,21 +7,20 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
 use crate::keys::TestKeys;
-use crate::server::InteractionManager;
-use crate::server::keys::mint_auth_jwt;
+use crate::server::person::InteractionManager;
+use crate::server::person::keys::mint_auth_jwt;
 use crate::types::{
-    AuthServerMetadata, ClarificationChallenge, ClarificationResponse, JwksDocument,
-    MetadataDocument, TokenExchangeRequest, TokenResponseBody,
+    ClarificationChallenge, ClarificationResponse, JwksDocument, PersonServerMetadata,
+    TokenExchangeRequest, TokenResponseBody,
 };
 
 #[derive(Clone)]
-pub struct AuthServerState {
+pub struct PersonServerState {
     pub keys: TestKeys,
-    pub auth_server_url: String,
+    pub person_server_url: String,
     pub resource_url: String,
     pub agent_url: String,
-    pub agent_jwks_uri: String,
-    pub auth_jwks_uri: String,
+    pub person_jwks_uri: String,
     pub interaction_manager: Arc<InteractionManager>,
     pub deferred_mode: bool,
     pub pending_id_capture: Option<Arc<Mutex<Option<String>>>>,
@@ -30,44 +29,29 @@ pub struct AuthServerState {
 }
 
 pub async fn person_metadata_handler(
-    State(state): State<AuthServerState>,
-) -> Json<AuthServerMetadata> {
-    Json(AuthServerMetadata {
-        token_endpoint: format!("{}/aauth/token", state.auth_server_url),
-        jwks_uri: Some(state.auth_jwks_uri.clone()),
+    State(state): State<PersonServerState>,
+) -> Json<PersonServerMetadata> {
+    Json(PersonServerMetadata {
+        token_endpoint: format!("{}/aauth/token", state.person_server_url),
+        jwks_uri: Some(state.person_jwks_uri.clone()),
     })
 }
 
-pub async fn jwks_handler(State(state): State<AuthServerState>) -> Json<JwksDocument> {
+pub async fn person_jwks_handler(State(state): State<PersonServerState>) -> Json<JwksDocument> {
     Json(JwksDocument {
-        keys: state.keys.auth_server.jwk_set(),
-    })
-}
-
-pub async fn agent_metadata_handler(
-    State(state): State<AuthServerState>,
-) -> Json<MetadataDocument> {
-    Json(MetadataDocument {
-        jwks_uri: state.agent_jwks_uri.clone(),
-        extra: Default::default(),
-    })
-}
-
-pub async fn agent_jwks_handler(State(state): State<AuthServerState>) -> Json<JwksDocument> {
-    Json(JwksDocument {
-        keys: state.keys.agent_root.jwk_set(),
+        keys: state.keys.person_server.jwk_set(),
     })
 }
 
 pub async fn token_exchange_handler(
-    State(state): State<AuthServerState>,
+    State(state): State<PersonServerState>,
     body: Option<Json<TokenExchangeRequest>>,
 ) -> Result<Json<TokenResponseBody>, StatusCode> {
     let _request = body.map(|Json(b)| b);
 
     let auth_jwt = mint_auth_jwt(
         &state.keys,
-        &state.auth_server_url,
+        &state.person_server_url,
         &state.resource_url,
         &state.agent_url,
         Some("user-123"),
@@ -81,7 +65,7 @@ pub async fn token_exchange_handler(
 }
 
 pub async fn token_exchange_deferred_handler(
-    State(state): State<AuthServerState>,
+    State(state): State<PersonServerState>,
     body: Option<Json<TokenExchangeRequest>>,
 ) -> Result<Response, StatusCode> {
     let _request = body.map(|Json(b)| b);
@@ -108,7 +92,7 @@ pub async fn token_exchange_deferred_handler(
 }
 
 pub async fn pending_poll_handler(
-    State(state): State<AuthServerState>,
+    State(state): State<PersonServerState>,
     Path(id): Path<String>,
 ) -> Response {
     if state.clarification_prompt {
@@ -136,7 +120,7 @@ pub async fn pending_poll_handler(
 }
 
 pub async fn pending_clarification_post_handler(
-    State(state): State<AuthServerState>,
+    State(state): State<PersonServerState>,
     Path(id): Path<String>,
     body: Json<ClarificationResponse>,
 ) -> Response {
@@ -150,7 +134,7 @@ pub async fn pending_clarification_post_handler(
     StatusCode::ACCEPTED.into_response()
 }
 
-fn pending_poll_response(state: &AuthServerState, id: &str) -> Response {
+fn pending_poll_response(state: &PersonServerState, id: &str) -> Response {
     let manager = &state.interaction_manager;
     let Some(pending) = manager.get_pending(id) else {
         return StatusCode::GONE.into_response();

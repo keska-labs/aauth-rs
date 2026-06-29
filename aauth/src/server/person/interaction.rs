@@ -146,8 +146,8 @@ mod tests {
     #[test]
     fn create_pending_header_format() {
         let manager = InteractionManager::new(InteractionManagerOptions {
-            base_url: "https://auth.example".into(),
-            interaction_url: "https://auth.example/interact".into(),
+            base_url: "https://person.example".into(),
+            interaction_url: "https://person.example/interact".into(),
             pending_path: None,
             ttl: None,
         });

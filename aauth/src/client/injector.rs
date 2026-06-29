@@ -6,7 +6,7 @@ use http::{HeaderMap, StatusCode};
 
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
-use crate::types::{AuthServerMetadata, Capability, Mission, RequirementLevel};
+use crate::types::{Capability, Mission, PersonServerMetadata, RequirementLevel};
 
 pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
 
@@ -50,7 +50,7 @@ struct CachedOpaque {
 pub struct AAuthInjector {
     token_cache: HashMap<String, CachedToken>,
     opaque_cache: HashMap<String, CachedOpaque>,
-    auth_server_url: Option<String>,
+    person_server_url: Option<String>,
     opaque_seed: Option<String>,
     on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
 }
@@ -58,8 +58,8 @@ pub struct AAuthInjector {
 #[derive(Clone)]
 pub struct AAuthClientOptions {
     pub provider: Arc<dyn super::keys::KeyMaterialProvider>,
-    pub auth_server_url: Option<String>,
-    pub auth_server_metadata: Option<AuthServerMetadata>,
+    pub person_server_url: Option<String>,
+    pub person_server_metadata: Option<PersonServerMetadata>,
     pub opaque_token: Option<String>,
     pub capabilities: Option<Vec<Capability>>,
     pub mission: Option<Mission>,
@@ -68,7 +68,7 @@ pub struct AAuthClientOptions {
     pub tenant: Option<String>,
     pub domain_hint: Option<String>,
     pub prompt: Option<String>,
-    pub on_metadata: Option<Arc<dyn Fn(AuthServerMetadata) + Send + Sync>>,
+    pub on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
     pub on_auth_token: Option<Arc<dyn Fn(String, u64) + Send + Sync>>,
     pub on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
     pub on_interaction: Option<InteractionCallback>,
@@ -80,14 +80,14 @@ impl AAuthInjector {
         Self {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
-            auth_server_url: options.auth_server_url.clone(),
+            person_server_url: options.person_server_url.clone(),
             opaque_seed: options.opaque_token.clone(),
             on_opaque_token: options.on_opaque_token.clone(),
         }
     }
 
-    pub fn auth_server_url(&self) -> Option<&str> {
-        self.auth_server_url.as_deref()
+    pub fn person_server_url(&self) -> Option<&str> {
+        self.person_server_url.as_deref()
     }
 
     pub fn resource_origin(url: &str) -> Result<String> {
@@ -152,9 +152,9 @@ impl AAuthInjector {
                     let challenge = parse_aauth_requirement(header)?;
                     if challenge.requirement == RequirementLevel::AuthToken {
                         if let Some(resource_token) = challenge.resource_token {
-                            if self.auth_server_url.is_none() {
+                            if self.person_server_url.is_none() {
                                 return Err(AAuthError::Message(
-                                    "auth-token challenge received but no auth_server_url configured"
+                                    "auth-token challenge received but no person_server_url configured"
                                         .into(),
                                 ));
                             }
@@ -170,13 +170,13 @@ impl AAuthInjector {
     pub fn record_auth_token(
         &mut self,
         origin: &str,
-        auth_server: &str,
+        person_server: &str,
         token: String,
         expires_in: u64,
         on_auth_token: Option<&Arc<dyn Fn(String, u64) + Send + Sync>>,
     ) {
         self.token_cache.insert(
-            cache_key(origin, auth_server),
+            cache_key(origin, person_server),
             CachedToken {
                 auth_token: token.clone(),
                 expires_at: Instant::now() + Duration::from_secs(expires_in),
@@ -226,8 +226,8 @@ impl AAuthInjector {
     }
 }
 
-fn cache_key(resource_origin: &str, auth_server: &str) -> String {
-    format!("{resource_origin}|{auth_server}")
+fn cache_key(resource_origin: &str, person_server: &str) -> String {
+    format!("{resource_origin}|{person_server}")
 }
 
 fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
@@ -277,7 +277,7 @@ mod tests {
                     token: "opaque".into(),
                 },
             )]),
-            auth_server_url: None,
+            person_server_url: None,
             opaque_seed: None,
             on_opaque_token: None,
         };
@@ -292,7 +292,7 @@ mod tests {
         let inj = AAuthInjector {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
-            auth_server_url: Some("https://auth.example".into()),
+            person_server_url: Some("https://person.example".into()),
             opaque_seed: None,
             on_opaque_token: None,
         };
@@ -323,7 +323,7 @@ mod tests {
         let mut inj = AAuthInjector {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
-            auth_server_url: None,
+            person_server_url: None,
             opaque_seed: None,
             on_opaque_token: Some(Arc::new(move |t| {
                 *captured_cb.lock().unwrap() = Some(t);

@@ -3,13 +3,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use jsonwebtoken::{Algorithm, Header};
 
 use crate::jwt::ResourceClaims;
-use crate::server::keys::ResourceTokenSigner;
+use crate::server::resource::keys::ResourceTokenSigner;
 use crate::types::JwtTyp;
 
 #[derive(Debug, Clone)]
 pub struct ResourceTokenOptions {
     pub resource: String,
-    pub auth_server: String,
+    pub audience: String,
     pub agent: String,
     pub agent_jkt: String,
     pub scope: Option<String>,
@@ -30,7 +30,7 @@ pub async fn create_resource_token(
     let claims = ResourceClaims {
         iss: options.resource,
         dwk: "aauth-resource.json".into(),
-        aud: options.auth_server,
+        aud: options.audience,
         jti: uuid::Uuid::new_v4().to_string(),
         agent: options.agent,
         agent_jkt: options.agent_jkt,

@@ -18,16 +18,16 @@ use reqwest_middleware::{Error, Middleware, Next};
 
 use aauth::{
     TestKeys, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt,
-    static_agent_metadata_fetcher, static_auth_metadata_fetcher,
+    static_agent_metadata_fetcher, static_person_metadata_fetcher,
 };
 
 use support::{MockServer, MockServerConfig, MockTransport};
 
 const AGENT_URL: &str = "https://agent.example";
 const AGENT_ID: &str = "aauth:test@example.com";
-const AUTH_SERVER_URL: &str = "https://auth.example";
+const PERSON_SERVER_URL: &str = "https://person.example";
 const RESOURCE_URL: &str = "https://resource.example";
-const INTERACTION_URL: &str = "https://auth.example/interact";
+const INTERACTION_URL: &str = "https://person.example/interact";
 
 fn test_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -119,14 +119,14 @@ async fn verify_token_auth_jwt() {
     let keys = create_test_keys();
     let auth_jwt = mint_auth_jwt(
         &keys,
-        AUTH_SERVER_URL,
+        PERSON_SERVER_URL,
         RESOURCE_URL,
         AGENT_URL,
         Some("user-456"),
         Some("files.read"),
     );
 
-    let fetcher = static_auth_metadata_fetcher(&keys, AUTH_SERVER_URL);
+    let fetcher = static_person_metadata_fetcher(&keys, PERSON_SERVER_URL);
     let result = verify_token(VerifyTokenOptions {
         jwt: auth_jwt,
         http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
@@ -137,7 +137,7 @@ async fn verify_token_auth_jwt() {
 
     match result {
         VerifiedToken::Auth(auth) => {
-            assert_eq!(auth.iss, AUTH_SERVER_URL);
+            assert_eq!(auth.iss, PERSON_SERVER_URL);
             assert_eq!(auth.dwk, "aauth-person.json");
             assert_eq!(auth.agent, AGENT_URL);
             assert_eq!(auth.sub.as_deref(), Some("user-456"));
@@ -276,7 +276,7 @@ async fn deferred_interaction_grant() {
     let provider = create_key_provider(&keys, agent_jwt);
 
     let manager = Arc::new(InteractionManager::new(InteractionManagerOptions {
-        base_url: AUTH_SERVER_URL.into(),
+        base_url: PERSON_SERVER_URL.into(),
         interaction_url: INTERACTION_URL.into(),
         pending_path: None,
         ttl: None,
@@ -302,7 +302,7 @@ async fn deferred_interaction_grant() {
         if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
             let auth_jwt = mint_auth_jwt(
                 &keys_cb,
-                AUTH_SERVER_URL,
+                PERSON_SERVER_URL,
                 RESOURCE_URL,
                 AGENT_URL,
                 Some("user-deferred"),
@@ -320,8 +320,8 @@ async fn deferred_interaction_grant() {
 
     let options = AAuthClientOptions {
         provider: Arc::clone(&provider),
-        auth_server_url: Some(AUTH_SERVER_URL.into()),
-        auth_server_metadata: None,
+        person_server_url: Some(PERSON_SERVER_URL.into()),
+        person_server_metadata: None,
         on_metadata: None,
         on_auth_token: None,
         on_opaque_token: None,
@@ -356,7 +356,7 @@ async fn deferred_interaction_grant() {
 async fn interaction_manager_create_pending_header() {
     let _guard = test_lock();
     let manager = InteractionManager::new(InteractionManagerOptions {
-        base_url: AUTH_SERVER_URL.into(),
+        base_url: PERSON_SERVER_URL.into(),
         interaction_url: INTERACTION_URL.into(),
         pending_path: None,
         ttl: None,
@@ -384,7 +384,7 @@ fn mock_config(
     MockServerConfig {
         keys: keys.clone(),
         resource_url: RESOURCE_URL.into(),
-        auth_server_url: AUTH_SERVER_URL.into(),
+        person_server_url: PERSON_SERVER_URL.into(),
         agent_url: AGENT_URL.into(),
         sub: AGENT_ID.into(),
         require_auth_token: true,
@@ -406,8 +406,8 @@ fn aauth_options(
 
     AAuthClientOptions {
         provider,
-        auth_server_url: Some(AUTH_SERVER_URL.into()),
-        auth_server_metadata: None,
+        person_server_url: Some(PERSON_SERVER_URL.into()),
+        person_server_metadata: None,
         on_metadata: None,
         on_auth_token: None,
         on_opaque_token: None,

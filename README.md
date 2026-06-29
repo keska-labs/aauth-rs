@@ -19,12 +19,23 @@ aauth-rs/
     │   │   ├── keys.rs       # KeyMaterialProvider, JWT minting
     │   │   └── reqwest/      # AAuthMiddleware, token exchange (feature "client-reqwest")
     │   ├── server/
-    │   │   ├── verify.rs, interaction.rs, …
-    │   │   └── axum/         # AAuthLayer, route helpers (feature "server-axum")
+    │   │   ├── resource/     # verify, resource tokens, AAuthLayer (feature "server-axum")
+    │   │   ├── person/       # interaction, auth JWT minting, PS route helpers
+    │   │   ├── access/       # stub for four-party federation
+    │   │   └── axum/         # facade re-exporting resource + person axum helpers
     │   ├── signature.rs      # shared HTTP Signature build + verify
     │   └── …                 # headers, JWT helpers, metadata cache
     └── tests/                # protocol integration tests (TypeScript e2e parity)
 ```
+
+## Protocol roles
+
+| AAuth party | Module |
+|-------------|--------|
+| Agent | `aauth::client` |
+| Resource server | `aauth::server::resource` |
+| Person server | `aauth::server::person` |
+| Access server | `aauth::server::access` (stub) |
 
 ## Features
 
@@ -33,7 +44,7 @@ aauth-rs/
 | `client` | yes | `aauth::client::injector`, `aauth::client::keys` — auth flow and key material |
 | `client-reqwest` | yes | `aauth::client::reqwest` — `AAuthMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
 | `server` | yes | `verify_token`, `create_resource_token`, `InteractionManager` |
-| `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `VerifiedAAuthToken`, auth-server route helpers |
+| `server-axum` | yes | `aauth::server::axum` — `AAuthLayer`, `VerifiedAAuthToken`, person-server route helpers |
 
 Disable defaults to depend on only one side:
 
@@ -64,8 +75,8 @@ async fn main() -> aauth::Result<()> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(AAuthMiddleware::new(AAuthClientOptions {
             provider: Arc::new(MyProvider),
-            auth_server_url: Some("https://person.example".into()),
-            auth_server_metadata: None,
+            person_server_url: Some("https://person.example".into()),
+            person_server_metadata: None,
             on_metadata: None,
             on_auth_token: None,
             on_opaque_token: None,
