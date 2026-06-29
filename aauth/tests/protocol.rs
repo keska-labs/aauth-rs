@@ -4,13 +4,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use aauth::KeyMaterialProvider;
 use aauth::VerifiedToken;
-use aauth::client::reqwest::{
-    AgentOptions, AgentMiddleware, ClientBuilder, InteractionCallback,
-};
+use aauth::client::reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
-use aauth::server::{
-    DeferRequirement, VerifyTokenOptions, build_accepted, verify_token,
-};
+use aauth::server::{DeferRequirement, VerifyTokenOptions, build_accepted, verify_token};
 use aauth::types::{AuthOkResponse, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
 use aauth::{InMemoryPendingStore, PendingOutcome, PendingStore};
 use http::Extensions;
@@ -236,12 +232,7 @@ async fn justification_and_hints_pass_through() {
     let provider = create_key_provider(&keys, agent_jwt);
     let captured = Arc::new(Mutex::new(None));
 
-    let server = MockServer::new(mock_config(
-        &keys,
-        false,
-        None,
-        Some(Arc::clone(&captured)),
-    ));
+    let server = MockServer::new(mock_config(&keys, false, None, Some(Arc::clone(&captured))));
 
     let client = aauth_client(
         provider,
@@ -277,12 +268,7 @@ async fn deferred_interaction_grant() {
 
     let pending = InMemoryPendingStore::new();
 
-    let server = MockServer::new(mock_config(
-        &keys,
-        true,
-        Some(pending.clone()),
-        None,
-    ));
+    let server = MockServer::new(mock_config(&keys, true, Some(pending.clone()), None));
 
     let received = Arc::new(Mutex::new(None));
     let received_cb = Arc::clone(&received);
@@ -350,7 +336,12 @@ async fn deferred_accepted_response_format() {
         accepted.headers.get("Location").unwrap(),
         "https://person.example/pending/abc"
     );
-    let aauth_req = accepted.headers.get("AAuth-Requirement").unwrap().to_str().unwrap();
+    let aauth_req = accepted
+        .headers
+        .get("AAuth-Requirement")
+        .unwrap()
+        .to_str()
+        .unwrap();
     let parsed = parse_aauth_requirement(aauth_req).unwrap();
     assert_eq!(parsed.requirement, RequirementLevel::Interaction);
     assert_eq!(parsed.url.as_deref(), Some(INTERACTION_URL));

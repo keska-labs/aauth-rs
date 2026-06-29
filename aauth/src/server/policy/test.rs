@@ -3,7 +3,9 @@ use crate::server::deferred::{DeferRequirement, PendingInput};
 use crate::types::AAuthProtocolError;
 
 use super::access::{AccessTokenContext, AccessTokenPolicy};
-use super::decision::{AuthGrant, PersonTokenDecision, ResourceConsentDecision, TokenPolicyDecision};
+use super::decision::{
+    AuthGrant, PersonTokenDecision, ResourceConsentDecision, TokenPolicyDecision,
+};
 use super::error::PolicyError;
 use super::person::{PersonTokenContext, PersonTokenPolicy};
 use super::resource::{ResourceAccessContext, ResourceConsentPolicy};
@@ -61,9 +63,7 @@ pub struct FixedSubPersonPolicy {
 #[async_trait::async_trait]
 impl PersonTokenPolicy for FixedSubPersonPolicy {
     async fn evaluate(&self, ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError> {
-        AlwaysGrantPersonPolicy::new(&self.sub)
-            .evaluate(ctx)
-            .await
+        AlwaysGrantPersonPolicy::new(&self.sub).evaluate(ctx).await
     }
 
     async fn resume(
@@ -156,10 +156,12 @@ impl ResourceConsentPolicy for DeferInteractionResourcePolicy {
         &self,
         _ctx: &ResourceAccessContext,
     ) -> Result<ResourceConsentDecision, PolicyError> {
-        Ok(ResourceConsentDecision::Defer(DeferRequirement::Interaction {
-            url: self.interaction_url.clone(),
-            code: generate_code(),
-        }))
+        Ok(ResourceConsentDecision::Defer(
+            DeferRequirement::Interaction {
+                url: self.interaction_url.clone(),
+                code: generate_code(),
+            },
+        ))
     }
 
     async fn resume(
@@ -187,11 +189,16 @@ pub struct ClarificationThenGrantPersonPolicy {
 
 #[async_trait::async_trait]
 impl PersonTokenPolicy for ClarificationThenGrantPersonPolicy {
-    async fn evaluate(&self, _ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError> {
-        Ok(PersonTokenDecision::Defer(DeferRequirement::Clarification {
-            question: self.question.clone(),
-            timeout: None,
-        }))
+    async fn evaluate(
+        &self,
+        _ctx: &PersonTokenContext,
+    ) -> Result<PersonTokenDecision, PolicyError> {
+        Ok(PersonTokenDecision::Defer(
+            DeferRequirement::Clarification {
+                question: self.question.clone(),
+                timeout: None,
+            },
+        ))
     }
 
     async fn resume(
@@ -233,7 +240,10 @@ impl<P> PersonTokenPolicy for DeferInteractionPersonPolicy<P>
 where
     P: PersonTokenPolicy + Send + Sync + Clone,
 {
-    async fn evaluate(&self, _ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError> {
+    async fn evaluate(
+        &self,
+        _ctx: &PersonTokenContext,
+    ) -> Result<PersonTokenDecision, PolicyError> {
         Ok(PersonTokenDecision::Defer(DeferRequirement::Interaction {
             url: self.interaction_url.clone(),
             code: generate_code(),
@@ -257,11 +267,16 @@ pub struct ClarificationThenGrantAccessPolicy {
 
 #[async_trait::async_trait]
 impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
-    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
-        Ok(TokenPolicyDecision::Defer(DeferRequirement::Clarification {
-            question: self.question.clone(),
-            timeout: None,
-        }))
+    async fn evaluate(
+        &self,
+        _ctx: &AccessTokenContext,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
+        Ok(TokenPolicyDecision::Defer(
+            DeferRequirement::Clarification {
+                question: self.question.clone(),
+                timeout: None,
+            },
+        ))
     }
 
     async fn resume(
@@ -299,7 +314,10 @@ impl<P> AccessTokenPolicy for DeferInteractionAccessPolicy<P>
 where
     P: AccessTokenPolicy + Send + Sync + Clone,
 {
-    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+    async fn evaluate(
+        &self,
+        _ctx: &AccessTokenContext,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
         Ok(TokenPolicyDecision::Defer(DeferRequirement::Interaction {
             url: self.interaction_url.clone(),
             code: generate_code(),
@@ -323,7 +341,10 @@ pub struct DeferClaimsAccessPolicy {
 
 #[async_trait::async_trait]
 impl AccessTokenPolicy for DeferClaimsAccessPolicy {
-    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+    async fn evaluate(
+        &self,
+        _ctx: &AccessTokenContext,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
         Ok(TokenPolicyDecision::Defer(DeferRequirement::Claims {
             required_claims: self.required_claims.clone(),
         }))
@@ -346,9 +367,9 @@ impl AccessTokenPolicy for DeferClaimsAccessPolicy {
                 error_description: Some("Request cancelled".into()),
                 error_uri: None,
             })),
-            PendingInput::ClarificationResponse(_) => Err(PolicyError::Message(
-                "clarification not expected".into(),
-            )),
+            PendingInput::ClarificationResponse(_) => {
+                Err(PolicyError::Message("clarification not expected".into()))
+            }
         }
     }
 }
@@ -360,7 +381,10 @@ pub struct DeferApprovalAccessPolicy {
 
 #[async_trait::async_trait]
 impl AccessTokenPolicy for DeferApprovalAccessPolicy {
-    async fn evaluate(&self, _ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+    async fn evaluate(
+        &self,
+        _ctx: &AccessTokenContext,
+    ) -> Result<TokenPolicyDecision, PolicyError> {
         Ok(TokenPolicyDecision::Defer(DeferRequirement::Approval))
     }
 

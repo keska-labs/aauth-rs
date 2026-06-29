@@ -2,27 +2,27 @@ use std::sync::Arc;
 
 use aauth::InMemoryOpaqueAccessStore;
 use aauth::InMemoryPendingStore;
+use aauth::OpaqueAccessStore;
 use aauth::PendingOutcome;
+use aauth::PendingStore;
 use aauth::TestKeys;
 use aauth::VerifiedToken;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::server::access::keys::TestAccessAuthJwtMinter;
 use aauth::server::axum::{
-    ResourceAuthLayer, AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
-    ResourceServerState, VerifiedAAuthToken, access_jwks_handler, access_metadata_handler,
-    access_pending_poll_handler, access_pending_post_handler, access_token_exchange_handler,
-    pending_poll_handler, pending_post_handler, person_jwks_handler,
+    AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
+    ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, access_jwks_handler,
+    access_metadata_handler, access_pending_poll_handler, access_pending_post_handler,
+    access_token_exchange_handler, pending_poll_handler, pending_post_handler, person_jwks_handler,
     person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
 };
 use aauth::server::person::keys::TestAuthJwtMinter;
-use aauth::OpaqueAccessStore;
-use aauth::PendingStore;
+use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use aauth::{
     AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
     DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, ResourceAccessMode,
     ResourceTokenSigner,
 };
-use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use async_trait::async_trait;
 use axum::Json;
 use axum::Router;
@@ -114,7 +114,8 @@ impl Drop for SpawnedServer {
     }
 }
 
-type TestPersonState = PersonServerState<HarnessPersonPolicy, InMemoryPendingStore, TestAuthJwtMinter>;
+type TestPersonState =
+    PersonServerState<HarnessPersonPolicy, InMemoryPendingStore, TestAuthJwtMinter>;
 type TestAccessState =
     AccessServerState<HarnessAccessPolicy, InMemoryPendingStore, TestAccessAuthJwtMinter>;
 type TestResourceState = ResourceServerState<InMemoryPendingStore, InMemoryOpaqueAccessStore>;

@@ -3,7 +3,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
 use crate::server::deferred::{
-    PendingOutcome, PendingStore, map_snapshot_to_poll_parts, PollResponse,
+    PendingOutcome, PendingStore, PollResponse, map_snapshot_to_poll_parts,
 };
 use crate::server::resource::opaque::OpaqueAccessStore;
 
@@ -47,7 +47,9 @@ where
             PendingOutcome::AuthToken(body) => {
                 (StatusCode::OK, axum::Json(body.clone())).into_response()
             }
-            PendingOutcome::Error(err) => (StatusCode::FORBIDDEN, axum::Json(err.clone())).into_response(),
+            PendingOutcome::Error(err) => {
+                (StatusCode::FORBIDDEN, axum::Json(err.clone())).into_response()
+            }
         };
     }
 

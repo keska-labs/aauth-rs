@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use aauth::InMemoryPendingStore;
+use aauth::PendingOutcome;
+use aauth::PendingStore;
 use aauth::VerifiedToken;
 use aauth::error::Result;
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement};
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::resolve_resource_token_audience;
-use aauth::InMemoryPendingStore;
-use aauth::PendingOutcome;
-use aauth::PendingStore;
 use aauth::server::{
-    DeferRequirement, PendingContext, PendingKind, PendingRecord, PendingSnapshot,
-    PersonPendingContext, ResourceTokenOptions, VerifyTokenOptions, build_accepted,
-    create_resource_token, generate_pending_id, pending_location, verify_token,
-    DEFAULT_PENDING_TTL_SECS,
+    DEFAULT_PENDING_TTL_SECS, DeferRequirement, PendingContext, PendingKind, PendingRecord,
+    PendingSnapshot, PersonPendingContext, ResourceTokenOptions, VerifyTokenOptions,
+    build_accepted, create_resource_token, generate_pending_id, pending_location, verify_token,
 };
 use aauth::types::{
     AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument, PersonServerMetadata,
@@ -392,9 +391,12 @@ impl MockServerState {
             .unwrap_or_default()
             .to_string();
 
-        let Some(record) = self.pending.load(&id).await.map_err(|e| {
-            aauth::AAuthError::Message(format!("pending load failed: {e}"))
-        })? else {
+        let Some(record) = self
+            .pending
+            .load(&id)
+            .await
+            .map_err(|e| aauth::AAuthError::Message(format!("pending load failed: {e}")))?
+        else {
             return Ok(Response::from(
                 http::Response::builder()
                     .status(StatusCode::GONE)
@@ -405,9 +407,10 @@ impl MockServerState {
         };
 
         if let Some(outcome) = &record.snapshot.outcome {
-            let _ = self.pending.remove(&id).await.map_err(|e| {
-                aauth::AAuthError::Message(format!("pending remove failed: {e}"))
-            })?;
+            let _ =
+                self.pending.remove(&id).await.map_err(|e| {
+                    aauth::AAuthError::Message(format!("pending remove failed: {e}"))
+                })?;
             return match outcome {
                 PendingOutcome::AuthToken(value) => Ok(Response::from(
                     http::Response::builder()

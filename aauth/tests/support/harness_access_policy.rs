@@ -15,10 +15,7 @@ pub enum HarnessAccessPolicy {
 
 #[async_trait::async_trait]
 impl AccessTokenPolicy for HarnessAccessPolicy {
-    async fn evaluate(
-        &self,
-        ctx: &AccessTokenContext,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
+    async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
         match self {
             Self::Grant(p) => p.evaluate(ctx).await,
             Self::Clarify(p) => p.evaluate(ctx).await,

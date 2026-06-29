@@ -7,20 +7,20 @@ use axum::response::{IntoResponse, Response};
 
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
+use crate::server::deferred::PendingInput;
 use crate::server::deferred::{
-    DeferRequirement, FederationPendingState, PendingContext, PendingKind, PendingOutcome,
-    PendingRecord, PendingSnapshot, PendingStore, PersonPendingContext, build_accepted,
-    generate_pending_id, map_snapshot_to_poll_parts, pending_location, post_pending_input,
-    poll_pending_http, ClaimsSubmission, PollResponse, ServerPollOptions, ServerPollOutcome,
+    ClaimsSubmission, DeferRequirement, FederationPendingState, PendingContext, PendingKind,
+    PendingOutcome, PendingRecord, PendingSnapshot, PendingStore, PersonPendingContext,
+    PollResponse, ServerPollOptions, ServerPollOutcome, build_accepted, generate_pending_id,
+    map_snapshot_to_poll_parts, pending_location, poll_pending_http, post_pending_input,
 };
 use crate::server::person::federation::{
-    federate_to_access_server, verify_federated_auth_token, FederationOutcome,
+    FederationOutcome, federate_to_access_server, verify_federated_auth_token,
 };
 use crate::server::person::keys::AuthJwtMinter;
 use crate::server::person::orchestrate::{
-    mint_person_auth, verify_person_token_request, PersonOrchestrateConfig,
+    PersonOrchestrateConfig, mint_person_auth, verify_person_token_request,
 };
-use crate::server::deferred::PendingInput;
 use crate::server::policy::{PersonTokenContext, PersonTokenDecision, PersonTokenPolicy};
 use crate::signature::verify_request_signature;
 use crate::types::{
@@ -137,13 +137,8 @@ where
     };
 
     let resource_token = request.resource_token.clone();
-    let ctx = match verify_person_token_request(
-        &orch,
-        &verified_sig.jwt,
-        &resource_token,
-        request,
-    )
-    .await
+    let ctx = match verify_person_token_request(&orch, &verified_sig.jwt, &resource_token, request)
+        .await
     {
         Ok(c) => c,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
@@ -405,7 +400,7 @@ where
                 .await
             }
             Err(_) => StatusCode::UNAUTHORIZED.into_response(),
-        }
+        },
         PersonTokenDecision::Deny(err) => (StatusCode::FORBIDDEN, Json(err)).into_response(),
         PersonTokenDecision::Defer(requirement) => {
             create_deferred_person_response(state, orch, ctx, requirement, agent_jwt).await
@@ -556,8 +551,7 @@ where
             if state.pending.save(pending_id, record).await.is_err() {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            let location =
-                pending_location(&orch.pending_base_url, &orch.pending_path, pending_id);
+            let location = pending_location(&orch.pending_base_url, &orch.pending_path, pending_id);
             build_accepted_response(&location, &requirement)
         }
         ServerPollOutcome::Error(err) => {
@@ -667,8 +661,7 @@ fn poll_snapshot_to_response(snapshot: &PendingSnapshot) -> Response {
 
 fn parse_pending_input(body: Option<&serde_json::Value>) -> PendingInput {
     if let Some(value) = body {
-        if let Ok(clarification) = serde_json::from_value::<ClarificationResponse>(value.clone())
-        {
+        if let Ok(clarification) = serde_json::from_value::<ClarificationResponse>(value.clone()) {
             return PendingInput::ClarificationResponse(clarification.clarification_response);
         }
         if let Ok(claims) = serde_json::from_value::<ClaimsSubmission>(value.clone()) {

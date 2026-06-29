@@ -68,10 +68,7 @@ impl TokenExchangeOptions {
 }
 
 impl TokenExchangeOptionsBuilder {
-    pub fn new(
-        person_server_url: impl Into<String>,
-        resource_token: impl Into<String>,
-    ) -> Self {
+    pub fn new(person_server_url: impl Into<String>, resource_token: impl Into<String>) -> Self {
         Self {
             person_server_url: person_server_url.into(),
             resource_token: resource_token.into(),
@@ -269,10 +266,8 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             .ok_or_else(|| AAuthError::Message("202 response missing Location header".into()))?
             .to_string();
 
-        let mut deferred = AgentDeferredOptions::builder(resolve_url(
-            &options.person_server_url,
-            &location,
-        ));
+        let mut deferred =
+            AgentDeferredOptions::builder(resolve_url(&options.person_server_url, &location));
         if let Some(header) = response
             .headers()
             .get("aauth-requirement")

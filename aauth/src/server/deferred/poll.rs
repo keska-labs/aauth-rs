@@ -132,8 +132,8 @@ pub async fn poll_pending_http(
         }
 
         if status == 403 {
-            let err: AAuthProtocolError = serde_json::from_slice(&body)
-                .unwrap_or_else(|_| AAuthProtocolError {
+            let err: AAuthProtocolError =
+                serde_json::from_slice(&body).unwrap_or_else(|_| AAuthProtocolError {
                     error: "access_denied".into(),
                     error_description: Some("Access denied".into()),
                     error_uri: None,
@@ -196,12 +196,12 @@ mod tests {
         let mock = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("GET"))
             .and(wiremock::matchers::path("/pending/abc"))
-            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
                     "auth_token": "jwt.example",
                     "expires_in": 3600,
-                }),
-            ))
+                })),
+            )
             .mount(&mock)
             .await;
 
@@ -232,12 +232,12 @@ mod tests {
         let mock = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/pending/abc"))
-            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
                     "auth_token": "jwt.example",
                     "expires_in": 3600,
-                }),
-            ))
+                })),
+            )
             .mount(&mock)
             .await;
 
@@ -266,8 +266,8 @@ mod tests {
             question: "Why?".into(),
             timeout: None,
         };
-        let accepted = build_accepted(&format!("{}/pending/abc", mock.uri()), &requirement)
-            .expect("accepted");
+        let accepted =
+            build_accepted(&format!("{}/pending/abc", mock.uri()), &requirement).expect("accepted");
 
         let mut template = wiremock::ResponseTemplate::new(202);
         for (name, value) in accepted.headers.iter() {

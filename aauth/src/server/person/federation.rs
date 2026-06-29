@@ -3,9 +3,7 @@ use std::sync::Arc;
 use crate::error::{AAuthError, Result};
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
-use crate::server::deferred::{
-    parse_deferred_response, DeferRequirement, ParsedDeferred,
-};
+use crate::server::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response};
 use crate::server::person::keys::AuthJwtMinter;
 use crate::types::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
 

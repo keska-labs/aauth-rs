@@ -180,10 +180,8 @@ impl AgentMiddleware {
                         .as_ref()
                         .map(|caps| caps.iter().map(|c| c.as_str().to_string()).collect());
 
-                    let mut exchange = TokenExchangeOptions::builder(
-                        person_server_url.clone(),
-                        resource_token,
-                    );
+                    let mut exchange =
+                        TokenExchangeOptions::builder(person_server_url.clone(), resource_token);
                     if let Some(metadata) = self.options.person_server_metadata.clone() {
                         exchange = exchange.person_server_metadata(metadata);
                     }

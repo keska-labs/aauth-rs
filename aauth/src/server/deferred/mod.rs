@@ -11,14 +11,18 @@ pub mod types;
 
 pub use memory::InMemoryPendingStore;
 #[cfg(feature = "server-axum")]
-pub use parse::{parse_deferred_response, parse_auth_token_response, resolve_deferred_location, ParsedDeferred};
+pub use parse::{
+    ParsedDeferred, parse_auth_token_response, parse_deferred_response, resolve_deferred_location,
+};
 #[cfg(feature = "server-axum")]
-pub use poll::{post_pending_input, poll_pending_http, ServerPollOptions, ServerPollOutcome};
+pub use poll::{ServerPollOptions, ServerPollOutcome, poll_pending_http, post_pending_input};
 #[cfg(feature = "server-axum")]
-pub use response::{build_accepted, build_payment_required_stub, map_snapshot_to_poll_parts, PollResponse};
-pub use types::*;
-pub use util::{generate_pending_id, pending_location, DEFAULT_PENDING_TTL_SECS};
+pub use response::{
+    PollResponse, build_accepted, build_payment_required_stub, map_snapshot_to_poll_parts,
+};
 pub use store::PendingStore;
+pub use types::*;
+pub use util::{DEFAULT_PENDING_TTL_SECS, generate_pending_id, pending_location};
 
 mod store {
     use super::types::{PendingOutcome, PendingRecord};

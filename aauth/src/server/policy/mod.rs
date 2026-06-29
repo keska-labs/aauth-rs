@@ -6,9 +6,7 @@ mod resource;
 mod test;
 
 pub use access::{AccessTokenContext, AccessTokenPolicy};
-pub use decision::{
-    AuthGrant, PersonTokenDecision, ResourceConsentDecision, TokenPolicyDecision,
-};
+pub use decision::{AuthGrant, PersonTokenDecision, ResourceConsentDecision, TokenPolicyDecision};
 pub use error::PolicyError;
 pub use person::{PersonTokenContext, PersonTokenPolicy};
 pub use resource::{ResourceAccessContext, ResourceConsentPolicy};

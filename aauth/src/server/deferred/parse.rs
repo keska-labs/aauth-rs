@@ -78,9 +78,7 @@ fn map_challenge_to_defer(
                 .and_then(|v| v.as_str())
                 .unwrap_or("Please clarify your request")
                 .to_string();
-            let timeout = body
-                .and_then(|v| v.get("timeout"))
-                .and_then(|v| v.as_u64());
+            let timeout = body.and_then(|v| v.get("timeout")).and_then(|v| v.as_u64());
             Ok(DeferRequirement::Clarification { question, timeout })
         }
         RequirementLevel::Claims => {

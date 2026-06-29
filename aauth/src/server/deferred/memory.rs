@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use super::types::{PendingOutcome, PendingRecord, PendingSnapshot};
 use super::PendingStore;
+use super::types::{PendingOutcome, PendingRecord, PendingSnapshot};
 
 #[derive(Debug, Clone)]
 pub struct InMemoryPendingStore {
@@ -29,12 +29,7 @@ impl InMemoryPendingStore {
     }
 
     pub fn last_id(&self) -> Option<String> {
-        self.inner
-            .lock()
-            .unwrap()
-            .keys()
-            .next()
-            .cloned()
+        self.inner.lock().unwrap().keys().next().cloned()
     }
 }
 

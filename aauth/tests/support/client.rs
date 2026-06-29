@@ -1,7 +1,7 @@
 //! Reqwest client setup shared by integration tests and runnable examples.
 
 use aauth::client::reqwest::{
-    AgentOptions, AgentMiddleware, ClarificationCallback, ClientBuilder, InteractionCallback,
+    AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
 use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
 

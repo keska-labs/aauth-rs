@@ -9,12 +9,12 @@ use crate::jwt::{VerifiedToken, decode_resource_token_unverified};
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 use crate::server::access::keys::AccessAuthJwtMinter;
-use crate::server::deferred::{
-    AccessPendingContext, DeferRequirement, PendingContext, PendingKind, PendingOutcome,
-    PendingRecord, PendingSnapshot, PendingStore, build_accepted, generate_pending_id,
-    map_snapshot_to_poll_parts, pending_location, ClaimsSubmission, PollResponse,
-};
 use crate::server::deferred::PendingInput;
+use crate::server::deferred::{
+    AccessPendingContext, ClaimsSubmission, DeferRequirement, PendingContext, PendingKind,
+    PendingOutcome, PendingRecord, PendingSnapshot, PendingStore, PollResponse, build_accepted,
+    generate_pending_id, map_snapshot_to_poll_parts, pending_location,
+};
 use crate::server::policy::{
     AccessTokenContext, AccessTokenPolicy, AuthGrant, TokenPolicyDecision,
 };
@@ -318,7 +318,10 @@ fn mint_access_auth<M: AccessAuthJwtMinter>(
         &config.resource_url,
         &ctx.agent_claims.iss,
         Some(&grant.sub),
-        grant.scope.as_deref().or(ctx.resource_claims.scope.as_deref()),
+        grant
+            .scope
+            .as_deref()
+            .or(ctx.resource_claims.scope.as_deref()),
     );
     TokenResponseBody {
         auth_token: auth_jwt,
@@ -407,8 +410,7 @@ fn poll_snapshot_to_response(snapshot: &PendingSnapshot) -> Response {
 
 fn parse_pending_input(body: Option<&serde_json::Value>) -> PendingInput {
     if let Some(value) = body {
-        if let Ok(clarification) = serde_json::from_value::<ClarificationResponse>(value.clone())
-        {
+        if let Ok(clarification) = serde_json::from_value::<ClarificationResponse>(value.clone()) {
             return PendingInput::ClarificationResponse(clarification.clarification_response);
         }
         if let Ok(claims) = serde_json::from_value::<ClaimsSubmission>(value.clone()) {

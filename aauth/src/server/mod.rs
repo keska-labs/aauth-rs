@@ -9,16 +9,16 @@ pub mod axum;
 pub mod access;
 
 pub use deferred::{
-    ClaimsSubmission, DeferRequirement, FederationPendingState, InMemoryPendingStore,
-    PendingContext, PendingInput, PendingKind, PendingOutcome, PendingRecord, PendingSnapshot,
-    PendingStatus, PendingStore, PersonPendingContext, DEFAULT_PENDING_TTL_SECS,
-    generate_pending_id, pending_location,
+    ClaimsSubmission, DEFAULT_PENDING_TTL_SECS, DeferRequirement, FederationPendingState,
+    InMemoryPendingStore, PendingContext, PendingInput, PendingKind, PendingOutcome, PendingRecord,
+    PendingSnapshot, PendingStatus, PendingStore, PersonPendingContext, generate_pending_id,
+    pending_location,
 };
 #[cfg(feature = "server-axum")]
 pub use deferred::{
-    build_accepted, build_payment_required_stub, map_snapshot_to_poll_parts,
-    parse_auth_token_response, parse_deferred_response, poll_pending_http, post_pending_input,
-    resolve_deferred_location, ParsedDeferred, ServerPollOptions, ServerPollOutcome,
+    ParsedDeferred, ServerPollOptions, ServerPollOutcome, build_accepted,
+    build_payment_required_stub, map_snapshot_to_poll_parts, parse_auth_token_response,
+    parse_deferred_response, poll_pending_http, post_pending_input, resolve_deferred_location,
 };
 pub use person::keys::{AuthJwtMinter, TestAuthJwtMinter, mint_auth_jwt};
 pub use policy::{
@@ -26,9 +26,8 @@ pub use policy::{
     AlwaysGrantResourcePolicy, AuthGrant, ClarificationThenGrantAccessPolicy,
     ClarificationThenGrantPersonPolicy, DeferApprovalAccessPolicy, DeferClaimsAccessPolicy,
     DeferInteractionAccessPolicy, DeferInteractionPersonPolicy, DeferInteractionResourcePolicy,
-    FixedSubPersonPolicy, PersonTokenContext, PersonTokenDecision, PersonTokenPolicy,
-    PolicyError, ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy,
-    TokenPolicyDecision,
+    FixedSubPersonPolicy, PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError,
+    ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy, TokenPolicyDecision,
 };
 pub use resource::keys::{Ed25519ResourceTokenSigner, ResourceTokenSigner};
 pub use resource::{

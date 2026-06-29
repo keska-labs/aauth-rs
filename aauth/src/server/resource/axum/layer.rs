@@ -14,7 +14,9 @@ use crate::server::deferred::{
     DeferRequirement, PendingContext, PendingKind, PendingRecord, PendingSnapshot, PendingStore,
     ResourcePendingContext, build_accepted, generate_pending_id, pending_location,
 };
-use crate::server::policy::{ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy};
+use crate::server::policy::{
+    ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy,
+};
 use crate::server::resource::audience::resolve_resource_token_audience;
 use crate::server::resource::keys::ResourceTokenSigner;
 use crate::server::resource::opaque::OpaqueAccessStore;
@@ -252,8 +254,7 @@ where
                                 }
                             }
                             let id = generate_pending_id();
-                            let location =
-                                pending_location(pending_base_url, pending_path, &id);
+                            let location = pending_location(pending_base_url, pending_path, &id);
                             let record = PendingRecord::new(
                                 id,
                                 PendingKind::ResourceAccess,

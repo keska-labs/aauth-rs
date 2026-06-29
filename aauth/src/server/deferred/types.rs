@@ -5,11 +5,21 @@ use crate::types::{AAuthProtocolError, TokenExchangeRequest, TokenResponseBody};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeferRequirement {
-    Interaction { url: String, code: String },
-    Clarification { question: String, timeout: Option<u64> },
-    Claims { required_claims: Vec<String> },
+    Interaction {
+        url: String,
+        code: String,
+    },
+    Clarification {
+        question: String,
+        timeout: Option<u64>,
+    },
+    Claims {
+        required_claims: Vec<String>,
+    },
     Approval,
-    Payment { location: String },
+    Payment {
+        location: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
