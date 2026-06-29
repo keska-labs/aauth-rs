@@ -6,9 +6,14 @@ use aauth::error::Result;
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement};
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::resolve_resource_token_audience;
+use aauth::InMemoryPendingStore;
+use aauth::PendingOutcome;
+use aauth::PendingStore;
 use aauth::server::{
-    InteractionManager, ResourceTokenOptions, VerifyTokenOptions, create_resource_token,
-    verify_token,
+    DeferRequirement, PendingContext, PendingKind, PendingRecord, PendingSnapshot,
+    PersonPendingContext, ResourceTokenOptions, VerifyTokenOptions, build_accepted,
+    create_resource_token, generate_pending_id, pending_location, verify_token,
+    DEFAULT_PENDING_TTL_SECS,
 };
 use aauth::types::{
     AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument, PersonServerMetadata,
@@ -34,9 +39,8 @@ pub struct MockServerState {
     pub agent_url: String,
     pub require_auth_token: bool,
     pub deferred_mode: bool,
-    pub interaction_manager: Arc<Mutex<Option<Arc<InteractionManager>>>>,
+    pub pending: InMemoryPendingStore,
     pub on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
-    pub pending_id_capture: Option<Arc<Mutex<Option<String>>>>,
 }
 
 impl MockTransport {
@@ -279,15 +283,70 @@ impl MockServerState {
         }
 
         if self.deferred_mode {
-            if let Some(manager) = self.interaction_manager.lock().unwrap().clone() {
-                let (headers, pending) = manager.create_pending();
-                if let Some(capture) = &self.pending_id_capture {
-                    *capture.lock().unwrap() = Some(pending.id.clone());
-                }
+            let id = generate_pending_id();
+            let interaction_url = format!("{}/interact", self.person_server_url);
+            let location = pending_location(&self.person_server_url, "/pending", &id);
+            let code = aauth::interaction_code::generate_code();
+            let requirement = DeferRequirement::Interaction {
+                url: interaction_url,
+                code: code.clone(),
+            };
+            let exchange = body.clone().unwrap_or(TokenExchangeRequest {
+                resource_token: String::new(),
+                justification: None,
+                localhost_callback: None,
+                login_hint: None,
+                tenant: None,
+                domain_hint: None,
+                capabilities: None,
+                prompt: None,
+            });
+            let record = PendingRecord::new(
+                id,
+                PendingKind::PersonToken,
+                PendingContext::Person(PersonPendingContext {
+                    person_server_url: self.person_server_url.clone(),
+                    resource_url: self.resource_url.clone(),
+                    agent_claims: aauth::jwt::AgentClaims {
+                        iss: self.agent_url.clone(),
+                        dwk: "aauth-agent.json".into(),
+                        sub: self.agent_url.clone(),
+                        jti: "mock".into(),
+                        cnf: aauth::jwt::CnfClaim {
+                            jwk: self.keys.agent_ephemeral.public_jwk(),
+                        },
+                        iat: 0,
+                        exp: i64::MAX,
+                        ps: Some(self.person_server_url.clone()),
+                    },
+                    resource_claims: aauth::jwt::decode_resource_token_unverified(
+                        &exchange.resource_token,
+                    )
+                    .unwrap_or_else(|_| aauth::jwt::ResourceClaims {
+                        iss: self.resource_url.clone(),
+                        dwk: "aauth-resource.json".into(),
+                        aud: self.person_server_url.clone(),
+                        jti: "mock".into(),
+                        agent: self.agent_url.clone(),
+                        agent_jkt: String::new(),
+                        iat: 0,
+                        exp: u64::MAX,
+                        scope: None,
+                        mission: None,
+                    }),
+                    exchange_request: exchange,
+                    agent_token: String::new(),
+                }),
+                PendingSnapshot::waiting(requirement.clone()),
+                DEFAULT_PENDING_TTL_SECS,
+            );
+            let _ = self.pending.create(record).await;
+
+            if let Ok(accepted) = build_accepted(&location, &requirement) {
                 let mut builder = http::Response::builder()
                     .status(StatusCode::ACCEPTED)
                     .url(Url::parse(url).expect("valid url"));
-                for (name, value) in headers {
+                for (name, value) in accepted.headers.iter() {
                     builder = builder.header(name, value);
                 }
                 return Ok(Response::from(
@@ -320,13 +379,6 @@ impl MockServerState {
     }
 
     async fn handle_pending(&self, url: &str) -> Result<Response> {
-        let manager = self
-            .interaction_manager
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or_else(|| aauth::AAuthError::Message("no interaction manager".into()))?;
-
         let id = url
             .split("/pending/")
             .nth(1)
@@ -339,7 +391,9 @@ impl MockServerState {
             .unwrap_or_default()
             .to_string();
 
-        let Some(pending) = manager.get_pending(&id) else {
+        let Some(record) = self.pending.load(&id).await.map_err(|e| {
+            aauth::AAuthError::Message(format!("pending load failed: {e}"))
+        })? else {
             return Ok(Response::from(
                 http::Response::builder()
                     .status(StatusCode::GONE)
@@ -349,38 +403,42 @@ impl MockServerState {
             ));
         };
 
-        if let Some(result) = pending.result.lock().unwrap().clone() {
-            match result {
-                Ok(value) => {
-                    manager.remove(&id);
-                    return Ok(Response::from(
-                        http::Response::builder()
-                            .status(StatusCode::OK)
-                            .url(Url::parse(url).expect("valid url"))
-                            .header("content-type", "application/json")
-                            .body(serde_json::to_vec(&value).expect("serialize json"))
-                            .expect("valid http response"),
-                    ));
-                }
-                Err(err) => {
-                    manager.remove(&id);
-                    return Ok(Response::from(
-                        http::Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .url(Url::parse(url).expect("valid url"))
-                            .body(err.into_bytes())
-                            .expect("valid http response"),
-                    ));
-                }
-            }
+        if let Some(outcome) = &record.snapshot.outcome {
+            let _ = self.pending.remove(&id).await.map_err(|e| {
+                aauth::AAuthError::Message(format!("pending remove failed: {e}"))
+            })?;
+            return match outcome {
+                PendingOutcome::AuthToken(value) => Ok(Response::from(
+                    http::Response::builder()
+                        .status(StatusCode::OK)
+                        .url(Url::parse(url).expect("valid url"))
+                        .header("content-type", "application/json")
+                        .body(serde_json::to_vec(value).expect("serialize json"))
+                        .expect("valid http response"),
+                )),
+                PendingOutcome::Error(err) => Ok(Response::from(
+                    http::Response::builder()
+                        .status(StatusCode::FORBIDDEN)
+                        .url(Url::parse(url).expect("valid url"))
+                        .body(serde_json::to_vec(err).expect("serialize json"))
+                        .expect("valid http response"),
+                )),
+                _ => Ok(Response::from(
+                    http::Response::builder()
+                        .status(StatusCode::OK)
+                        .url(Url::parse(url).expect("valid url"))
+                        .body(Vec::new())
+                        .expect("valid http response"),
+                )),
+            };
         }
 
         Ok(Response::from(
             http::Response::builder()
                 .status(StatusCode::ACCEPTED)
                 .url(Url::parse(url).expect("valid url"))
-                .header("Retry-After", "0")
-                .header("Cache-Control", "no-store")
+                .header("retry-after", "0")
+                .header("cache-control", "no-store")
                 .body(Vec::new())
                 .expect("valid http response"),
         ))

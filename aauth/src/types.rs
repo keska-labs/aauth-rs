@@ -297,6 +297,27 @@ pub struct AuthOkResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessTokenExchangeRequest {
+    pub resource_token: String,
+    pub agent_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subagent_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimsChallenge {
+    pub status: String,
+    pub required_claims: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingStatusBody {
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenExchangeRequest {
     pub resource_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -351,7 +372,7 @@ pub struct KeyMaterial {
     pub signature_key: SignatureKey,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AAuthProtocolError {
     pub error: String,
     #[serde(default)]
@@ -360,7 +381,7 @@ pub struct AAuthProtocolError {
     pub error_uri: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenResponseBody {
     pub auth_token: String,
     pub expires_in: u64,

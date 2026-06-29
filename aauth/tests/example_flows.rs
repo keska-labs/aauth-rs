@@ -1,18 +1,11 @@
 //! E2E tests mirroring each runnable example (`cargo run --example <name>`).
-//!
-//! | Explorer flow           | Example                   | Test                            |
-//! |-------------------------|---------------------------|---------------------------------|
-//! | Identity Based          | `identity_based`          | `identity_based_over_http`      |
-//! | Person Server Managed   | `person_server_managed`   | `person_server_managed_over_http` |
-//! | Resource Managed        | `resource_managed`        | `resource_managed_over_http`    |
-//! | Federated               | `federated`               | `federated_over_http`           |
 
 mod support;
 
 use std::sync::Arc;
 
 use aauth::types::{AgentOkResponse, AuthOkResponse};
-use aauth::{InMemoryOpaqueAccessStore, OpaqueAccessStore};
+use aauth::{OpaqueAccessStore, PendingStore};
 
 use support::axum_server::{ServerConfig, spawn_test_server};
 use support::client::build_client;
@@ -76,16 +69,21 @@ async fn resource_managed_over_http() {
     })
     .await;
 
-    let manager_cb = Arc::clone(&spawned.resource_interaction_manager);
-    let opaque_store_cb: Arc<InMemoryOpaqueAccessStore> = Arc::clone(&spawned.opaque_store);
-    let pending_id_capture_cb = Arc::clone(&spawned.resource_pending_id_capture);
+    let resource_pending_cb = spawned.resource_pending.clone();
+    let opaque_store_cb = spawned.opaque_store.clone();
     let agent_url = spawned.agent_url.clone();
 
     let on_interaction = Arc::new(move |_url: String, _code: String| {
-        if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
-            let opaque = opaque_store_cb.issue(&agent_url);
-            let _ = manager_cb.resolve_opaque_access(&id, opaque);
-        }
+        let pending = resource_pending_cb.clone();
+        let opaque = opaque_store_cb.issue(&agent_url);
+        let pending_id = resource_pending_cb.last_created.lock().unwrap().clone();
+        tokio::spawn(async move {
+            if let Some(id) = pending_id {
+                let _ = pending
+                    .complete(&id, aauth::PendingOutcome::OpaqueAccess(opaque))
+                    .await;
+            }
+        });
     });
 
     let client = build_client(&spawned, None, None, Some(on_interaction), None, None);

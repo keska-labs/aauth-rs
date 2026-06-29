@@ -4,12 +4,15 @@ mod support;
 
 use std::sync::{Arc, Mutex};
 
-use aauth::client::reqwest::{ClarificationCallback, InteractionCallback};
-use aauth::types::{AuthOkResponse, TokenResponseBody};
-use aauth::{create_test_keys, mint_agent_jwt, mint_auth_jwt};
+use aauth::client::reqwest::{
+    AAuthClientOptions, AAuthMiddleware, ClarificationCallback, ClientBuilder,
+    InteractionCallback,
+};
+use aauth::types::{AgentOkResponse, AuthOkResponse};
+use aauth::{create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt, PendingStore};
 
 use support::axum_server::{ServerConfig, spawn_test_server};
-use support::client::{AGENT_ID, build_client};
+use support::client::{build_client, AGENT_ID};
 
 #[tokio::test]
 async fn person_server_managed_ps_from_agent_claim_over_http() {
@@ -71,32 +74,38 @@ async fn deferred_interaction_over_http() {
     let interaction_url = format!("{}/interact", spawned.person_server_url);
     let received = Arc::new(Mutex::new(None));
     let received_cb = Arc::clone(&received);
-    let manager_cb = Arc::clone(&spawned.interaction_manager);
+    let person_pending_cb = spawned.person_pending.clone();
     let keys_cb = spawned.keys.clone();
-    let pending_id_capture_cb = Arc::clone(&spawned.pending_id_capture);
     let resource_url = spawned.resource_url.clone();
     let person_server_url = spawned.person_server_url.clone();
     let agent_url = spawned.agent_url.clone();
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
-        if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
-            let auth_jwt = mint_auth_jwt(
-                &keys_cb,
-                &person_server_url,
-                &resource_url,
-                &agent_url,
-                Some("user-deferred"),
-                None,
-            );
-            let _ = manager_cb.resolve(
-                &id,
-                TokenResponseBody {
-                    auth_token: auth_jwt,
-                    expires_in: 3600,
-                },
-            );
-        }
+        let auth_jwt = mint_auth_jwt(
+            &keys_cb,
+            &person_server_url,
+            &resource_url,
+            &agent_url,
+            Some("user-deferred"),
+            None,
+        );
+        let pending = person_pending_cb.clone();
+        let pending_id = person_pending_cb.last_created.lock().unwrap().clone();
+        tokio::spawn(async move {
+            if let Some(id) = pending_id {
+                pending
+                    .complete(
+                        &id,
+                        aauth::PendingOutcome::AuthToken(aauth::types::TokenResponseBody {
+                            auth_token: auth_jwt,
+                            expires_in: 3600,
+                        }),
+                    )
+                    .await
+                    .expect("complete");
+            }
+        });
     });
 
     let client = build_client(
@@ -138,12 +147,6 @@ async fn clarification_deferred_over_http() {
 
     let received_clarification = Arc::new(Mutex::new(None));
     let received_clarification_cb = Arc::clone(&received_clarification);
-    let manager_cb = Arc::clone(&spawned.interaction_manager);
-    let keys_cb = spawned.keys.clone();
-    let pending_id_capture_cb = Arc::clone(&spawned.pending_id_capture);
-    let resource_url = spawned.resource_url.clone();
-    let person_server_url = spawned.person_server_url.clone();
-    let agent_url = spawned.agent_url.clone();
 
     let on_clarification: ClarificationCallback = Arc::new(move |prompt| {
         let received = Arc::clone(&received_clarification_cb);
@@ -153,31 +156,11 @@ async fn clarification_deferred_over_http() {
         })
     });
 
-    let on_interaction: InteractionCallback = Arc::new(move |_url, _code| {
-        if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
-            let auth_jwt = mint_auth_jwt(
-                &keys_cb,
-                &person_server_url,
-                &resource_url,
-                &agent_url,
-                Some("user-clarified"),
-                None,
-            );
-            let _ = manager_cb.resolve(
-                &id,
-                TokenResponseBody {
-                    auth_token: auth_jwt,
-                    expires_in: 3600,
-                },
-            );
-        }
-    });
-
     let client = build_client(
         &spawned,
         Some(spawned.person_server_url.clone()),
         Some(&spawned.person_server_url),
-        Some(on_interaction),
+        None,
         Some(on_clarification),
         None,
     );
@@ -213,7 +196,7 @@ async fn invalid_signature_rejected_over_http() {
         AGENT_ID,
         Some(&spawned.person_server_url),
     );
-    let provider = aauth::create_key_provider(&wrong_keys, agent_jwt);
+    let provider = create_key_provider(&wrong_keys, agent_jwt);
 
     let client = build_client(&spawned, None, None, None, None, Some(provider));
     let response = client

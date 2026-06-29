@@ -1,18 +1,26 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use aauth::InMemoryOpaqueAccessStore;
+use aauth::InMemoryPendingStore;
+use aauth::PendingOutcome;
 use aauth::TestKeys;
 use aauth::VerifiedToken;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
+use aauth::server::access::keys::TestAccessAuthJwtMinter;
 use aauth::server::axum::{
-    AAuthLayer, AccessServerState, PersonServerState, ResourceAccessPolicy, ResourceServerState,
-    VerifiedAAuthToken, access_jwks_handler, access_metadata_handler,
-    access_token_exchange_handler, pending_clarification_post_handler, pending_poll_handler,
-    person_jwks_handler, person_metadata_handler, resource_pending_poll_handler,
-    token_exchange_deferred_handler, token_exchange_handler,
+    AAuthLayer, AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
+    ResourceServerState, VerifiedAAuthToken, access_jwks_handler, access_metadata_handler,
+    access_token_exchange_handler, pending_poll_handler, pending_post_handler, person_jwks_handler,
+    person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
 };
-use aauth::server::{InteractionManager, InteractionManagerOptions, ResourceTokenSigner};
+use aauth::server::person::keys::TestAuthJwtMinter;
+use aauth::OpaqueAccessStore;
+use aauth::PendingStore;
+use aauth::{
+    AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy,
+    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, ResourceAccessMode,
+    ResourceTokenSigner,
+};
 use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use async_trait::async_trait;
 use axum::Json;
@@ -21,6 +29,10 @@ use axum::extract::{FromRef, State};
 use axum::routing::{get, post};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
+
+#[path = "harness_policy.rs"]
+mod harness_policy;
+use harness_policy::HarnessPersonPolicy;
 
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -51,12 +63,37 @@ pub struct SpawnedServer {
     pub agent_url: String,
     pub person_server_url: String,
     pub resource_url: String,
-    pub interaction_manager: Arc<InteractionManager>,
-    pub resource_interaction_manager: Arc<InteractionManager>,
-    pub opaque_store: Arc<InMemoryOpaqueAccessStore>,
-    pub pending_id_capture: Arc<Mutex<Option<String>>>,
-    pub resource_pending_id_capture: Arc<Mutex<Option<String>>>,
+    pub person_pending: InMemoryPendingStore,
+    pub resource_pending: InMemoryPendingStore,
+    pub opaque_store: InMemoryOpaqueAccessStore,
     handle: JoinHandle<()>,
+}
+
+impl SpawnedServer {
+    pub async fn resolve_person_pending(&self, auth_token: &str) {
+        if let Some(id) = self.person_pending.last_created.lock().unwrap().clone() {
+            let _ = self
+                .person_pending
+                .complete(
+                    &id,
+                    PendingOutcome::AuthToken(aauth::types::TokenResponseBody {
+                        auth_token: auth_token.to_string(),
+                        expires_in: 3600,
+                    }),
+                )
+                .await;
+        }
+    }
+
+    pub async fn resolve_resource_pending(&self, agent_iss: &str) {
+        if let Some(id) = self.resource_pending.last_created.lock().unwrap().clone() {
+            let opaque = self.opaque_store.issue(agent_iss);
+            let _ = self
+                .resource_pending
+                .complete(&id, PendingOutcome::OpaqueAccess(opaque))
+                .await;
+        }
+    }
 }
 
 impl Drop for SpawnedServer {
@@ -65,28 +102,33 @@ impl Drop for SpawnedServer {
     }
 }
 
+type TestPersonState = PersonServerState<HarnessPersonPolicy, InMemoryPendingStore, TestAuthJwtMinter>;
+type TestAccessState =
+    AccessServerState<AlwaysGrantAccessPolicy, InMemoryPendingStore, TestAccessAuthJwtMinter>;
+type TestResourceState = ResourceServerState<InMemoryPendingStore, InMemoryOpaqueAccessStore>;
+
 #[derive(Clone)]
 struct TestServerState {
-    person: PersonServerState,
-    access: AccessServerState,
-    resource: ResourceServerState,
+    person: TestPersonState,
+    access: TestAccessState,
+    resource: TestResourceState,
     agent_jwks_uri: String,
 }
 
-impl FromRef<TestServerState> for PersonServerState {
-    fn from_ref(input: &TestServerState) -> PersonServerState {
+impl FromRef<TestServerState> for TestPersonState {
+    fn from_ref(input: &TestServerState) -> TestPersonState {
         input.person.clone()
     }
 }
 
-impl FromRef<TestServerState> for AccessServerState {
-    fn from_ref(input: &TestServerState) -> AccessServerState {
+impl FromRef<TestServerState> for TestAccessState {
+    fn from_ref(input: &TestServerState) -> TestAccessState {
         input.access.clone()
     }
 }
 
-impl FromRef<TestServerState> for ResourceServerState {
-    fn from_ref(input: &TestServerState) -> ResourceServerState {
+impl FromRef<TestServerState> for TestResourceState {
+    fn from_ref(input: &TestServerState) -> TestResourceState {
         input.resource.clone()
     }
 }
@@ -121,36 +163,39 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let resource_token_signer: Arc<dyn ResourceTokenSigner> =
         Arc::new(keys.resource_token_signer());
 
-    let opaque_store = Arc::new(InMemoryOpaqueAccessStore::new());
-
-    let person_interaction_manager = Arc::new(InteractionManager::new(InteractionManagerOptions {
-        base_url: person_server_url.clone(),
-        interaction_url: format!("{person_server_url}/interact"),
-        pending_path: None,
-        ttl: None,
-    }));
-
-    let resource_interaction_manager =
-        Arc::new(InteractionManager::new(InteractionManagerOptions {
-            base_url: resource_url.clone(),
-            interaction_url: format!("{resource_url}/interact"),
-            pending_path: Some("/resource/pending".into()),
-            ttl: None,
-        }));
-
-    let pending_id_capture = Arc::new(Mutex::new(None));
-    let resource_pending_id_capture = Arc::new(Mutex::new(None));
-    let clarification_state = Arc::new(Mutex::new(HashMap::new()));
+    let opaque_store = InMemoryOpaqueAccessStore::new();
+    let person_pending = InMemoryPendingStore::new();
+    let resource_pending = InMemoryPendingStore::new();
     let http_client = reqwest::Client::new();
 
-    let policy = if config.resource_managed {
-        ResourceAccessPolicy::ResourceManaged {
-            interaction_manager: Arc::clone(&resource_interaction_manager),
-            opaque_store: Arc::clone(&opaque_store) as Arc<dyn aauth::OpaqueAccessStore>,
-            pending_id_capture: Some(Arc::clone(&resource_pending_id_capture)),
+    let person_policy = if config.clarification_on_poll {
+        HarnessPersonPolicy::Clarify(ClarificationThenGrantPersonPolicy {
+            sub: "user-clarified".into(),
+            question: "What is your purpose?".into(),
+        })
+    } else if config.deferred_mode {
+        HarnessPersonPolicy::Defer(DeferInteractionPersonPolicy {
+            inner: AlwaysGrantPersonPolicy::new("user-deferred"),
+            interaction_url: format!("{person_server_url}/interact"),
+        })
+    } else {
+        HarnessPersonPolicy::Grant(AlwaysGrantPersonPolicy::new("user-123"))
+    };
+
+    let mode = if config.resource_managed {
+        ResourceAccessMode::ResourceManaged {
+            policy: DeferInteractionResourcePolicy {
+                interaction_url: format!("{resource_url}/interact"),
+            },
+            pending: resource_pending.clone(),
+            opaque: opaque_store.clone(),
+            interaction_url: format!("{resource_url}/interact"),
+            pending_base_url: resource_url.clone(),
+            pending_path: "/resource/pending".into(),
+            pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
         }
     } else {
-        ResourceAccessPolicy::PsAsserted {
+        ResourceAccessMode::PsAsserted {
             require_auth_token: config.require_auth_token,
             access_server_url: if config.federated {
                 Some(access_server_url.clone())
@@ -164,37 +209,48 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let aauth_layer = AAuthLayer::new(
         Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
         resource_url.clone(),
-        policy,
+        mode,
         resource_token_signer,
     );
 
     let test_state = TestServerState {
         person: PersonServerState {
-            keys: keys.clone(),
-            person_server_url: person_server_url.clone(),
-            resource_url: resource_url.clone(),
-            agent_url: agent_url.clone(),
-            person_jwks_uri: person_jwks_uri.clone(),
-            interaction_manager: Arc::clone(&person_interaction_manager),
-            deferred_mode: config.deferred_mode,
-            pending_id_capture: Some(Arc::clone(&pending_id_capture)),
-            clarification_state: if config.clarification_on_poll {
-                Some(Arc::clone(&clarification_state))
-            } else {
-                None
+            policy: person_policy,
+            pending: person_pending.clone(),
+            minter: keys.auth_jwt_minter(),
+            config: PersonServerConfig {
+                keys: keys.clone(),
+                person_server_url: person_server_url.clone(),
+                resource_url: resource_url.clone(),
+                agent_url: agent_url.clone(),
+                person_jwks_uri: person_jwks_uri.clone(),
+                interaction_url: format!("{person_server_url}/interact"),
+                pending_base_url: person_server_url.clone(),
+                pending_path: "/pending".into(),
+                pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
+                fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
+                http_client: http_client.clone(),
             },
-            clarification_prompt: config.clarification_on_poll,
-            fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
-            http_client: http_client.clone(),
         },
         access: AccessServerState {
-            keys: keys.clone(),
-            access_server_url: access_server_url.clone(),
-            resource_url: resource_url.clone(),
-            access_jwks_uri: access_jwks_uri.clone(),
+            policy: AlwaysGrantAccessPolicy::new("user-federated"),
+            pending: InMemoryPendingStore::new(),
+            minter: keys.access_auth_jwt_minter(),
+            config: AccessServerConfig {
+                keys: keys.clone(),
+                access_server_url: access_server_url.clone(),
+                resource_url: resource_url.clone(),
+                person_server_url: person_server_url.clone(),
+                access_jwks_uri: access_jwks_uri.clone(),
+                pending_base_url: access_server_url.clone(),
+                pending_path: "/as/access/pending".into(),
+                pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
+                fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
+            },
         },
         resource: ResourceServerState {
-            interaction_manager: Arc::clone(&resource_interaction_manager),
+            pending: resource_pending.clone(),
+            opaque: opaque_store.clone(),
         },
         agent_jwks_uri: agent_jwks_uri.clone(),
     };
@@ -209,22 +265,16 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         .route("/agent/jwks", get(agent_jwks_handler));
 
     if config.with_auth_routes || config.federated {
-        let token_handler = if config.deferred_mode {
-            post(token_exchange_deferred_handler)
-        } else {
-            post(token_exchange_handler)
-        };
-
         app = app
             .route(
                 "/.well-known/aauth-person.json",
                 get(person_metadata_handler),
             )
             .route("/auth/jwks", get(person_jwks_handler))
-            .route("/aauth/token", token_handler)
+            .route("/aauth/token", post(token_exchange_handler))
             .route(
                 "/pending/{id}",
-                get(pending_poll_handler).post(pending_clarification_post_handler),
+                get(pending_poll_handler).post(pending_post_handler),
             );
     }
 
@@ -256,11 +306,9 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         agent_url,
         person_server_url,
         resource_url,
-        interaction_manager: person_interaction_manager,
-        resource_interaction_manager,
+        person_pending,
+        resource_pending,
         opaque_store,
-        pending_id_capture,
-        resource_pending_id_capture,
         handle,
     }
 }
@@ -293,7 +341,7 @@ async fn agent_metadata_handler(State(state): State<TestServerState>) -> Json<Me
 
 async fn agent_jwks_handler(State(state): State<TestServerState>) -> Json<JwksDocument> {
     Json(JwksDocument {
-        keys: state.person.keys.agent_root.jwk_set(),
+        keys: state.person.config.keys.agent_root.jwk_set(),
     })
 }
 

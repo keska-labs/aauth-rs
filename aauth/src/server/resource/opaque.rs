@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 
@@ -9,14 +9,15 @@ pub trait OpaqueAccessStore: Send + Sync {
     fn revoke(&self, token: &str);
 }
 
+#[derive(Clone)]
 pub struct InMemoryOpaqueAccessStore {
-    tokens: Mutex<HashMap<String, String>>,
+    tokens: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl InMemoryOpaqueAccessStore {
     pub fn new() -> Self {
         Self {
-            tokens: Mutex::new(HashMap::new()),
+            tokens: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

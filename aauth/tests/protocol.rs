@@ -9,9 +9,10 @@ use aauth::client::reqwest::{
 };
 use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
 use aauth::server::{
-    InteractionManager, InteractionManagerOptions, VerifyTokenOptions, verify_token,
+    DeferRequirement, VerifyTokenOptions, build_accepted, verify_token,
 };
 use aauth::types::{AuthOkResponse, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
+use aauth::{InMemoryPendingStore, PendingOutcome, PendingStore};
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
@@ -176,7 +177,7 @@ async fn full_401_challenge_response_direct_grant() {
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let provider = create_key_provider(&keys, agent_jwt);
 
-    let server = MockServer::new(mock_config(&keys, false, None, None, None));
+    let server = MockServer::new(mock_config(&keys, false, None, None));
     let client = aauth_client(provider, &server, None, None);
 
     let response = client
@@ -199,7 +200,7 @@ async fn second_request_reuses_cached_token() {
     let provider = create_key_provider(&keys, agent_jwt);
 
     let call_count = Arc::new(Mutex::new(0usize));
-    let server = MockServer::new(mock_config(&keys, false, None, None, None));
+    let server = MockServer::new(mock_config(&keys, false, None, None));
 
     let options = aauth_options(provider, None, None);
     let client = ClientBuilder::new(reqwest::Client::new())
@@ -240,7 +241,6 @@ async fn justification_and_hints_pass_through() {
         false,
         None,
         Some(Arc::clone(&captured)),
-        None,
     ));
 
     let client = aauth_client(
@@ -275,31 +275,23 @@ async fn deferred_interaction_grant() {
     let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
     let provider = create_key_provider(&keys, agent_jwt);
 
-    let manager = Arc::new(InteractionManager::new(InteractionManagerOptions {
-        base_url: PERSON_SERVER_URL.into(),
-        interaction_url: INTERACTION_URL.into(),
-        pending_path: None,
-        ttl: None,
-    }));
-    let pending_id_capture = Arc::new(Mutex::new(None));
+    let pending = InMemoryPendingStore::new();
 
     let server = MockServer::new(mock_config(
         &keys,
         true,
-        Some(Arc::clone(&manager)),
+        Some(pending.clone()),
         None,
-        Some(Arc::clone(&pending_id_capture)),
     ));
 
     let received = Arc::new(Mutex::new(None));
     let received_cb = Arc::clone(&received);
-    let manager_cb = Arc::clone(&manager);
+    let pending_cb = pending.clone();
     let keys_cb = keys.clone();
-    let pending_id_capture_cb = Arc::clone(&pending_id_capture);
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
-        if let Some(id) = pending_id_capture_cb.lock().unwrap().clone() {
+        if let Some(id) = pending_cb.last_created.lock().unwrap().clone() {
             let auth_jwt = mint_auth_jwt(
                 &keys_cb,
                 PERSON_SERVER_URL,
@@ -308,13 +300,18 @@ async fn deferred_interaction_grant() {
                 Some("user-deferred"),
                 None,
             );
-            let _ = manager_cb.resolve(
-                &id,
-                TokenResponseBody {
-                    auth_token: auth_jwt,
-                    expires_in: 3600,
-                },
-            );
+            let pending = pending_cb.clone();
+            tokio::spawn(async move {
+                let _ = pending
+                    .complete(
+                        &id,
+                        PendingOutcome::AuthToken(TokenResponseBody {
+                            auth_token: auth_jwt,
+                            expires_in: 3600,
+                        }),
+                    )
+                    .await;
+            });
         }
     });
 
@@ -353,33 +350,31 @@ async fn deferred_interaction_grant() {
 }
 
 #[tokio::test]
-async fn interaction_manager_create_pending_header() {
+async fn deferred_accepted_response_format() {
     let _guard = test_lock();
-    let manager = InteractionManager::new(InteractionManagerOptions {
-        base_url: PERSON_SERVER_URL.into(),
-        interaction_url: INTERACTION_URL.into(),
-        pending_path: None,
-        ttl: None,
-    });
-    let (headers, pending) = manager.create_pending();
-    assert!(pending.code.contains('-'));
-    assert!(headers["Location"].contains("/pending/"));
-    assert!(headers["AAuth-Requirement"].contains("requirement=interaction"));
-    assert!(headers["AAuth-Requirement"].contains(&format!("url=\"{INTERACTION_URL}\"")));
-    assert!(headers["AAuth-Requirement"].contains(&format!("code=\"{}\"", pending.code)));
-
-    let parsed = parse_aauth_requirement(&headers["AAuth-Requirement"]).unwrap();
+    let code = aauth::interaction_code::generate_code();
+    let requirement = DeferRequirement::Interaction {
+        url: INTERACTION_URL.into(),
+        code: code.clone(),
+    };
+    let accepted = build_accepted("https://person.example/pending/abc", &requirement).unwrap();
+    assert_eq!(accepted.status, http::StatusCode::ACCEPTED);
+    assert_eq!(
+        accepted.headers.get("Location").unwrap(),
+        "https://person.example/pending/abc"
+    );
+    let aauth_req = accepted.headers.get("AAuth-Requirement").unwrap().to_str().unwrap();
+    let parsed = parse_aauth_requirement(aauth_req).unwrap();
     assert_eq!(parsed.requirement, RequirementLevel::Interaction);
     assert_eq!(parsed.url.as_deref(), Some(INTERACTION_URL));
-    assert_eq!(parsed.code.as_deref(), Some(pending.code.as_str()));
+    assert_eq!(parsed.code.as_deref(), Some(code.as_str()));
 }
 
 fn mock_config(
     keys: &TestKeys,
     deferred_mode: bool,
-    interaction_manager: Option<Arc<InteractionManager>>,
+    pending: Option<InMemoryPendingStore>,
     on_token_request: Option<Arc<Mutex<Option<TokenExchangeRequest>>>>,
-    pending_id_capture: Option<Arc<Mutex<Option<String>>>>,
 ) -> MockServerConfig {
     MockServerConfig {
         keys: keys.clone(),
@@ -389,9 +384,8 @@ fn mock_config(
         sub: AGENT_ID.into(),
         require_auth_token: true,
         deferred_mode,
-        interaction_manager,
+        pending,
         on_token_request,
-        pending_id_capture,
     }
 }
 

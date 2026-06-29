@@ -1,16 +1,31 @@
-pub mod access;
-pub mod interaction;
+pub mod deferred;
 pub mod person;
+pub mod policy;
 pub mod resource;
 
 #[cfg(feature = "server-axum")]
 pub mod axum;
 
-pub use interaction::{InteractionManager, InteractionManagerOptions, PendingRequest};
+pub mod access;
+
+pub use deferred::{
+    ClaimsSubmission, DeferRequirement, InMemoryPendingStore, PendingContext, PendingInput,
+    PendingKind, PendingOutcome, PendingRecord, PendingSnapshot, PendingStatus, PendingStore,
+    PersonPendingContext, DEFAULT_PENDING_TTL_SECS, generate_pending_id, pending_location,
+};
+#[cfg(feature = "server-axum")]
+pub use deferred::{build_accepted, build_payment_required_stub, map_snapshot_to_poll_parts};
 pub use person::keys::{AuthJwtMinter, TestAuthJwtMinter, mint_auth_jwt};
+pub use policy::{
+    AccessTokenContext, AccessTokenPolicy, AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy,
+    AlwaysGrantResourcePolicy, AuthGrant, ClarificationThenGrantPersonPolicy,
+    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, FixedSubPersonPolicy,
+    PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError,
+    ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy, TokenPolicyDecision,
+};
 pub use resource::keys::{Ed25519ResourceTokenSigner, ResourceTokenSigner};
 pub use resource::{
-    InMemoryOpaqueAccessStore, OpaqueAccessStore, ResourceAccessPolicy, ResourceTokenOptions,
-    VerifyResourceTokenOptions, VerifyTokenOptions, create_resource_token,
+    InMemoryOpaqueAccessStore, OpaqueAccessStore, ResourceAccessMode, ResourceAccessPolicy,
+    ResourceTokenOptions, VerifyResourceTokenOptions, VerifyTokenOptions, create_resource_token,
     resolve_resource_token_audience, verify_resource_token, verify_token,
 };

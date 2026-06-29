@@ -4,7 +4,7 @@
 //!
 //! - `client` — framework-agnostic auth flow and key material (`client::injector`, `client::keys`)
 //! - `client-reqwest` — reqwest middleware and token exchange (`client::reqwest`)
-//! - `server` — token verification, resource token creation, interaction management
+//! - `server` — token verification, resource token creation, policy traits, pending store
 //! - `server-axum` — axum middleware and route helpers (`server::axum`)
 //!
 //! # Protocol roles
@@ -58,12 +58,21 @@ pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
 pub use server::access::{
     AccessAuthJwtMinter, AccessServerMetadata, TestAccessAuthJwtMinter, mint_access_auth_jwt,
 };
+#[cfg(all(feature = "server", feature = "server-axum"))]
+pub use server::deferred::{build_accepted, build_payment_required_stub};
 #[cfg(feature = "server")]
 pub use server::{
-    AuthJwtMinter, Ed25519ResourceTokenSigner, InMemoryOpaqueAccessStore, InteractionManager,
-    InteractionManagerOptions, OpaqueAccessStore, PendingRequest, ResourceAccessPolicy,
-    ResourceTokenOptions, ResourceTokenSigner, TestAuthJwtMinter, VerifyResourceTokenOptions,
-    VerifyTokenOptions, create_resource_token, mint_auth_jwt, resolve_resource_token_audience,
-    verify_resource_token, verify_token,
+    AccessTokenContext, AccessTokenPolicy, AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy,
+    AlwaysGrantResourcePolicy, AuthGrant, AuthJwtMinter, ClarificationThenGrantPersonPolicy,
+    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, DeferRequirement,
+    Ed25519ResourceTokenSigner, FixedSubPersonPolicy, InMemoryOpaqueAccessStore,
+    InMemoryPendingStore, OpaqueAccessStore, PendingContext, PendingInput, PendingKind,
+    PendingOutcome, PendingRecord, PendingSnapshot, PendingStatus, PendingStore,
+    PersonPendingContext, PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError,
+    ResourceAccessContext, ResourceAccessMode, ResourceAccessPolicy, ResourceConsentDecision,
+    ResourceConsentPolicy, ResourceTokenOptions, ResourceTokenSigner, TestAuthJwtMinter,
+    TokenPolicyDecision, VerifyResourceTokenOptions, VerifyTokenOptions, create_resource_token,
+    mint_auth_jwt, resolve_resource_token_audience, verify_resource_token, verify_token,
+    ClaimsSubmission, DEFAULT_PENDING_TTL_SECS, generate_pending_id, pending_location,
 };
 pub use types::*;
