@@ -36,7 +36,6 @@ pub enum InjectorStep {
 struct CachedToken {
     auth_token: String,
     expires_at: Instant,
-    auth_server: String,
 }
 
 #[derive(Clone)]
@@ -181,7 +180,6 @@ impl AAuthInjector {
             CachedToken {
                 auth_token: token.clone(),
                 expires_at: Instant::now() + Duration::from_secs(expires_in),
-                auth_server: auth_server.to_string(),
             },
         );
         if let Some(callback) = on_auth_token {
@@ -271,7 +269,6 @@ mod tests {
                 CachedToken {
                     auth_token: "auth".into(),
                     expires_at: Instant::now() + Duration::from_secs(3600),
-                    auth_server: "https://auth.example".into(),
                 },
             )]),
             opaque_cache: HashMap::from([(

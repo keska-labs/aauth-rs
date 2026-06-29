@@ -51,6 +51,8 @@ http-body-util.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 tower.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
 
 [[example]]
 name = "direct_agent_grant"
@@ -58,6 +60,10 @@ required-features = ["client-reqwest", "server", "server-axum"]
 
 [[example]]
 name = "auth_token_challenge"
+required-features = ["client-reqwest", "server", "server-axum"]
+
+[[test]]
+name = "axum_integration"
 required-features = ["client-reqwest", "server", "server-axum"]
 
 [package.metadata.docs.rs]

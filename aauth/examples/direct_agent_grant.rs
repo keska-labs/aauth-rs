@@ -4,7 +4,7 @@
 //! cargo run --example direct_agent_grant
 //! ```
 
-#[path = "shared/server.rs"]
+#[path = "../tests/support/axum_server.rs"]
 mod server;
 
 use aauth::client::reqwest::{AAuthClientOptions, AAuthMiddleware, ClientBuilder};
@@ -58,6 +58,5 @@ async fn main() -> aauth::Result<()> {
         .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
     println!("status: ok, agent: {}", body.agent);
 
-    spawned.handle.abort();
     Ok(())
 }

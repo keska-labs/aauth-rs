@@ -36,11 +36,16 @@ impl Default for ServerConfig {
 pub struct SpawnedServer {
     pub addr: SocketAddr,
     pub keys: TestKeys,
-    pub base_url: String,
     pub agent_url: String,
     pub auth_server_url: String,
     pub resource_url: String,
-    pub handle: JoinHandle<()>,
+    handle: JoinHandle<()>,
+}
+
+impl Drop for SpawnedServer {
+    fn drop(&mut self) {
+        self.handle.abort();
+    }
 }
 
 pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
@@ -103,10 +108,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
 
     if config.with_auth_routes {
         app = app
-            .route(
-                "/.well-known/aauth-person.json",
-                get(person_metadata_handler),
-            )
+            .route("/.well-known/aauth-person.json", get(person_metadata_handler))
             .route("/auth/jwks", get(jwks_handler))
             .route("/aauth/token", post(token_exchange_handler))
             .route("/pending/{id}", get(pending_poll_handler));
@@ -121,7 +123,6 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     SpawnedServer {
         addr,
         keys,
-        base_url,
         agent_url,
         auth_server_url,
         resource_url,
@@ -148,7 +149,9 @@ async fn api_data_handler(token: VerifiedAAuthToken) -> Json<serde_json::Value> 
     }
 }
 
-async fn agent_metadata_handler(State(state): State<AuthServerState>) -> Json<MetadataDocument> {
+async fn agent_metadata_handler(
+    State(state): State<AuthServerState>,
+) -> Json<MetadataDocument> {
     Json(MetadataDocument {
         jwks_uri: state.agent_jwks_uri,
         extra: Default::default(),
