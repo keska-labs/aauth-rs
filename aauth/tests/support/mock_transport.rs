@@ -298,6 +298,8 @@ impl MockServerState {
             };
             let exchange = body.clone().unwrap_or(TokenExchangeRequest {
                 resource_token: String::new(),
+                upstream_token: None,
+                subagent_token: None,
                 justification: None,
                 localhost_callback: None,
                 login_hint: None,
@@ -305,6 +307,8 @@ impl MockServerState {
                 domain_hint: None,
                 capabilities: None,
                 prompt: None,
+                platform: None,
+                device: None,
             });
             let record = PendingRecord::new(
                 id,
@@ -323,6 +327,7 @@ impl MockServerState {
                         iat: 0,
                         exp: i64::MAX,
                         ps: Some(self.person_server_url.clone()),
+                        parent_agent: None,
                     },
                     resource_claims: aauth::jwt::decode_resource_token_unverified(
                         &exchange.resource_token,
@@ -338,6 +343,7 @@ impl MockServerState {
                         exp: u64::MAX,
                         scope: None,
                         mission: None,
+                        interaction: None,
                     }),
                     exchange_request: exchange,
                     agent_token: String::new(),

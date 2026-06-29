@@ -47,6 +47,7 @@ impl AgentJwtMinter for TestAgentJwtMinter {
             iat: now,
             exp: now + 3600,
             ps: ps.map(str::to_string),
+            parent_agent: None,
         };
 
         let mut header = Header::new(Algorithm::EdDSA);

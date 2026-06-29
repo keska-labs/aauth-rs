@@ -38,6 +38,7 @@ pub async fn create_resource_token(
         exp: now + lifetime,
         scope: options.scope,
         mission: options.mission,
+        interaction: None,
     };
 
     let mut header = Header::new(Algorithm::EdDSA);

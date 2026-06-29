@@ -235,6 +235,8 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
 
     let body = TokenExchangeRequest {
         resource_token: options.resource_token,
+        upstream_token: None,
+        subagent_token: None,
         justification: options.justification,
         localhost_callback: options.localhost_callback,
         login_hint: options.login_hint,
@@ -242,6 +244,8 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
         domain_hint: options.domain_hint,
         capabilities: options.capabilities,
         prompt: options.prompt,
+        platform: None,
+        device: None,
     };
 
     let token_body =

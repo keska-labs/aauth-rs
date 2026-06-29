@@ -32,11 +32,18 @@ pub fn parse_mission_header(header_value: &str) -> Result<Mission> {
     Ok(Mission { approver, s256 })
 }
 
-/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure
+/// Parameters for building an `AAuth-Requirement` header value.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure
+///
+/// `resource_token` is required for `auth-token`; `url` and `code` are required for `interaction`.
 #[derive(Debug, Clone, Default)]
 pub struct AAuthRequirementParams<'a> {
+    /// Resource token JWT for `requirement=auth-token`.
     pub resource_token: Option<&'a str>,
+    /// Interaction URL for `requirement=interaction`.
     pub url: Option<&'a str>,
+    /// Interaction code for `requirement=interaction`.
     pub code: Option<&'a str>,
 }
 

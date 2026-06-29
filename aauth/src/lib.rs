@@ -47,7 +47,8 @@ pub use headers::{
 pub use interaction_code::{canonicalize_code, generate_code};
 pub use jwt::{
     ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
-    VerifiedToken, decode_resource_token_unverified, jwk_set_from_okp, jwk_thumbprint,
+    ResourceInteractionClaim, VerifiedToken, decode_resource_token_unverified, jwk_set_from_okp,
+    jwk_thumbprint,
 };
 pub use keys::{
     Ed25519KeyPair, OkpSigningKey, TestKeys, create_test_keys, static_agent_metadata_fetcher,

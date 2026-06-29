@@ -57,6 +57,7 @@ mod tests {
             iat: 0,
             exp: 9999999999,
             ps: ps.map(str::to_string),
+            parent_agent: None,
         }
     }
 

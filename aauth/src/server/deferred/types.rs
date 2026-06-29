@@ -3,48 +3,78 @@ use serde::{Deserialize, Serialize};
 use crate::jwt::{AgentClaims, ResourceClaims};
 use crate::types::{AAuthProtocolError, TokenExchangeRequest, TokenResponseBody};
 
-/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#requirement-values
+/// Deferred `AAuth-Requirement` encoded for server-side pending state.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#requirement-values
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeferRequirement {
+    /// `requirement=interaction` with required `url` and `code` parameters.
     Interaction {
+        /// Interaction URL. MUST use `https` with no query or fragment.
         url: String,
+        /// Interaction code per the interaction code format rules.
         code: String,
     },
+    /// `requirement=clarification` with optional response deadline.
     Clarification {
+        /// Markdown clarification question.
         question: String,
+        /// Seconds until the server times out the request.
         timeout: Option<u64>,
     },
+    /// `requirement=claims` with required claim names.
     Claims {
+        /// Claim names the recipient MUST provide (including directed `sub`).
         required_claims: Vec<String>,
     },
+    /// `requirement=approval` — poll until a terminal response.
     Approval,
+    /// `402 Payment Required` — poll `Location` after payment settlement.
     Payment {
+        /// Pending URL to poll after payment.
         location: String,
     },
 }
 
-/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
+/// Pending response body `status` values.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PendingStatus {
+    /// Request is waiting for completion.
     Pending,
+    /// User has arrived at the interaction endpoint.
     Interacting,
 }
 
-/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#deferred-responses
+/// Terminal or in-progress outcome stored for pending poll responses.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#deferred-responses
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PendingOutcome {
+    /// Direct grant (`200`) with an auth token.
     AuthToken(TokenResponseBody),
+    /// Resource-managed opaque access token from `AAuth-Access`.
     OpaqueAccess(String),
+    /// Terminal polling or token endpoint error.
     Error(AAuthProtocolError),
 }
 
-/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
+/// Snapshot of a pending request exposed via poll responses.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
+///
+/// While waiting, either [`requirement`](Self::requirement) or [`outcome`](Self::outcome) is set,
+/// not both.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingSnapshot {
+    /// `"pending"` or `"interacting"`.
     pub status: PendingStatus,
+    /// Active requirement while the request is unresolved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requirement: Option<DeferRequirement>,
+    /// Terminal outcome once resolved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outcome: Option<PendingOutcome>,
 }
@@ -67,24 +97,39 @@ impl PendingSnapshot {
     }
 }
 
-/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#claims-required-requirement-claims
+/// Identity claims POSTed to a pending URL for `requirement=claims`.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#claims-required-requirement-claims
+///
+/// MUST include a directed user identifier as [`sub`](Self::sub). Unrecognized claim names SHOULD
+/// be ignored by the recipient.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClaimsSubmission {
+    /// Directed user identifier for the resource.
     pub sub: String,
+    /// Identity claim when requested by `required_claims`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    /// Tenant identifier when requested by `required_claims`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant: Option<String>,
+    /// Additional requested identity claims.
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
-/// https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#agent-response-to-clarification
+/// Agent input to a pending URL during deferred resolution.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#agent-response-to-clarification
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PendingInput {
+    /// POST `clarification_response` to answer a clarification.
     ClarificationResponse(String),
+    /// POST requested identity claims for `requirement=claims`.
     ClaimsSubmission(ClaimsSubmission),
+    /// Signal that the user completed an interaction.
     InteractionCompleted,
+    /// DELETE the pending URL to withdraw the request.
     Cancelled,
 }
 

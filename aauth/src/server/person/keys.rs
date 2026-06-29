@@ -103,6 +103,7 @@ pub fn mint_person_server_signature_jwt(keys: &TestKeys, person_server_url: &str
         iat: now,
         exp: now + 3600,
         ps: None,
+        parent_agent: None,
     };
 
     let mut header = Header::new(Algorithm::EdDSA);
