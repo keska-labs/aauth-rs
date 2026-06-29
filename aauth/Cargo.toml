@@ -55,15 +55,27 @@ async-trait.workspace = true
 serde_json.workspace = true
 
 [[example]]
-name = "direct_agent_grant"
+name = "identity_based"
 required-features = ["client-reqwest", "server", "server-axum"]
 
 [[example]]
-name = "auth_token_challenge"
+name = "person_server_managed"
+required-features = ["client-reqwest", "server", "server-axum"]
+
+[[example]]
+name = "resource_managed"
+required-features = ["client-reqwest", "server", "server-axum"]
+
+[[example]]
+name = "federated"
 required-features = ["client-reqwest", "server", "server-axum"]
 
 [[test]]
 name = "axum_integration"
+required-features = ["client-reqwest", "server", "server-axum"]
+
+[[test]]
+name = "example_flows"
 required-features = ["client-reqwest", "server", "server-axum"]
 
 [package.metadata.docs.rs]
