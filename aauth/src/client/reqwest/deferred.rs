@@ -10,7 +10,7 @@ use crate::client::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::{
-    AAuthProtocolError, ClarificationChallenge, ClarificationResponse, RequirementLevel,
+    AAuthChallenge, AAuthProtocolError, ClarificationChallenge, ClarificationResponse,
 };
 
 const DEFAULT_MAX_POLL_DURATION: u64 = 300;
@@ -186,13 +186,11 @@ pub(crate) async fn poll_deferred_with<S: SignedSend>(
             }
 
             if let Some(header) = requirement_header {
-                if let Ok(challenge) = parse_aauth_requirement(&header) {
-                    if challenge.requirement == RequirementLevel::Interaction {
-                        if let (Some(url), Some(code)) = (challenge.url, challenge.code) {
-                            if let Some(on_interaction) = &options.on_interaction {
-                                on_interaction(url, code);
-                            }
-                        }
+                if let Ok(AAuthChallenge::Interaction { url, code }) =
+                    parse_aauth_requirement(&header)
+                {
+                    if let Some(on_interaction) = &options.on_interaction {
+                        on_interaction(url, code);
                     }
                 }
             }

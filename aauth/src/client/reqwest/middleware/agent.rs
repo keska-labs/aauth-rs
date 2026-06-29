@@ -18,7 +18,7 @@ use crate::headers::parse_aauth_requirement;
 use crate::jwt::{VerifiedToken, jwk_thumbprint};
 #[cfg(feature = "server")]
 use crate::server::resource::{verify_client_auth_token, verify_resource_challenge};
-use crate::types::RequirementLevel;
+use crate::types::AAuthChallenge;
 
 pub struct AgentMiddleware {
     options: AgentOptions,
@@ -200,11 +200,7 @@ impl AgentMiddleware {
                         agent_jwt,
                     )?;
 
-                    let capabilities = self
-                        .options
-                        .capabilities
-                        .as_ref()
-                        .map(|caps| caps.iter().map(|c| c.as_str().to_string()).collect());
+                    let capabilities = self.options.capabilities.clone();
 
                     let mut exchange =
                         TokenExchangeOptions::builder(person_server_url.clone(), resource_token);
@@ -297,10 +293,8 @@ fn interaction_from_response(resp: &Response) -> (Option<String>, Option<String>
     else {
         return (None, None);
     };
-    if let Ok(challenge) = parse_aauth_requirement(header) {
-        if challenge.requirement == RequirementLevel::Interaction {
-            return (challenge.url, challenge.code);
-        }
+    if let Ok(AAuthChallenge::Interaction { url, code }) = parse_aauth_requirement(header) {
+        return (Some(url), Some(code));
     }
     (None, None)
 }

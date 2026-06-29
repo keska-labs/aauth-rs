@@ -170,22 +170,58 @@ impl FromStr for Capability {
     }
 }
 
+/// `202` pending response body `status` values.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PendingStatus {
+    /// Request is waiting for completion.
+    Pending,
+    /// User has arrived at the interaction endpoint.
+    Interacting,
+}
+
 /// Parsed `AAuth-Requirement` response header.
 ///
 /// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure
 ///
-/// Requirement-specific parameters: `resource_token` for `auth-token`; `url` and `code` for
-/// `interaction` (both required when `requirement=interaction`).
+/// Each variant carries only the parameters defined for that requirement level.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AAuthChallenge {
-    /// Requirement type from the `requirement` member.
-    pub requirement: RequirementLevel,
-    /// Resource token JWT. Present when `requirement=auth-token`.
-    pub resource_token: Option<String>,
-    /// Interaction URL. Present when `requirement=interaction`. MUST use `https` with no query or fragment.
-    pub url: Option<String>,
-    /// Interaction code. Present when `requirement=interaction`.
-    pub code: Option<String>,
+pub enum AAuthChallenge {
+    /// `401` — AAuth agent token required for identity-only access.
+    AgentToken,
+    /// `401` — auth token required.
+    AuthToken {
+        /// Resource token JWT from the `resource-token` parameter.
+        resource_token: String,
+    },
+    /// `202` — approval pending; poll `Location` for result.
+    Approval,
+    /// `202` — user action required at an interaction endpoint.
+    Interaction {
+        /// Interaction URL. MUST use `https` with no query or fragment.
+        url: String,
+        /// Interaction code.
+        code: String,
+    },
+    /// `202` — question posed to the recipient (details in response body).
+    Clarification,
+    /// `202` — identity claims required (details in response body).
+    Claims,
+}
+
+impl AAuthChallenge {
+    pub fn level(&self) -> RequirementLevel {
+        match self {
+            Self::AgentToken => RequirementLevel::AgentToken,
+            Self::AuthToken { .. } => RequirementLevel::AuthToken,
+            Self::Approval => RequirementLevel::Approval,
+            Self::Interaction { .. } => RequirementLevel::Interaction,
+            Self::Clarification => RequirementLevel::Clarification,
+            Self::Claims => RequirementLevel::Claims,
+        }
+    }
 }
 
 /// Mission reference (`approver`, `s256`) in headers and JWT claims.
@@ -388,18 +424,9 @@ pub struct AccessTokenExchangeRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimsChallenge {
     /// `"pending"` while waiting for claims submission.
-    pub status: String,
+    pub status: PendingStatus,
     /// Claim names the recipient MUST provide (including directed `sub`).
     pub required_claims: Vec<String>,
-}
-
-/// `202` pending response body status field.
-///
-/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingStatusBody {
-    /// `"pending"` while waiting, `"interacting"` when the user has arrived at the interaction endpoint.
-    pub status: String,
 }
 
 /// Agent POST body to the PS `token_endpoint`.
@@ -431,7 +458,7 @@ pub struct TokenExchangeRequest {
     pub domain_hint: Option<String>,
     /// Capability values the agent can handle for this request.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub capabilities: Option<Vec<String>>,
+    pub capabilities: Option<Vec<Capability>>,
     /// Space-delimited prompt values (`none`, `login`, `consent`, `select_account`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
@@ -449,8 +476,8 @@ pub struct TokenExchangeRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClarificationChallenge {
     /// `"pending"` while waiting for a response.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
+    #[serde(default = "default_pending_status")]
+    pub status: PendingStatus,
     /// Markdown question the recipient MUST answer.
     pub clarification: String,
     /// Seconds until the server times out the request.
@@ -459,6 +486,10 @@ pub struct ClarificationChallenge {
     /// Discrete answer choices, when applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<Vec<String>>,
+}
+
+fn default_pending_status() -> PendingStatus {
+    PendingStatus::Pending
 }
 
 /// Agent POST body to answer a clarification on a pending URL.

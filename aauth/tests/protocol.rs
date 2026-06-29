@@ -5,9 +5,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use aauth::KeyMaterialProvider;
 use aauth::VerifiedToken;
 use aauth::client::reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
-use aauth::headers::{AAuthRequirementParams, build_aauth_requirement, parse_aauth_requirement};
+use aauth::headers::{build_aauth_requirement, parse_aauth_requirement};
 use aauth::server::{DeferRequirement, VerifyTokenOptions, build_accepted, verify_token};
-use aauth::types::{AuthOkResponse, RequirementLevel, TokenExchangeRequest, TokenResponseBody};
+use aauth::types::{
+    AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody,
+};
 use aauth::{InMemoryPendingStore, PendingOutcome, PendingStore};
 use http::Extensions;
 use reqwest::{Request, Response};
@@ -46,43 +48,33 @@ fn build_client(
 #[tokio::test]
 async fn aauth_requirement_header_round_trip_auth_token() {
     let _guard = test_lock();
-    let header = build_aauth_requirement(
-        RequirementLevel::AuthToken,
-        Some(&AAuthRequirementParams {
-            resource_token: Some("rt_abc123"),
-            ..Default::default()
-        }),
-    )
-    .unwrap();
+    let challenge = AAuthChallenge::AuthToken {
+        resource_token: "rt_abc123".into(),
+    };
+    let header = build_aauth_requirement(&challenge).unwrap();
     let parsed = parse_aauth_requirement(&header).unwrap();
-    assert_eq!(parsed.requirement, RequirementLevel::AuthToken);
-    assert_eq!(parsed.resource_token.as_deref(), Some("rt_abc123"));
+    assert_eq!(parsed, challenge);
 }
 
 #[tokio::test]
 async fn aauth_requirement_header_round_trip_interaction() {
     let _guard = test_lock();
-    let header = build_aauth_requirement(
-        RequirementLevel::Interaction,
-        Some(&AAuthRequirementParams {
-            url: Some("https://auth.example/interact"),
-            code: Some("CODE1234"),
-            ..Default::default()
-        }),
-    )
-    .unwrap();
+    let challenge = AAuthChallenge::Interaction {
+        url: "https://auth.example/interact".into(),
+        code: "CODE1234".into(),
+    };
+    let header = build_aauth_requirement(&challenge).unwrap();
     let parsed = parse_aauth_requirement(&header).unwrap();
-    assert_eq!(parsed.requirement, RequirementLevel::Interaction);
-    assert_eq!(parsed.url.as_deref(), Some("https://auth.example/interact"));
-    assert_eq!(parsed.code.as_deref(), Some("CODE1234"));
+    assert_eq!(parsed, challenge);
 }
 
 #[tokio::test]
 async fn aauth_requirement_header_round_trip_approval() {
     let _guard = test_lock();
-    let header = build_aauth_requirement(RequirementLevel::Approval, None).unwrap();
+    let challenge = AAuthChallenge::Approval;
+    let header = build_aauth_requirement(&challenge).unwrap();
     let parsed = parse_aauth_requirement(&header).unwrap();
-    assert_eq!(parsed.requirement, RequirementLevel::Approval);
+    assert_eq!(parsed, challenge);
 }
 
 #[tokio::test]
@@ -348,9 +340,13 @@ async fn deferred_accepted_response_format() {
         .to_str()
         .unwrap();
     let parsed = parse_aauth_requirement(aauth_req).unwrap();
-    assert_eq!(parsed.requirement, RequirementLevel::Interaction);
-    assert_eq!(parsed.url.as_deref(), Some(INTERACTION_URL));
-    assert_eq!(parsed.code.as_deref(), Some(code.as_str()));
+    assert_eq!(
+        parsed,
+        AAuthChallenge::Interaction {
+            url: INTERACTION_URL.into(),
+            code: code.clone(),
+        }
+    );
 }
 
 fn mock_config(

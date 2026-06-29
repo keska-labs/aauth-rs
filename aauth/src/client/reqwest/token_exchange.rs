@@ -10,7 +10,7 @@ use crate::client::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 use crate::types::{
-    AAuthProtocolError, PersonServerMetadata, RequirementLevel, TokenExchangeRequest,
+    AAuthProtocolError, AAuthChallenge, PersonServerMetadata, TokenExchangeRequest,
     TokenResponseBody,
 };
 
@@ -33,7 +33,7 @@ pub struct TokenExchangeOptions {
     pub(crate) login_hint: Option<String>,
     pub(crate) tenant: Option<String>,
     pub(crate) domain_hint: Option<String>,
-    pub(crate) capabilities: Option<Vec<String>>,
+    pub(crate) capabilities: Option<Vec<crate::types::Capability>>,
     pub(crate) prompt: Option<String>,
     pub(crate) on_interaction: Option<InteractionCallback>,
     pub(crate) on_clarification: Option<crate::client::injector::ClarificationCallback>,
@@ -51,7 +51,7 @@ pub struct TokenExchangeOptionsBuilder {
     login_hint: Option<String>,
     tenant: Option<String>,
     domain_hint: Option<String>,
-    capabilities: Option<Vec<String>>,
+    capabilities: Option<Vec<crate::types::Capability>>,
     prompt: Option<String>,
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<crate::client::injector::ClarificationCallback>,
@@ -125,7 +125,7 @@ impl TokenExchangeOptionsBuilder {
         self
     }
 
-    pub fn capabilities(mut self, capabilities: Vec<String>) -> Self {
+    pub fn capabilities(mut self, capabilities: Vec<crate::types::Capability>) -> Self {
         self.capabilities = Some(capabilities);
         self
     }
@@ -277,12 +277,9 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             .get("aauth-requirement")
             .and_then(|v| v.to_str().ok())
         {
-            if let Ok(challenge) = parse_aauth_requirement(header) {
-                if challenge.requirement == RequirementLevel::Interaction {
-                    if let (Some(url), Some(code)) = (challenge.url, challenge.code) {
-                        deferred = deferred.interaction(url, code);
-                    }
-                }
+            if let Ok(AAuthChallenge::Interaction { url, code }) = parse_aauth_requirement(header)
+            {
+                deferred = deferred.interaction(url, code);
             }
         }
         if let Some(cb) = options.on_interaction {

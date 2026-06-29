@@ -3,7 +3,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
 use crate::server::deferred::{
-    PendingOutcome, PendingStore, PollResponse, map_snapshot_to_poll_parts,
+    PendingOutcome, PendingSnapshot, PendingStore, PollResponse, map_snapshot_to_poll_parts,
 };
 use crate::server::resource::opaque::OpaqueAccessStore;
 
@@ -36,7 +36,7 @@ where
         return StatusCode::GONE.into_response();
     }
 
-    if let Some(outcome) = &record.snapshot.outcome {
+    if let PendingSnapshot::Complete(outcome) = &record.snapshot {
         let _ = state.pending.remove(&id).await;
         return match outcome {
             PendingOutcome::OpaqueAccess(token) => {

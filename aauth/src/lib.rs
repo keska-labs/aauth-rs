@@ -75,7 +75,7 @@ pub use server::{
     DeferInteractionAccessPolicy, DeferInteractionPersonPolicy, DeferInteractionResourcePolicy,
     DeferRequirement, Ed25519ResourceTokenSigner, FederationPendingState, FixedSubPersonPolicy,
     InMemoryOpaqueAccessStore, InMemoryPendingStore, OpaqueAccessStore, PendingContext,
-    PendingInput, PendingKind, PendingOutcome, PendingRecord, PendingSnapshot, PendingStatus,
+    PendingInput, PendingKind, PendingOutcome, PendingRecord, PendingSnapshot,
     PendingStore, PersonPendingContext, PersonTokenContext, PersonTokenDecision, PersonTokenPolicy,
     PolicyError, ResourceAccessContext, ResourceAccessMode, ResourceAccessPolicy,
     ResourceConsentDecision, ResourceConsentPolicy, ResourceTokenOptions, ResourceTokenSigner,

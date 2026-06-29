@@ -32,52 +32,18 @@ pub fn parse_mission_header(header_value: &str) -> Result<Mission> {
     Ok(Mission { approver, s256 })
 }
 
-/// Parameters for building an `AAuth-Requirement` header value.
-///
-/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure
-///
-/// `resource_token` is required for `auth-token`; `url` and `code` are required for `interaction`.
-#[derive(Debug, Clone, Default)]
-pub struct AAuthRequirementParams<'a> {
-    /// Resource token JWT for `requirement=auth-token`.
-    pub resource_token: Option<&'a str>,
-    /// Interaction URL for `requirement=interaction`.
-    pub url: Option<&'a str>,
-    /// Interaction code for `requirement=interaction`.
-    pub code: Option<&'a str>,
-}
-
-pub fn build_aauth_requirement(
-    requirement: RequirementLevel,
-    params: Option<&AAuthRequirementParams<'_>>,
-) -> Result<String> {
-    match requirement {
-        RequirementLevel::Approval => Ok("requirement=approval".into()),
-        RequirementLevel::Clarification => Ok("requirement=clarification".into()),
-        RequirementLevel::Claims => Ok("requirement=claims".into()),
-        RequirementLevel::AgentToken => Ok("requirement=agent-token".into()),
-        RequirementLevel::AuthToken => {
-            let resource_token = params.and_then(|p| p.resource_token).ok_or_else(|| {
-                AAuthError::InvalidHeader("auth-token requires resource_token".into())
-            })?;
-            Ok(format!(
-                "requirement=auth-token; resource-token=\"{resource_token}\""
-            ))
-        }
-        RequirementLevel::Interaction => {
-            let params = params.ok_or_else(|| {
-                AAuthError::InvalidHeader("interaction requires url and code".into())
-            })?;
-            let url = params
-                .url
-                .ok_or_else(|| AAuthError::InvalidHeader("interaction requires url".into()))?;
-            let code = params
-                .code
-                .ok_or_else(|| AAuthError::InvalidHeader("interaction requires code".into()))?;
-            Ok(format!(
-                "requirement=interaction; url=\"{url}\"; code=\"{code}\""
-            ))
-        }
+pub fn build_aauth_requirement(challenge: &AAuthChallenge) -> Result<String> {
+    match challenge {
+        AAuthChallenge::Approval => Ok("requirement=approval".into()),
+        AAuthChallenge::Clarification => Ok("requirement=clarification".into()),
+        AAuthChallenge::Claims => Ok("requirement=claims".into()),
+        AAuthChallenge::AgentToken => Ok("requirement=agent-token".into()),
+        AAuthChallenge::AuthToken { resource_token } => Ok(format!(
+            "requirement=auth-token; resource-token=\"{resource_token}\""
+        )),
+        AAuthChallenge::Interaction { url, code } => Ok(format!(
+            "requirement=interaction; url=\"{url}\"; code=\"{code}\""
+        )),
     }
 }
 
@@ -98,18 +64,29 @@ pub fn parse_aauth_requirement(header_value: &str) -> Result<AAuthChallenge> {
             AAuthError::InvalidHeader("missing requirement= in AAuth-Requirement header".into())
         })?;
 
-    let requirement = requirement_match.parse().map_err(|_| {
+    let level = requirement_match.parse().map_err(|_| {
         AAuthError::InvalidHeader(format!("unknown requirement level: {requirement_match}"))
     })?;
 
-    let challenge = AAuthChallenge {
-        requirement,
-        resource_token: extract_quoted_param(trimmed, "resource-token"),
-        url: extract_quoted_param(trimmed, "url"),
-        code: extract_quoted_param(trimmed, "code"),
-    };
-
-    Ok(challenge)
+    match level {
+        RequirementLevel::AgentToken => Ok(AAuthChallenge::AgentToken),
+        RequirementLevel::Approval => Ok(AAuthChallenge::Approval),
+        RequirementLevel::Clarification => Ok(AAuthChallenge::Clarification),
+        RequirementLevel::Claims => Ok(AAuthChallenge::Claims),
+        RequirementLevel::AuthToken => {
+            let resource_token = extract_quoted_param(trimmed, "resource-token").ok_or_else(
+                || AAuthError::InvalidHeader("auth-token requires resource-token".into()),
+            )?;
+            Ok(AAuthChallenge::AuthToken { resource_token })
+        }
+        RequirementLevel::Interaction => {
+            let url = extract_quoted_param(trimmed, "url")
+                .ok_or_else(|| AAuthError::InvalidHeader("interaction requires url".into()))?;
+            let code = extract_quoted_param(trimmed, "code")
+                .ok_or_else(|| AAuthError::InvalidHeader("interaction requires code".into()))?;
+            Ok(AAuthChallenge::Interaction { url, code })
+        }
+    }
 }
 
 fn extract_quoted_param(input: &str, key: &str) -> Option<String> {
@@ -126,40 +103,30 @@ mod tests {
 
     #[test]
     fn round_trip_auth_token() {
-        let header = build_aauth_requirement(
-            RequirementLevel::AuthToken,
-            Some(&AAuthRequirementParams {
-                resource_token: Some("rt_abc123"),
-                ..Default::default()
-            }),
-        )
-        .unwrap();
+        let challenge = AAuthChallenge::AuthToken {
+            resource_token: "rt_abc123".into(),
+        };
+        let header = build_aauth_requirement(&challenge).unwrap();
         let parsed = parse_aauth_requirement(&header).unwrap();
-        assert_eq!(parsed.requirement, RequirementLevel::AuthToken);
-        assert_eq!(parsed.resource_token.as_deref(), Some("rt_abc123"));
+        assert_eq!(parsed, challenge);
     }
 
     #[test]
     fn round_trip_interaction() {
-        let header = build_aauth_requirement(
-            RequirementLevel::Interaction,
-            Some(&AAuthRequirementParams {
-                url: Some("https://auth.example/interact"),
-                code: Some("CODE1234"),
-                ..Default::default()
-            }),
-        )
-        .unwrap();
+        let challenge = AAuthChallenge::Interaction {
+            url: "https://auth.example/interact".into(),
+            code: "CODE1234".into(),
+        };
+        let header = build_aauth_requirement(&challenge).unwrap();
         let parsed = parse_aauth_requirement(&header).unwrap();
-        assert_eq!(parsed.requirement, RequirementLevel::Interaction);
-        assert_eq!(parsed.url.as_deref(), Some("https://auth.example/interact"));
-        assert_eq!(parsed.code.as_deref(), Some("CODE1234"));
+        assert_eq!(parsed, challenge);
     }
 
     #[test]
     fn round_trip_approval() {
-        let header = build_aauth_requirement(RequirementLevel::Approval, None).unwrap();
+        let challenge = AAuthChallenge::Approval;
+        let header = build_aauth_requirement(&challenge).unwrap();
         let parsed = parse_aauth_requirement(&header).unwrap();
-        assert_eq!(parsed.requirement, RequirementLevel::Approval);
+        assert_eq!(parsed, challenge);
     }
 }

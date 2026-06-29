@@ -11,8 +11,7 @@ pub mod access;
 pub use deferred::{
     ClaimsSubmission, DEFAULT_PENDING_TTL_SECS, DeferRequirement, FederationPendingState,
     InMemoryPendingStore, PendingContext, PendingInput, PendingKind, PendingOutcome, PendingRecord,
-    PendingSnapshot, PendingStatus, PendingStore, PersonPendingContext, generate_pending_id,
-    pending_location,
+    PendingSnapshot, PendingStore, PersonPendingContext, generate_pending_id, pending_location,
 };
 #[cfg(feature = "server-axum")]
 pub use deferred::{

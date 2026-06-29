@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::jwt::{AgentClaims, ResourceClaims};
-use crate::types::{AAuthProtocolError, TokenExchangeRequest, TokenResponseBody};
+use crate::types::{
+    AAuthChallenge, AAuthProtocolError, PendingStatus, TokenExchangeRequest, TokenResponseBody,
+};
 
 /// Deferred `AAuth-Requirement` encoded for server-side pending state.
 ///
@@ -36,16 +38,25 @@ pub enum DeferRequirement {
     },
 }
 
-/// Pending response body `status` values.
-///
-/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PendingStatus {
-    /// Request is waiting for completion.
-    Pending,
-    /// User has arrived at the interaction endpoint.
-    Interacting,
+impl DeferRequirement {
+    /// Header-only [`AAuthChallenge`] for this deferred requirement.
+    ///
+    /// Returns an error for [`DeferRequirement::Payment`], which uses `402` rather than
+    /// `AAuth-Requirement`.
+    pub fn header_challenge(&self) -> Result<AAuthChallenge, crate::error::AAuthError> {
+        match self {
+            Self::Interaction { url, code } => Ok(AAuthChallenge::Interaction {
+                url: url.clone(),
+                code: code.clone(),
+            }),
+            Self::Clarification { .. } => Ok(AAuthChallenge::Clarification),
+            Self::Claims { .. } => Ok(AAuthChallenge::Claims),
+            Self::Approval => Ok(AAuthChallenge::Approval),
+            Self::Payment { .. } => Err(crate::error::AAuthError::Message(
+                "payment defer uses 402, not AAuth-Requirement".into(),
+            )),
+        }
+    }
 }
 
 /// Terminal or in-progress outcome stored for pending poll responses.
@@ -64,36 +75,29 @@ pub enum PendingOutcome {
 /// Snapshot of a pending request exposed via poll responses.
 ///
 /// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#pending-response
-///
-/// While waiting, either [`requirement`](Self::requirement) or [`outcome`](Self::outcome) is set,
-/// not both.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PendingSnapshot {
-    /// `"pending"` or `"interacting"`.
-    pub status: PendingStatus,
-    /// Active requirement while the request is unresolved.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub requirement: Option<DeferRequirement>,
+pub enum PendingSnapshot {
+    /// Request is still waiting on a deferred requirement.
+    Waiting {
+        /// `"pending"` or `"interacting"`.
+        status: PendingStatus,
+        /// Active requirement while unresolved.
+        requirement: DeferRequirement,
+    },
     /// Terminal outcome once resolved.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub outcome: Option<PendingOutcome>,
+    Complete(PendingOutcome),
 }
 
 impl PendingSnapshot {
     pub fn waiting(requirement: DeferRequirement) -> Self {
-        Self {
+        Self::Waiting {
             status: PendingStatus::Pending,
-            requirement: Some(requirement),
-            outcome: None,
+            requirement,
         }
     }
 
     pub fn complete(outcome: PendingOutcome) -> Self {
-        Self {
-            status: PendingStatus::Pending,
-            requirement: None,
-            outcome: Some(outcome),
-        }
+        Self::Complete(outcome)
     }
 }
 

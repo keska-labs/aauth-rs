@@ -8,7 +8,7 @@ use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
 #[cfg(feature = "server")]
 use crate::metadata::MetadataFetcher;
-use crate::types::{Capability, Mission, PersonServerMetadata, RequirementLevel};
+use crate::types::{Capability, Mission, PersonServerMetadata};
 
 pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
 
@@ -328,10 +328,10 @@ impl AgentAuth {
             AgentAuthAttempt::AgentSigned => {
                 if let Some(header) = header_value(headers, "aauth-requirement") {
                     let challenge = parse_aauth_requirement(header)?;
-                    if challenge.requirement == RequirementLevel::AuthToken {
-                        if let Some(resource_token) = challenge.resource_token {
-                            return Ok(AgentAuthStep::ExchangeToken { resource_token });
-                        }
+                    if let crate::types::AAuthChallenge::AuthToken { resource_token } =
+                        challenge
+                    {
+                        return Ok(AgentAuthStep::ExchangeToken { resource_token });
                     }
                 }
                 Ok(AgentAuthStep::Finish)

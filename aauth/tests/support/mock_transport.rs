@@ -6,7 +6,7 @@ use aauth::PendingOutcome;
 use aauth::PendingStore;
 use aauth::VerifiedToken;
 use aauth::error::Result;
-use aauth::headers::{AAuthRequirementParams, build_aauth_requirement};
+use aauth::headers::build_aauth_requirement;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::resolve_resource_token_audience;
 use aauth::server::{
@@ -16,7 +16,7 @@ use aauth::server::{
 };
 use aauth::types::{
     AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument, PersonServerMetadata,
-    RequirementLevel, TokenExchangeRequest, TokenResponseBody,
+    AAuthChallenge, TokenExchangeRequest, TokenResponseBody,
 };
 use async_trait::async_trait;
 use http::StatusCode;
@@ -229,13 +229,9 @@ impl MockServerState {
                 .await
                 .map_err(|e| aauth::AAuthError::Message(e))?;
 
-                let header = build_aauth_requirement(
-                    RequirementLevel::AuthToken,
-                    Some(&AAuthRequirementParams {
-                        resource_token: Some(&resource_token),
-                        ..Default::default()
-                    }),
-                )?;
+                let header = build_aauth_requirement(&AAuthChallenge::AuthToken {
+                    resource_token: resource_token.clone(),
+                })?;
 
                 Ok(Response::from(
                     http::Response::builder()
@@ -418,7 +414,7 @@ impl MockServerState {
             ));
         };
 
-        if let Some(outcome) = &record.snapshot.outcome {
+        if let PendingSnapshot::Complete(outcome) = &record.snapshot {
             let _ =
                 self.pending.remove(&id).await.map_err(|e| {
                     aauth::AAuthError::Message(format!("pending remove failed: {e}"))

@@ -15,10 +15,18 @@ Changes since [0.0.1].
 - Renamed agent-side types: `AAuthMiddleware` → `AgentMiddleware`, `AAuthInjector` → `AgentAuth`, `AuthAttempt` → `AgentAuthAttempt`, `InjectorStep` → `AgentAuthStep`, `DeferredOptions` → `AgentDeferredOptions` (with builder).
 - Renamed resource server axum types: `AAuthLayer` → `ResourceAuthLayer`, `AAuthService` → `ResourceAuthService`.
 - `TokenExchangeOptions` now uses a builder API (`TokenExchangeOptions::builder(person_server_url, resource_token)`).
+- `AAuthChallenge` is now an enum keyed by requirement level; each variant carries only the parameters defined for that level (`AuthToken { resource_token }`, `Interaction { url, code }`, etc.).
+- `build_aauth_requirement` takes `&AAuthChallenge` instead of `(RequirementLevel, Option<AAuthRequirementParams>)`.
+- `PendingSnapshot` is now `Waiting { status, requirement }` or `Complete(outcome)` instead of optional fields on a struct.
+- `PendingStatus` moved to `aauth::types` (wire `status` on pending response bodies).
+- `TokenExchangeRequest.capabilities` is `Option<Vec<Capability>>` instead of `Option<Vec<String>>`.
+- `ClarificationChallenge.status` and `ClaimsChallenge.status` use `PendingStatus` instead of `String` / `Option<String>`.
 
 ### Added
 
-- Pluggable server policy traits (`PersonTokenPolicy`, `AccessTokenPolicy`, `ResourceConsentPolicy`) and `PendingStore` / `InMemoryPendingStore` for deferred flows (`DeferRequirement`, `PendingInput`, `PendingOutcome`).
+- Spec-linked doc comments on protocol payload types with per-field documentation from the AAuth draft.
+- `ResourceInteractionClaim` and optional `interaction` claim on `ResourceClaims`.
+- Spec-aligned optional fields: `parent_agent` on `AgentClaims`, nested `act` on `ActClaim`, `upstream_token` / `subagent_token` / `platform` / `device` on `TokenExchangeRequest`, `timeout` / `options` on `ClarificationChallenge`. (`PersonTokenPolicy`, `AccessTokenPolicy`, `ResourceConsentPolicy`) and `PendingStore` / `InMemoryPendingStore` for deferred flows (`DeferRequirement`, `PendingInput`, `PendingOutcome`).
 - Generic Person/Access axum state (`PersonServerState<P, S, M>`, `AccessServerState<P, S, M>`) and `ResourceAccessMode<P, S, O>`.
 - Shared deferred helpers: `build_accepted`, `map_snapshot_to_poll_parts`, pending poll/post route handlers.
 - **Federation deferred loop**: when the Access Server returns `202` during PS→AS token exchange, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready (`FederationOutcome`, `FederationPendingState`, `parse_deferred_response`, `post_pending_input`, `poll_pending_http`).
@@ -34,6 +42,8 @@ Changes since [0.0.1].
 
 - `AAuthClientOptions` (use `AgentOptions` and `AgentOptions::builder`).
 - `AAuthMiddleware`, `AAuthInjector`, `AuthAttempt`, `InjectorStep`, `DeferredOptions`, `AAuthLayer`, `AAuthService` (see renamed replacements above).
+- `AAuthRequirementParams` (use `AAuthChallenge` variants directly).
+- `PendingStatusBody` (use `PendingStatus` on challenge bodies).
 - `InteractionManager`, `InteractionManagerOptions`, `PendingRequest`.
 - Test-only server flags: `deferred_mode`, `clarification_prompt`, `pending_id_capture`.
 

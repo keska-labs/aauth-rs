@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use axum::http::{HeaderMap, StatusCode};
 use serde_json::Value;
 
-use crate::headers::{AAuthRequirementParams, build_aauth_requirement};
-use crate::types::{AAuthProtocolError, RequirementLevel, TokenResponseBody};
+use crate::headers::build_aauth_requirement;
+use crate::types::{AAuthProtocolError, PendingStatus, TokenResponseBody};
 
-use super::types::{DeferRequirement, PendingOutcome, PendingSnapshot, PendingStatus};
+use super::types::{DeferRequirement, PendingOutcome, PendingSnapshot};
 
 pub struct AcceptedResponse {
     pub status: StatusCode,
@@ -18,8 +18,7 @@ pub fn build_accepted(
     location: &str,
     requirement: &DeferRequirement,
 ) -> Result<AcceptedResponse, crate::error::AAuthError> {
-    let (level, params) = requirement_to_header(requirement)?;
-    let aauth_requirement = build_aauth_requirement(level, params.as_ref())?;
+    let aauth_requirement = build_aauth_requirement(&requirement.header_challenge()?)?;
 
     let body = match requirement {
         DeferRequirement::Clarification { question, timeout } => {
@@ -93,7 +92,7 @@ pub enum PollResponse {
 }
 
 pub fn map_snapshot_to_poll_parts(snapshot: &PendingSnapshot) -> PollResponse {
-    if let Some(outcome) = &snapshot.outcome {
+    if let PendingSnapshot::Complete(outcome) = snapshot {
         return match outcome {
             PendingOutcome::AuthToken(body) => PollResponse::OkAuthToken(body.clone()),
             PendingOutcome::OpaqueAccess(token) => PollResponse::OkOpaque(token.clone()),
@@ -104,11 +103,19 @@ pub fn map_snapshot_to_poll_parts(snapshot: &PendingSnapshot) -> PollResponse {
         };
     }
 
+    let PendingSnapshot::Waiting {
+        status,
+        requirement,
+    } = snapshot
+    else {
+        unreachable!("complete branch handled above")
+    };
+
     let mut headers = HeaderMap::new();
     headers.insert("Retry-After", "0".parse().expect("valid header"));
     headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
 
-    let body = if let Some(requirement) = &snapshot.requirement {
+    let body = {
         let mut headers_extra = HashMap::new();
         if let Ok(AcceptedResponse {
             headers: defer_headers,
@@ -132,11 +139,9 @@ pub fn map_snapshot_to_poll_parts(snapshot: &PendingSnapshot) -> PollResponse {
         } else {
             None
         }
-    } else {
-        None
     };
 
-    let status_body = match snapshot.status {
+    let status_body = match status {
         PendingStatus::Pending => serde_json::json!({ "status": "pending" }),
         PendingStatus::Interacting => serde_json::json!({ "status": "interacting" }),
     };
@@ -144,26 +149,5 @@ pub fn map_snapshot_to_poll_parts(snapshot: &PendingSnapshot) -> PollResponse {
     PollResponse::Accepted {
         headers,
         body: Some(body.unwrap_or(status_body)),
-    }
-}
-
-fn requirement_to_header(
-    requirement: &DeferRequirement,
-) -> Result<(RequirementLevel, Option<AAuthRequirementParams<'_>>), crate::error::AAuthError> {
-    match requirement {
-        DeferRequirement::Interaction { url, code } => Ok((
-            RequirementLevel::Interaction,
-            Some(AAuthRequirementParams {
-                url: Some(url),
-                code: Some(code),
-                resource_token: None,
-            }),
-        )),
-        DeferRequirement::Clarification { .. } => Ok((RequirementLevel::Clarification, None)),
-        DeferRequirement::Claims { .. } => Ok((RequirementLevel::Claims, None)),
-        DeferRequirement::Approval => Ok((RequirementLevel::Approval, None)),
-        DeferRequirement::Payment { .. } => Err(crate::error::AAuthError::Message(
-            "payment defer uses 402, not AAuth-Requirement".into(),
-        )),
     }
 }

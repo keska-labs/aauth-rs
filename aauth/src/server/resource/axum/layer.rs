@@ -7,7 +7,8 @@ use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
 use tower::{Layer, Service};
 
-use crate::headers::{AAuthRequirementParams, build_aauth_requirement};
+use crate::headers::build_aauth_requirement;
+use crate::types::AAuthChallenge;
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::server::deferred::{
@@ -26,7 +27,6 @@ use crate::server::resource::{
     verify_token,
 };
 use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
-use crate::types::RequirementLevel;
 
 #[derive(Clone)]
 pub struct ResourceAuthLayer<P, S, O>
@@ -218,13 +218,9 @@ where
                         Err(e) => return Ok(unauthorized(e)),
                     };
 
-                    let header = match build_aauth_requirement(
-                        RequirementLevel::AuthToken,
-                        Some(&AAuthRequirementParams {
-                            resource_token: Some(&resource_token),
-                            ..Default::default()
-                        }),
-                    ) {
+                    let header = match build_aauth_requirement(&AAuthChallenge::AuthToken {
+                        resource_token: resource_token.clone(),
+                    }) {
                         Ok(h) => h,
                         Err(e) => return Ok(unauthorized(e.to_string())),
                     };

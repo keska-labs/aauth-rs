@@ -2,7 +2,7 @@ use http::HeaderMap;
 
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
-use crate::types::{RequirementLevel, TokenResponseBody};
+use crate::types::TokenResponseBody;
 
 use super::types::DeferRequirement;
 
@@ -71,8 +71,8 @@ fn map_challenge_to_defer(
     challenge: &crate::types::AAuthChallenge,
     body: Option<&serde_json::Value>,
 ) -> Result<DeferRequirement> {
-    match challenge.requirement {
-        RequirementLevel::Clarification => {
+    match challenge {
+        crate::types::AAuthChallenge::Clarification => {
             let question = body
                 .and_then(|v| v.get("clarification"))
                 .and_then(|v| v.as_str())
@@ -81,7 +81,7 @@ fn map_challenge_to_defer(
             let timeout = body.and_then(|v| v.get("timeout")).and_then(|v| v.as_u64());
             Ok(DeferRequirement::Clarification { question, timeout })
         }
-        RequirementLevel::Claims => {
+        crate::types::AAuthChallenge::Claims => {
             let required_claims = body
                 .and_then(|v| v.get("required_claims"))
                 .and_then(|v| v.as_array())
@@ -93,21 +93,18 @@ fn map_challenge_to_defer(
                 .unwrap_or_default();
             Ok(DeferRequirement::Claims { required_claims })
         }
-        RequirementLevel::Interaction => {
-            let url = challenge
-                .url
-                .clone()
-                .ok_or_else(|| AAuthError::Message("interaction defer missing url".into()))?;
-            let code = challenge
-                .code
-                .clone()
-                .ok_or_else(|| AAuthError::Message("interaction defer missing code".into()))?;
-            Ok(DeferRequirement::Interaction { url, code })
+        crate::types::AAuthChallenge::Interaction { url, code } => Ok(
+            DeferRequirement::Interaction {
+                url: url.clone(),
+                code: code.clone(),
+            },
+        ),
+        crate::types::AAuthChallenge::Approval => Ok(DeferRequirement::Approval),
+        crate::types::AAuthChallenge::AgentToken | crate::types::AAuthChallenge::AuthToken { .. } => {
+            Err(AAuthError::Message(
+                "agent-token/auth-token requirements are not defer requirements".into(),
+            ))
         }
-        RequirementLevel::Approval => Ok(DeferRequirement::Approval),
-        RequirementLevel::AgentToken | RequirementLevel::AuthToken => Err(AAuthError::Message(
-            "agent-token/auth-token requirements are not defer requirements".into(),
-        )),
     }
 }
 
