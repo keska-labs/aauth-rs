@@ -1,12 +1,14 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use aauth::TestKeys;
 use aauth::VerifiedToken;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::server::axum::{
-    AAuthLayer, AuthServerState, VerifiedAAuthToken, jwks_handler, pending_poll_handler,
-    person_metadata_handler, token_exchange_handler,
+    AAuthLayer, AuthServerState, VerifiedAAuthToken, jwks_handler, pending_clarification_post_handler,
+    pending_poll_handler, person_metadata_handler, token_exchange_deferred_handler,
+    token_exchange_handler,
 };
 use aauth::server::{InteractionManager, InteractionManagerOptions, ResourceTokenSigner};
 use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
@@ -22,6 +24,8 @@ use tokio::task::JoinHandle;
 pub struct ServerConfig {
     pub require_auth_token: bool,
     pub with_auth_routes: bool,
+    pub deferred_mode: bool,
+    pub clarification_on_poll: bool,
 }
 
 impl Default for ServerConfig {
@@ -29,6 +33,8 @@ impl Default for ServerConfig {
         Self {
             require_auth_token: false,
             with_auth_routes: false,
+            deferred_mode: false,
+            clarification_on_poll: false,
         }
     }
 }
@@ -39,6 +45,8 @@ pub struct SpawnedServer {
     pub agent_url: String,
     pub auth_server_url: String,
     pub resource_url: String,
+    pub interaction_manager: Arc<InteractionManager>,
+    pub pending_id_capture: Arc<Mutex<Option<String>>>,
     handle: JoinHandle<()>,
 }
 
@@ -86,6 +94,9 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         ttl: None,
     }));
 
+    let pending_id_capture = Arc::new(Mutex::new(None));
+    let clarification_state = Arc::new(Mutex::new(HashMap::new()));
+
     let auth_state = AuthServerState {
         keys: keys.clone(),
         auth_server_url: auth_server_url.clone(),
@@ -93,8 +104,15 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         agent_url: agent_url.clone(),
         agent_jwks_uri: agent_jwks_uri.clone(),
         auth_jwks_uri: auth_jwks_uri.clone(),
-        interaction_manager,
-        deferred_mode: false,
+        interaction_manager: Arc::clone(&interaction_manager),
+        deferred_mode: config.deferred_mode,
+        pending_id_capture: Some(Arc::clone(&pending_id_capture)),
+        clarification_state: if config.clarification_on_poll {
+            Some(Arc::clone(&clarification_state))
+        } else {
+            None
+        },
+        clarification_prompt: config.clarification_on_poll,
     };
 
     let api = Router::new()
@@ -107,11 +125,20 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         .route("/agent/jwks", get(agent_jwks_handler));
 
     if config.with_auth_routes {
+        let token_handler = if config.deferred_mode {
+            post(token_exchange_deferred_handler)
+        } else {
+            post(token_exchange_handler)
+        };
+
         app = app
             .route("/.well-known/aauth-person.json", get(person_metadata_handler))
             .route("/auth/jwks", get(jwks_handler))
-            .route("/aauth/token", post(token_exchange_handler))
-            .route("/pending/{id}", get(pending_poll_handler));
+            .route("/aauth/token", token_handler)
+            .route(
+                "/pending/{id}",
+                get(pending_poll_handler).post(pending_clarification_post_handler),
+            );
     }
 
     let app = app.with_state(auth_state);
@@ -126,6 +153,8 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         agent_url,
         auth_server_url,
         resource_url,
+        interaction_manager,
+        pending_id_capture,
         handle,
     }
 }

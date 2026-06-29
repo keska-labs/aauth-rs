@@ -18,6 +18,7 @@ async fn main() -> aauth::Result<()> {
     let spawned = server::spawn_test_server(server::ServerConfig {
         require_auth_token: false,
         with_auth_routes: false,
+        ..Default::default()
     })
     .await;
 

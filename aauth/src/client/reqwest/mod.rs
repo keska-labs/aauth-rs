@@ -1,8 +1,8 @@
 mod deferred;
 mod metadata;
 mod middleware;
-mod send;
-mod signed;
+pub(crate) mod send;
+pub(crate) mod signed;
 mod token_exchange;
 
 pub use super::injector::{
