@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.3]
+
+### Changed
+
+- Restructured `src/` into protocol-party modules: `agent`, `person_server`, `access_server`, `resource`, with shared siblings `deferred`, `policy`, and `server_axum`.
+- Granular Cargo features per role: `person-server`, `access-server`, `resource`, `person-server-axum`, `access-server-axum`, `resource-axum`; meta-features `server` and `full`.
+- Renamed features `client` → `agent`, `client-reqwest` → `agent-reqwest`; optional `agent-reqwest-verify` for 401 challenge binding checks via `resource-verify`.
+- `AuthTokenFlowOutcome` / `AuthTokenPollOutcome` moved to `deferred` (shared by Person and Access servers).
+- `ResourceAccessMode` lives in `resource::mode` (was `resource::policy`).
+- Flat crate-root re-exports are feature-gated to match enabled roles.
+
+### Added
+
+- `resource-verify` feature — resource token verification (`verify_resource_token`, `verify_token`, audience resolution) without the full Resource Server service or axum layer.
+- `resource_verify` module for token verification used by Person Server federation and optional agent middleware.
+- `PersonServerOutboundSigner` and `OutboundSignatureProvider` trait for federation pending POST signing.
+- `full` meta-feature matching previous default feature set.
+
+### Removed
+
+- `aauth::client` module path (use `aauth::agent`).
+- `aauth::server` umbrella module (use role modules or flat re-exports).
+- `server` as a single module gate; use per-role features instead.
+
 ## [0.0.2] - 2026-06-29
 
 Changes since [0.0.1].

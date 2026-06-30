@@ -29,12 +29,12 @@ AAuth has four roles. Each maps to a module in this crate:
 
 | AAuth party | Crate module | Responsibility |
 |-------------|--------------|----------------|
-| **Agent** | `aauth::client` (rename to `aauth::agent` planned) | Signs requests, handles 401 challenges, exchanges resource tokens for auth tokens, polls deferred responses |
-| **Resource server** | `aauth::server::resource` | Verifies agent/auth JWTs and HTTP signatures; issues resource tokens; enforces access mode |
-| **Person server** | `aauth::server::person` | Token exchange endpoint; may defer, federate to an Access Server, or mint auth JWTs |
-| **Access server** | `aauth::server::access` | Token exchange when the Person Server delegates authorization (federated / four-party mode) |
+| **Agent** | `aauth::agent` | Signs requests, handles 401 challenges, exchanges resource tokens for auth tokens, polls deferred responses |
+| **Resource server** | `aauth::resource` | Verifies agent/auth JWTs and HTTP signatures; issues resource tokens; enforces access mode |
+| **Person server** | `aauth::person_server` | Token exchange endpoint; may defer, federate to an Access Server, or mint auth JWTs |
+| **Access server** | `aauth::access_server` | Token exchange when the Person Server delegates authorization (federated / four-party mode) |
 
-The agent JWT's `ps` claim names the Person Server. When `person_server_url` is omitted on `AgentOptions`, the client resolves it from the agent token via `client::resolve::resolve_person_server_url`.
+The agent JWT's `ps` claim names the Person Server. When `person_server_url` is omitted on `AgentOptions`, the client resolves it from the agent token via `agent::resolve::resolve_person_server_url`.
 
 ### Crate layout
 
@@ -43,33 +43,29 @@ aauth-rs/
 ├── Cargo.toml              # workspace root
 └── aauth/
     ├── src/
-    │   ├── client/         # agent runtime
-    │   │   ├── injector.rs # AgentAuth state machine (framework-agnostic)
-    │   │   ├── keys.rs     # KeyMaterialProvider, JWT minting
-    │   │   ├── resolve.rs  # PS URL resolution from agent `ps` claim
-    │   │   └── reqwest/    # AgentMiddleware, token exchange, deferred poll (feature "client-reqwest")
-    │   ├── server/
-    │   │   ├── deferred/   # PendingStore, DeferCreated/DeferWaiting, parse_pending_post_body
-    │   │   ├── policy/     # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
-    │   │   ├── access/     # AuthTokenFlowOutcome, AccessTokenService, AS axum routes
-    │   │   ├── person/     # PersonTokenFlowOutcome, PersonTokenService, federation, PS axum routes
-    │   │   ├── resource/   # ResourceConsentFlowOutcome, ResourceAccessService, ResourceAuthLayer
-    │   │   └── axum/       # respond.rs (IntoResponse), extract.rs (PendingResumeInput); facade re-exports
-    │   ├── signature.rs    # shared HTTP Signature build + verify
-    │   └── …               # headers, JWT helpers, metadata cache, types
-    └── tests/              # protocol integration tests (TypeScript e2e parity)
+    │   ├── agent/              # agent runtime (feature `agent`)
+    │   ├── person_server/      # Person Server (feature `person-server`)
+    │   ├── access_server/      # Access Server (feature `access-server`)
+    │   ├── resource/           # Resource Server (feature `resource`)
+    │   ├── resource_verify/    # token verification only (feature `resource-verify`)
+    │   ├── deferred/           # PendingStore, DeferCreated/DeferWaiting (feature `deferred`)
+    │   ├── policy/             # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
+    │   ├── server_axum/        # IntoResponse, PendingResumeInput, route re-exports (per `*-axum`)
+    │   ├── signature.rs        # shared HTTP Signature build + verify
+    │   └── …                   # headers, JWT helpers, metadata cache, types
+    └── tests/                  # protocol integration tests (TypeScript e2e parity)
 ```
 
-**Shared protocol primitives** (no role prefix): `headers`, `signature`, `jwt`, `metadata`, `types`, `interaction_code`. These implement wire format and are used by both client and server.
+**Shared protocol primitives** (no role prefix, always on): `headers`, `signature`, `jwt`, `metadata`, `types`, `interaction_code`. These implement wire format and are used by all roles.
 
-**Cargo features:** `client`, `client-reqwest`, `server`, `server-axum` (all default-on). Disable defaults to depend on only one side.
+**Cargo features:** per-role `person-server`, `access-server`, `resource`, `person-server-axum`, `access-server-axum`, `resource-axum`; agent `agent`, `agent-reqwest`, `agent-reqwest-verify`; meta `server`, `full`. Protocol modules need no feature flag. Disable defaults to compile only the roles you need.
 
 ### Agent request flow
 
 The agent side is split into a transport-agnostic state machine and a reqwest adapter:
 
-1. **`AgentAuth`** (`client/injector.rs`) — tracks per-origin cached auth/opaque tokens; on each response decides the next step (`AgentAuthStep`: continue, finish, exchange token, poll deferred, invalidate attempt).
-2. **`AgentMiddleware`** (`client/reqwest/middleware/agent.rs`) — reqwest middleware that drives `AgentAuth`, signs requests via `SigningMiddleware`, calls `exchange_token` and `poll_deferred` when needed.
+1. **`AgentAuth`** (`agent/injector.rs`) — tracks per-origin cached auth/opaque tokens; on each response decides the next step (`AgentAuthStep`: continue, finish, exchange token, poll deferred, invalidate attempt).
+2. **`AgentMiddleware`** (`agent/reqwest/middleware/agent.rs`) — reqwest middleware that drives `AgentAuth`, signs requests via `SigningMiddleware`, calls `exchange_token` and `poll_deferred` when needed.
 3. **`AgentOptions`** — configuration builder (provider, PS URL, callbacks, poll limits).
 
 Typical three-party flow:
@@ -96,7 +92,7 @@ Deferred responses (`202 Accepted` + `Location` + optional `AAuth-Requirement`) 
 | Federated | `PsAsserted { access_server_url: Some(...), ... }` | 4 | Resource token `aud` = AS; PS federates token exchange to AS |
 | Resource-managed | `ResourceManaged { service, ... }` | 2 | Resource owns consent via `ResourceAccessService` (default: `PolicyResourceAccessService`); issues opaque `AAuth-Access` tokens |
 
-When the Access Server returns `202` during federation, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready (`server/person/federation.rs`, `server/deferred/poll.rs`). Payment (`402`) from the AS remains a stub.
+When the Access Server returns `202` during federation, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready (`person_server/federation.rs`, `deferred/poll.rs`). Payment (`402`) from the AS remains a stub.
 
 ### Server policy, services, and deferred store
 
@@ -108,7 +104,7 @@ Authorization decisions are pluggable via generic policy traits. Flow orchestrat
 | `AccessTokenService` | AS token exchange / pending | `exchange_token`, `poll_pending`, `resume_pending` |
 | `ResourceAccessService` | RS resource-managed consent | `consent_for_agent`, `poll_pending`, `validate_opaque` |
 
-Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`, `PolicyResourceAccessService`) wrap the policy traits below plus `PendingStore` and JWT minters. Service `Err` maps to spec `500` + `{ "error": "server_error" }` via `InternalServiceError`; protocol outcomes (`AuthTokenFlowOutcome`, etc.) map to 200/202/403/410/502 in `server/axum/respond.rs`.
+Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`, `PolicyResourceAccessService`) wrap the policy traits below plus `PendingStore` and JWT minters. Service `Err` maps to spec `500` + `{ "error": "server_error" }` via `InternalServiceError`; protocol outcomes (`AuthTokenFlowOutcome`, etc.) map to 200/202/403/410/502 in `server_axum/respond.rs`.
 
 | Policy trait | Role | Decisions |
 |--------------|------|-----------|
@@ -118,7 +114,7 @@ Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`,
 
 Policies are **stateless**. In-flight deferred requests are persisted in a `PendingStore` (`InMemoryPendingStore` for tests).
 
-**Defer semantics (HTTP-free):** `DeferCreated` (initial 202 + `Location`), `DeferWaiting` (poll 202), `PendingBody` (serialize-side JSON). Flow outcomes carry these types; axum converts them via `IntoResponse` in `server/axum/respond.rs` only.
+**Defer semantics (HTTP-free):** `DeferCreated` (initial 202 + `Location`), `DeferWaiting` (poll 202), `PendingBody` (serialize-side JSON). Flow outcomes carry these types; axum converts them via `IntoResponse` in `server_axum/respond.rs` only.
 
 **Pending POST ingress:** `PendingPostBody` (`#[serde(untagged)]` until the spec adds a wire discriminator) → `parse_pending_post_body` / `PendingResumeInput` `FromRequest` on person/access pending handlers.
 
@@ -141,13 +137,11 @@ Public types follow a **role prefix** that matches AAuth protocol parties:
 | `Resource*` | Resource Server | `ResourceAuthLayer`, `ResourceAccessMode`, `ResourceConsentPolicy` |
 | `AAuth*` | Protocol-wide wire format, headers, and errors | `AAuthError`, `AAuthRequirementParams` |
 
-**Do not** use `Client*` for first-party agent types — `client` is a module path, not a type prefix.
+**Do not** use `Client*` for first-party agent types — `agent` is the module path.
 
 Configuration types use a **builder** (`Type::builder(...)` → chained setters → `.build()`), not public struct literals with many optional fields.
 
 Internal state-machine types (`AgentAuthAttempt`, `AgentAuthStep`) are exported for custom transport adapters but are not typically constructed by application code.
-
-The top-level agent module is `aauth::client` today; a rename to `aauth::agent` is planned.
 
 ## Pre-alpha
 
@@ -163,4 +157,9 @@ User-visible API changes belong in [CHANGELOG.md](CHANGELOG.md) under the unrele
 cargo test --all-features
 cargo fmt --all
 cargo clippy --all-features -- -D warnings
+
+cargo check --no-default-features --features person-server,person-server-axum
+cargo check --no-default-features --features access-server,access-server-axum
+cargo check --no-default-features --features resource,resource-axum
+cargo check --no-default-features --features agent,agent-reqwest
 ```

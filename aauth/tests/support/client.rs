@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use aauth::client::reqwest::{
+use aauth::agent::reqwest::{
     AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
 use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
@@ -19,7 +19,7 @@ pub fn build_client(
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<ClarificationCallback>,
     provider: Option<std::sync::Arc<dyn KeyMaterialProvider>>,
-) -> aauth::client::reqwest::ClientWithMiddleware {
+) -> aauth::agent::reqwest::ClientWithMiddleware {
     let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID, ps);
     let provider = provider.unwrap_or_else(|| create_key_provider(&spawned.keys, agent_jwt));
 

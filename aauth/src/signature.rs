@@ -382,10 +382,10 @@ mod tests {
         assert!(err.to_string().contains("signature expired"));
     }
 
-    #[cfg(feature = "client-reqwest")]
+    #[cfg(feature = "agent-reqwest")]
     #[tokio::test]
     async fn sign_request_verify_roundtrip() {
-        use crate::client::reqwest::signed::sign_request;
+        use crate::agent::reqwest::signed::sign_request;
         use crate::{create_key_provider, create_test_keys, mint_agent_jwt};
 
         let keys = create_test_keys();

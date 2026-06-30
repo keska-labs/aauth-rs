@@ -1,13 +1,13 @@
 mod mock_server;
 mod mock_transport;
 
-#[cfg(all(feature = "client-reqwest", feature = "server-axum"))]
+#[cfg(feature = "full")]
 pub mod axum_server;
 
-#[cfg(all(feature = "client-reqwest", feature = "server-axum"))]
+#[cfg(feature = "full")]
 pub mod client;
 
-#[cfg(all(feature = "client-reqwest", feature = "server-axum"))]
+#[cfg(feature = "full")]
 pub mod timeout;
 
 pub use mock_server::*;

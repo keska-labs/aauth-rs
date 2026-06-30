@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use aauth::client::reqwest::{ClarificationCallback, InteractionCallback};
+use aauth::agent::reqwest::{ClarificationCallback, InteractionCallback};
 use aauth::types::AuthOkResponse;
 use aauth::{PendingStore, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt};
 use rstest::rstest;

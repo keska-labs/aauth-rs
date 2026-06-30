@@ -2,7 +2,7 @@
 
 Rust implementation of the [AAuth authorization protocol](https://github.com/dickhardt/AAuth).
 
-This workspace provides the `aauth` crate with protocol primitives, a **client** module for signed requests and token exchange, and a **server** module for token verification, pluggable policy traits, and a deferred pending store.
+This workspace provides the `aauth` crate with protocol primitives (always on) and optional modules per AAuth party — enable only the roles you implement.
 
 ## ⚠️ WARNING: LLM usage & pre-alpha ⚠️
 This library is currently in pre-alpha and can't in any way be described as satisfactory. It's mainly a LLM translation of the `Javascript` implementation of the `aauth` draft and a start for us to work from. We currently discourage using this, and won't be accepting contributions because our internal plans will make any external contributions moot, but if you check back in a few weeks, we're hopefully in a more acceptable state.
@@ -14,31 +14,27 @@ aauth-rs/
 ├── Cargo.toml          # workspace root
 └── aauth/
     ├── src/
-    │   ├── client/
-    │   │   ├── injector.rs   # framework-agnostic auth flow
-    │   │   ├── keys.rs       # KeyMaterialProvider, JWT minting
-    │   │   ├── resolve.rs    # PS URL resolution from agent `ps` claim
-    │   │   └── reqwest/      # AgentMiddleware, token exchange (feature "client-reqwest")
-    │   ├── server/
-    │   │   ├── deferred/     # PendingStore, deferred response builders
-    │   │   ├── policy/       # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
-    │   │   ├── resource/     # verify, resource tokens, ResourceAccessMode, ResourceAuthLayer
-    │   │   ├── person/       # federation, auth JWT minting, PS route helpers
-    │   │   ├── access/       # AS auth JWT minting and route helpers
-    │   │   └── axum/         # facade re-exporting resource + person + access axum helpers
-    │   ├── signature.rs      # shared HTTP Signature build + verify
-    │   └── …                 # headers, JWT helpers, metadata cache
-    └── tests/                # protocol integration tests (TypeScript e2e parity)
+    │   ├── agent/              # agent runtime (feature `agent`)
+    │   ├── person_server/      # Person Server (feature `person-server`)
+    │   ├── access_server/      # Access Server (feature `access-server`)
+    │   ├── resource/           # Resource Server (feature `resource`)
+    │   ├── resource_verify/    # token verification only (feature `resource-verify`)
+    │   ├── deferred/           # pending store, defer types (feature `deferred`)
+    │   ├── policy/             # policy traits (feature `policy`)
+    │   ├── server_axum/        # axum IntoResponse + route re-exports (per `*-axum` features)
+    │   ├── signature.rs        # shared HTTP Signature build + verify
+    │   └── …                   # headers, JWT helpers, metadata, types
+    └── tests/                  # protocol integration tests (TypeScript e2e parity)
 ```
 
 ## Protocol roles
 
 | AAuth party | Module |
 |-------------|--------|
-| Agent | `aauth::client` (rename to `aauth::agent` planned) |
-| Resource server | `aauth::server::resource` |
-| Person server | `aauth::server::person` |
-| Access server | `aauth::server::access` |
+| Agent | `aauth::agent` |
+| Resource server | `aauth::resource` |
+| Person server | `aauth::person_server` |
+| Access server | `aauth::access_server` |
 
 ## Resource access modes
 
@@ -49,13 +45,13 @@ aauth-rs/
 | Identity-based | `IdentityBased` | Grant on verified agent or auth token alone |
 | PS-asserted (three-party) | `PsAsserted { require_auth_token, access_server_url: None, person_server_fallback }` | Resource token `aud` = agent `ps` claim (or fallback) |
 | Federated (four-party) | `PsAsserted { require_auth_token, access_server_url: Some(...), ... }` | Resource token `aud` = AS; PS federates to AS |
-| Resource-managed (two-party) | `ResourceManaged { policy, pending, opaque, ... }` | `ResourceConsentPolicy` + `PendingStore` + opaque `AAuth-Access` tokens |
+| Resource-managed (two-party) | `ResourceManaged { service, ... }` | `ResourceConsentPolicy` + `PendingStore` + opaque `AAuth-Access` tokens |
 
 When the Access Server returns `202` during federation, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready. Payment (`402`) from the AS remains a stub.
 
 ## Policy and deferred store
 
-Server authorization decisions are pluggable via generic policy traits (monomorphized on axum state, not `Arc<dyn>`):
+Server authorization decisions are pluggable via generic policy traits:
 
 | Trait | Role |
 |-------|------|
@@ -63,7 +59,7 @@ Server authorization decisions are pluggable via generic policy traits (monomorp
 | `AccessTokenPolicy` | AS token exchange: grant, deny, or defer |
 | `ResourceConsentPolicy` | Resource-managed access: grant opaque, deny, or defer |
 
-Policies are stateless; in-flight deferred requests are persisted in a `PendingStore` implementation (reference: `InMemoryPendingStore`). Deferred responses use shared builders (`build_accepted`, `map_snapshot_to_poll_parts`).
+Policies are stateless; in-flight deferred requests are persisted in a `PendingStore` implementation (reference: `InMemoryPendingStore`).
 
 Reference policies for tests and examples: `AlwaysGrantPersonPolicy`, `AlwaysGrantAccessPolicy`, `DeferInteractionPersonPolicy`, `ClarificationThenGrantPersonPolicy`, `DeferInteractionResourcePolicy`.
 
@@ -71,23 +67,35 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Naming
 
-Public types use role prefixes: `Agent*` (agent runtime), `Person*` / `Access*` / `Resource*` (server roles), `AAuth*` (protocol wire/errors). Configuration types use builders (`Type::builder(...)`). The agent module is `aauth::client` today; a rename to `aauth::agent` is planned. See [AGENTS.md](AGENTS.md) for full conventions.
+Public types use role prefixes: `Agent*` (agent runtime), `Person*` / `Access*` / `Resource*` (server roles), `AAuth*` (protocol wire/errors). Configuration types use builders (`Type::builder(...)`). See [AGENTS.md](AGENTS.md) for full conventions.
 
-The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `client::resolve::resolve_person_server_url` or omit `person_server_url` on [`AgentOptions`](aauth::client::injector::AgentOptions) to resolve from the agent token.
+The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `agent::resolve::resolve_person_server_url` or omit `person_server_url` on [`AgentOptions`](aauth::agent::injector::AgentOptions) to resolve from the agent token.
 
 ## Features
 
-| Feature | Default | Description |
-|---------|---------|-------------|
-| `client` | yes | `aauth::client::injector`, `aauth::client::keys` — auth flow and key material |
-| `client-reqwest` | yes | `aauth::client::reqwest` — `AgentMiddleware`, `ClientBuilder`, `exchange_token`, `poll_deferred` |
-| `server` | yes | `verify_token`, `verify_resource_token`, `create_resource_token`, `PendingStore`, policy traits |
-| `server-axum` | yes | `aauth::server::axum` — `ResourceAuthLayer`, `ResourceAccessPolicy`, route helpers |
+Protocol modules (`error`, `headers`, `jwt`, `signature`, `types`, …) are always available. Enable role features to compile only what you need:
 
-Disable defaults to depend on only one side:
+| Feature | Description |
+|---------|-------------|
+| `agent` | `aauth::agent::injector`, `aauth::agent::keys` |
+| `agent-reqwest` | `aauth::agent::reqwest` — `AgentMiddleware`, `ClientBuilder`, token exchange |
+| `agent-reqwest-verify` | Optional 401 challenge binding checks (implies `resource-verify`) |
+| `person-server` / `person-server-axum` | Person Server service and axum routes |
+| `access-server` / `access-server-axum` | Access Server service and axum routes |
+| `resource` / `resource-axum` | Resource Server layer, consent service, axum helpers |
+| `resource-verify` | Resource token verification only (no RS service/layer) |
+| `full` | All roles and integrations (matches `default`) |
+
+**Person Server only:**
 
 ```toml
-aauth = { version = "0.0", default-features = false, features = ["client-reqwest"] }
+aauth = { version = "0.0", default-features = false, features = ["person-server", "person-server-axum"] }
+```
+
+**Agent client only:**
+
+```toml
+aauth = { version = "0.0", default-features = false, features = ["agent", "agent-reqwest"] }
 ```
 
 ## Quick example
@@ -95,9 +103,9 @@ aauth = { version = "0.0", default-features = false, features = ["client-reqwest
 ```rust
 use std::sync::Arc;
 
-use aauth::client::injector::AgentOptions;
-use aauth::client::keys::KeyMaterialProvider;
-use aauth::client::reqwest::{AgentMiddleware, ClientBuilder};
+use aauth::agent::injector::AgentOptions;
+use aauth::agent::keys::KeyMaterialProvider;
+use aauth::agent::reqwest::{AgentMiddleware, ClientBuilder};
 use aauth::types::KeyMaterial;
 
 #[async_trait::async_trait]
@@ -174,6 +182,12 @@ cargo build --examples --all-features
 cargo test --all-features
 cargo fmt --all
 cargo clippy --all-features -- -D warnings
+
+# Per-role minimal builds
+cargo check --no-default-features --features person-server,person-server-axum
+cargo check --no-default-features --features access-server,access-server-axum
+cargo check --no-default-features --features resource,resource-axum
+cargo check --no-default-features --features agent,agent-reqwest
 ```
 
 Release notes: [CHANGELOG.md](CHANGELOG.md).

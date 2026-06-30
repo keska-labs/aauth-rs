@@ -9,17 +9,17 @@ use aauth::PendingOutcome;
 use aauth::PendingStore;
 use aauth::TestKeys;
 use aauth::VerifiedToken;
+use aauth::access_server::keys::TestAccessAuthJwtMinter;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
-use aauth::server::access::keys::TestAccessAuthJwtMinter;
-use aauth::server::axum::{
+use aauth::person_server::keys::TestAuthJwtMinter;
+use aauth::resource::{PolicyResourceAccessService, ResourceAccessConfig};
+use aauth::server_axum::{
     AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
     ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, access_jwks_handler,
     access_metadata_handler, access_pending_poll_handler, access_pending_post_handler,
     access_token_exchange_handler, pending_poll_handler, pending_post_handler, person_jwks_handler,
     person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
 };
-use aauth::server::person::keys::TestAuthJwtMinter;
-use aauth::server::resource::{PolicyResourceAccessService, ResourceAccessConfig};
 use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use aauth::{
     AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
@@ -119,14 +119,14 @@ impl Drop for SpawnedServer {
 }
 
 type TestPersonState = PersonServerState<
-    aauth::server::person::PolicyPersonTokenService<
+    aauth::person_server::PolicyPersonTokenService<
         HarnessPersonPolicy,
         InMemoryPersonPendingStore,
         TestAuthJwtMinter,
     >,
 >;
 type TestAccessState = AccessServerState<
-    aauth::server::access::PolicyAccessTokenService<
+    aauth::access_server::PolicyAccessTokenService<
         HarnessAccessPolicy,
         InMemoryAccessPendingStore,
         TestAccessAuthJwtMinter,

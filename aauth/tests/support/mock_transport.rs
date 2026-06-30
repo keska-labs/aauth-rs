@@ -9,14 +9,14 @@ use aauth::error::Result;
 use aauth::headers::build_aauth_requirement;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::resolve_resource_token_audience;
-use aauth::server::{
-    DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, PendingSnapshot,
-    PersonPendingContext, PersonPendingRecord, ResourceTokenOptions, VerifyTokenOptions,
-    create_resource_token, generate_pending_id, pending_location, verify_token,
-};
 use aauth::types::{
     AAuthChallenge, AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument,
     PersonServerMetadata, TokenExchangeRequest, TokenResponseBody,
+};
+use aauth::{
+    DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, PendingSnapshot,
+    PersonPendingContext, PersonPendingRecord, ResourceTokenOptions, VerifyTokenOptions,
+    create_resource_token, generate_pending_id, pending_location, verify_token,
 };
 use async_trait::async_trait;
 use axum::response::IntoResponse;
