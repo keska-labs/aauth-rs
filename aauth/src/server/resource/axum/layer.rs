@@ -17,8 +17,8 @@ use crate::server::resource::keys::ResourceTokenSigner;
 use crate::server::resource::policy::ResourceAccessMode;
 use crate::server::resource::service::ResourceAccessService;
 use crate::server::resource::{
-    ResourceConsentFlowOutcome, ResourceTokenOptions, VerifyTokenOptions, create_resource_token,
-    verify_auth_token_binding, verify_token,
+    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_auth_token_binding,
+    verify_token,
 };
 use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
 use crate::types::AAuthChallenge;
@@ -228,13 +228,6 @@ where
                     };
 
                     match service.consent_for_agent(ctx).await {
-                        Ok(ResourceConsentFlowOutcome::Deferred(accepted)) => {
-                            let mut response = Response::builder().status(accepted.status);
-                            for (k, v) in accepted.headers.iter() {
-                                response = response.header(k, v);
-                            }
-                            Ok(response.body(Body::empty()).expect("valid response"))
-                        }
                         Ok(outcome) => Ok(outcome.into_response()),
                         Err(e) => Ok(unauthorized(e.to_string())),
                     }

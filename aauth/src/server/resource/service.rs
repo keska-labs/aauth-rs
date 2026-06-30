@@ -1,8 +1,8 @@
 use crate::error::AAuthError;
-use crate::server::axum::{deferred_accepted, resource_poll_outcome_from_snapshot};
+use crate::server::axum::resource_poll_outcome_from_snapshot;
 use crate::server::deferred::{
-    DeferRequirement, PendingOutcome, PendingSnapshot, PendingStore, ResourcePendingContext,
-    ResourcePendingRecord, generate_pending_id, pending_location,
+    DeferCreated, DeferRequirement, PendingOutcome, PendingSnapshot, PendingStore,
+    ResourcePendingContext, ResourcePendingRecord, generate_pending_id, pending_location,
 };
 use crate::server::policy::{
     PolicyError, ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy,
@@ -161,6 +161,8 @@ where
         .await
         .map_err(|e| ResourceAccessServiceError::PendingStore(e.to_string()))?;
 
-    let accepted = deferred_accepted(&location, requirement)?;
-    Ok(ResourceConsentFlowOutcome::Deferred(accepted))
+    Ok(ResourceConsentFlowOutcome::Deferred(DeferCreated {
+        location,
+        requirement: requirement.clone(),
+    }))
 }

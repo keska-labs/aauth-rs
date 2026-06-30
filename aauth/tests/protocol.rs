@@ -6,9 +6,10 @@ use aauth::KeyMaterialProvider;
 use aauth::VerifiedToken;
 use aauth::client::reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
 use aauth::headers::{build_aauth_requirement, parse_aauth_requirement};
-use aauth::server::{DeferRequirement, VerifyTokenOptions, build_accepted, verify_token};
+use aauth::server::{DeferCreated, DeferRequirement, VerifyTokenOptions, verify_token};
 use aauth::types::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
 use aauth::{InMemoryPersonPendingStore, PendingOutcome, PendingStore};
+use axum::response::IntoResponse;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
@@ -320,14 +321,18 @@ async fn deferred_accepted_response_format() {
         url: INTERACTION_URL.into(),
         code: code.clone(),
     };
-    let accepted = build_accepted("https://person.example/pending/abc", &requirement).unwrap();
-    assert_eq!(accepted.status, http::StatusCode::ACCEPTED);
+    let response = DeferCreated {
+        location: "https://person.example/pending/abc".into(),
+        requirement,
+    }
+    .into_response();
+    assert_eq!(response.status(), http::StatusCode::ACCEPTED);
     assert_eq!(
-        accepted.headers.get("Location").unwrap(),
+        response.headers().get("Location").unwrap(),
         "https://person.example/pending/abc"
     );
-    let aauth_req = accepted
-        .headers
+    let aauth_req = response
+        .headers()
         .get("AAuth-Requirement")
         .unwrap()
         .to_str()

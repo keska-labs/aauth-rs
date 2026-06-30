@@ -1,5 +1,5 @@
 use crate::server::access::outcome::AuthTokenFlowOutcome;
-use crate::server::deferred::AcceptedResponse;
+use crate::server::deferred::DeferCreated;
 use crate::types::{AAuthProtocolError, TokenResponseBody};
 
 /// Person Server token exchange / resume result (includes federation-specific outcomes).
@@ -16,8 +16,8 @@ impl PersonTokenFlowOutcome {
         Self::Flow(AuthTokenFlowOutcome::Granted(body))
     }
 
-    pub fn deferred(accepted: AcceptedResponse) -> Self {
-        Self::Flow(AuthTokenFlowOutcome::Deferred(accepted))
+    pub fn deferred(defer: DeferCreated) -> Self {
+        Self::Flow(AuthTokenFlowOutcome::Deferred(defer))
     }
 
     pub fn denied(err: AAuthProtocolError) -> Self {

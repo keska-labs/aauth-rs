@@ -10,7 +10,7 @@ This crate is a **Rust implementation of the AAuth authorization draft** — not
 
 When implementing or changing protocol behavior — headers, signatures, token exchange, interactions, metadata, error semantics, or any other AAuth surface — use the canonical spec as the source of truth:
 
-**[draft-hardt-oauth-aauth-protocol.md](https://raw.githubusercontent.com/dickhardt/AAuth/refs/heads/main/draft-hardt-oauth-aauth-protocol.md)**
+**[draft-hardt-oauth-aauth-protocol.md](./docs/specs/draft-hardt-oauth-aauth-protocol.md)**
 
 For mode comparisons, flow diagrams, and explanatory copy, use the **[AAuth Protocol Explorer](https://explorer.aauth.dev/access/compare)**. Its UI text is authored in native TSX in **[aauth-dev/explorer](https://github.com/aauth-dev/explorer)** — read the relevant page/components there when you need the source behind the explorer content, not just the rendered site.
 
@@ -49,12 +49,12 @@ aauth-rs/
     │   │   ├── resolve.rs  # PS URL resolution from agent `ps` claim
     │   │   └── reqwest/    # AgentMiddleware, token exchange, deferred poll (feature "client-reqwest")
     │   ├── server/
-    │   │   ├── deferred/   # PendingStore, deferred response builders, federation poll helpers
+    │   │   ├── deferred/   # PendingStore, DeferCreated/DeferWaiting, parse_pending_post_body
     │   │   ├── policy/     # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
     │   │   ├── access/     # AuthTokenFlowOutcome, AccessTokenService, AS axum routes
     │   │   ├── person/     # PersonTokenFlowOutcome, PersonTokenService, federation, PS axum routes
     │   │   ├── resource/   # ResourceConsentFlowOutcome, ResourceAccessService, ResourceAuthLayer
-    │   │   └── axum/       # respond.rs (IntoResponse, InternalServiceError); facade re-exports
+    │   │   └── axum/       # respond.rs (IntoResponse), extract.rs (PendingResumeInput); facade re-exports
     │   ├── signature.rs    # shared HTTP Signature build + verify
     │   └── …               # headers, JWT helpers, metadata cache, types
     └── tests/              # protocol integration tests (TypeScript e2e parity)
@@ -116,7 +116,13 @@ Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`,
 | `AccessTokenPolicy` | AS token exchange | grant, deny, defer |
 | `ResourceConsentPolicy` | Resource-managed access | grant opaque, deny, defer |
 
-Policies are **stateless**. In-flight deferred requests are persisted in a `PendingStore` (`InMemoryPendingStore` for tests). Shared deferred helpers: `build_accepted`, `map_snapshot_to_poll_parts`, pending poll/post route handlers in `server/deferred/`.
+Policies are **stateless**. In-flight deferred requests are persisted in a `PendingStore` (`InMemoryPendingStore` for tests).
+
+**Defer semantics (HTTP-free):** `DeferCreated` (initial 202 + `Location`), `DeferWaiting` (poll 202), `PendingBody` (serialize-side JSON). Flow outcomes carry these types; axum converts them via `IntoResponse` in `server/axum/respond.rs` only.
+
+**Pending POST ingress:** `PendingPostBody` (`#[serde(untagged)]` until the spec adds a wire discriminator) → `parse_pending_post_body` / `PendingResumeInput` `FromRequest` on person/access pending handlers.
+
+See [`.cursor/rules/prefer-rust-traits.mdc`](.cursor/rules/prefer-rust-traits.mdc): domain types stay HTTP-free; use `IntoResponse` / `FromRequest`, not `*_to_response` mappers.
 
 Axum state types hold a single service field: `PersonServerState<S>`, `AccessServerState<S>`, `ResourceServerState<S>`. Use `PersonServerState::from_policy(...)` for the default policy-backed setup.
 

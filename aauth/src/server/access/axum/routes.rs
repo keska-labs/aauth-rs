@@ -12,7 +12,7 @@ use crate::server::access::outcome::AuthTokenPollOutcome;
 use crate::server::access::service::{
     AccessTokenService, PolicyAccessTokenService, build_access_context,
 };
-use crate::server::axum::{InternalServiceError, parse_pending_input};
+use crate::server::axum::{InternalServiceError, PendingResumeInput};
 use crate::server::deferred::{AccessPendingRecord, PendingStore};
 use crate::server::policy::AccessTokenPolicy;
 use crate::signature::verify_request_signature;
@@ -128,13 +128,11 @@ where
 pub async fn access_pending_post_handler<S>(
     State(state): State<AccessServerState<S>>,
     Path(id): Path<String>,
-    body: Option<Json<serde_json::Value>>,
+    PendingResumeInput(input): PendingResumeInput,
 ) -> Response
 where
     S: AccessTokenService,
 {
-    let input = parse_pending_input(body.as_ref().map(|Json(v)| v));
-
     match state.service.resume_pending(&id, input).await {
         Ok(outcome) => outcome.into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),

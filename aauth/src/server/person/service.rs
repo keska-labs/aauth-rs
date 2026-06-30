@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use crate::error::AAuthError;
 use crate::server::access::outcome::AuthTokenPollOutcome;
-use crate::server::axum::{deferred_accepted, poll_outcome_from_snapshot};
+use crate::server::axum::poll_outcome_from_snapshot;
 use crate::server::deferred::{
-    DeferRequirement, FederationPendingState, PendingInput, PendingOutcome, PendingSnapshot,
-    PendingStore, PersonPendingContext, PersonPendingRecord, ServerPollOptions, ServerPollOutcome,
-    generate_pending_id, pending_location, poll_pending_http, post_pending_input,
+    DeferCreated, DeferRequirement, FederationPendingState, PendingInput, PendingOutcome,
+    PendingSnapshot, PendingStore, PersonPendingContext, PersonPendingRecord, ServerPollOptions,
+    ServerPollOutcome, generate_pending_id, pending_location, poll_pending_http,
+    post_pending_input,
 };
 use crate::server::person::axum::PersonServerConfig;
 use crate::server::person::federation::{
@@ -325,8 +326,10 @@ where
         .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
 
     let location = pending_location(&orch.pending_base_url, &orch.pending_path, pending_id);
-    let accepted = deferred_accepted(&location, &requirement)?;
-    Ok(PersonTokenFlowOutcome::deferred(accepted))
+    Ok(PersonTokenFlowOutcome::deferred(DeferCreated {
+        location,
+        requirement,
+    }))
 }
 
 async fn create_deferred_person_response<P, S, M>(
@@ -364,8 +367,10 @@ where
         .await
         .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
 
-    let accepted = deferred_accepted(&location, &requirement)?;
-    Ok(PersonTokenFlowOutcome::deferred(accepted))
+    Ok(PersonTokenFlowOutcome::deferred(DeferCreated {
+        location,
+        requirement,
+    }))
 }
 
 async fn create_federated_deferred_response<P, S, M>(
@@ -427,8 +432,10 @@ where
             .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
     }
 
-    let accepted = deferred_accepted(&location, &requirement)?;
-    Ok(PersonTokenFlowOutcome::deferred(accepted))
+    Ok(PersonTokenFlowOutcome::deferred(DeferCreated {
+        location,
+        requirement,
+    }))
 }
 
 async fn handle_federated_pending_post<P, S, M>(
@@ -537,8 +544,10 @@ where
                 .await
                 .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
             let location = pending_location(&orch.pending_base_url, &orch.pending_path, pending_id);
-            let accepted = deferred_accepted(&location, &requirement)?;
-            Ok(PersonTokenFlowOutcome::deferred(accepted))
+            Ok(PersonTokenFlowOutcome::deferred(DeferCreated {
+                location,
+                requirement,
+            }))
         }
         ServerPollOutcome::Error(err) => {
             service

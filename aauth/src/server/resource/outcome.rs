@@ -1,12 +1,12 @@
 use crate::server::access::outcome::AuthTokenPollOutcome;
-use crate::server::deferred::AcceptedResponse;
+use crate::server::deferred::DeferCreated;
 use crate::types::AAuthProtocolError;
 
 /// Resource-managed consent evaluation result.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResourceConsentFlowOutcome {
     GrantOpaque(String),
-    Deferred(AcceptedResponse),
+    Deferred(DeferCreated),
     Denied(AAuthProtocolError),
 }
 

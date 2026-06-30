@@ -1,11 +1,11 @@
-use crate::server::deferred::{AcceptedResponse, PendingOutcome};
+use crate::server::deferred::{DeferCreated, DeferWaiting, PendingOutcome};
 use crate::types::{AAuthProtocolError, TokenResponseBody};
 
 /// Token exchange flow result for Person and Access servers.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AuthTokenFlowOutcome {
     Granted(TokenResponseBody),
-    Deferred(AcceptedResponse),
+    Deferred(DeferCreated),
     Denied(AAuthProtocolError),
     Gone,
 }
@@ -15,8 +15,8 @@ impl AuthTokenFlowOutcome {
         Self::Granted(body)
     }
 
-    pub fn deferred(accepted: AcceptedResponse) -> Self {
-        Self::Deferred(accepted)
+    pub fn deferred(defer: DeferCreated) -> Self {
+        Self::Deferred(defer)
     }
 
     pub fn denied(err: AAuthProtocolError) -> Self {
@@ -27,7 +27,7 @@ impl AuthTokenFlowOutcome {
 /// Pending poll result for Person and Access servers.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AuthTokenPollOutcome {
-    Pending(AcceptedResponse),
+    Pending(DeferWaiting),
     Complete(PendingOutcome),
     Gone,
 }

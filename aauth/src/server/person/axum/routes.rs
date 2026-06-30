@@ -8,7 +8,7 @@ use axum::response::{IntoResponse, Response};
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 use crate::server::access::outcome::AuthTokenPollOutcome;
-use crate::server::axum::{InternalServiceError, parse_pending_input};
+use crate::server::axum::{InternalServiceError, PendingResumeInput};
 use crate::server::deferred::{PendingStore, PersonPendingRecord};
 use crate::server::person::keys::AuthJwtMinter;
 use crate::server::person::orchestrate::{PersonOrchestrateConfig, verify_person_token_request};
@@ -167,13 +167,11 @@ where
 pub async fn pending_post_handler<S>(
     State(state): State<PersonServerState<S>>,
     Path(id): Path<String>,
-    body: Option<Json<serde_json::Value>>,
+    PendingResumeInput(input): PendingResumeInput,
 ) -> Response
 where
     S: PersonTokenService,
 {
-    let input = parse_pending_input(body.as_ref().map(|Json(v)| v));
-
     match state.service.resume_pending(&id, input).await {
         Ok(outcome) => outcome.into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),

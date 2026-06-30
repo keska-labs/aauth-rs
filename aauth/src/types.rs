@@ -723,36 +723,6 @@ impl AAuthProtocolError {
     pub fn server_error() -> Self {
         Self::new(AAuthErrorCode::ServerError)
     }
-
-    /// HTTP status for this error on a pending poll response.
-    ///
-    /// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#polling-error-codes
-    #[cfg(feature = "server-axum")]
-    pub fn polling_status(&self) -> axum::http::StatusCode {
-        use axum::http::StatusCode;
-        match self.error {
-            AAuthErrorCode::Denied | AAuthErrorCode::Abandoned | AAuthErrorCode::AccessDenied => {
-                StatusCode::FORBIDDEN
-            }
-            AAuthErrorCode::Expired | AAuthErrorCode::InteractionExpired => {
-                StatusCode::REQUEST_TIMEOUT
-            }
-            AAuthErrorCode::InvalidCode => StatusCode::GONE,
-            AAuthErrorCode::SlowDown => StatusCode::TOO_MANY_REQUESTS,
-            AAuthErrorCode::ServerError | AAuthErrorCode::TemporarilyUnavailable => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-            AAuthErrorCode::Custom(ref code) => match code.as_str() {
-                "denied" | "abandoned" | "access_denied" => StatusCode::FORBIDDEN,
-                "expired" | "interaction_expired" => StatusCode::REQUEST_TIMEOUT,
-                "invalid_code" => StatusCode::GONE,
-                "slow_down" => StatusCode::TOO_MANY_REQUESTS,
-                "server_error" | "temporarily_unavailable" => StatusCode::INTERNAL_SERVER_ERROR,
-                _ => StatusCode::FORBIDDEN,
-            },
-            _ => StatusCode::FORBIDDEN,
-        }
-    }
 }
 
 /// Direct grant (`200`) token endpoint response.

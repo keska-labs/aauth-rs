@@ -17,16 +17,16 @@ pub use access::{
 };
 pub use deferred::{
     AccessPendingContext, AccessPendingRecord, ClaimsSubmission, DEFAULT_PENDING_TTL_SECS,
-    DeferRequirement, FederationPendingState, InMemoryAccessPendingStore, InMemoryPendingStore,
-    InMemoryPersonPendingStore, InMemoryResourcePendingStore, PendingInput, PendingOutcome,
-    PendingRecord, PendingSnapshot, PendingStorable, PendingStore, PersonPendingContext,
-    PersonPendingRecord, ResourcePendingContext, ResourcePendingRecord, generate_pending_id,
-    pending_location,
+    DeferCreated, DeferRequirement, DeferWaiting, FederationPendingState,
+    InMemoryAccessPendingStore, InMemoryPendingStore, InMemoryPersonPendingStore,
+    InMemoryResourcePendingStore, PaymentRequiredDefer, PendingBody, PendingInput, PendingOutcome,
+    PendingPostBody, PendingRecord, PendingSnapshot, PendingStorable, PendingStore,
+    PersonPendingContext, PersonPendingRecord, ResourcePendingContext, ResourcePendingRecord,
+    generate_pending_id, parse_pending_post_body, pending_location,
 };
 #[cfg(feature = "server-axum")]
 pub use deferred::{
-    ParsedDeferred, ServerPollOptions, ServerPollOutcome, build_accepted,
-    build_payment_required_stub, map_snapshot_to_poll_parts, parse_auth_token_response,
+    ParsedDeferred, ServerPollOptions, ServerPollOutcome, parse_auth_token_response,
     parse_deferred_response, poll_pending_http, post_pending_input, resolve_deferred_location,
 };
 pub use person::keys::{AuthJwtMinter, TestAuthJwtMinter, mint_auth_jwt};

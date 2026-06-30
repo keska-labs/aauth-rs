@@ -1,10 +1,12 @@
+mod extract;
 mod respond;
 
 pub use crate::server::access::outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 pub use crate::server::person::outcome::PersonTokenFlowOutcome;
 pub use crate::server::resource::{ResourceConsentFlowOutcome, ResourcePollOutcome};
+pub use extract::PendingResumeInput;
 pub use respond::{
-    InternalServiceError, deferred_accepted, parse_pending_input, poll_outcome_from_snapshot,
+    InternalServiceError, poll_outcome_from_snapshot, polling_status,
     resource_poll_outcome_from_snapshot,
 };
 

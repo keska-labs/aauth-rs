@@ -3,10 +3,10 @@ use crate::jwt::{VerifiedToken, decode_resource_token_unverified};
 use crate::server::access::axum::AccessServerConfig;
 use crate::server::access::keys::AccessAuthJwtMinter;
 use crate::server::access::outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
-use crate::server::axum::{deferred_accepted, poll_outcome_from_snapshot};
+use crate::server::axum::poll_outcome_from_snapshot;
 use crate::server::deferred::{
-    AccessPendingContext, AccessPendingRecord, DeferRequirement, PendingInput, PendingOutcome,
-    PendingSnapshot, PendingStore, generate_pending_id, pending_location,
+    AccessPendingContext, AccessPendingRecord, DeferCreated, DeferRequirement, PendingInput,
+    PendingOutcome, PendingSnapshot, PendingStore, generate_pending_id, pending_location,
 };
 use crate::server::policy::{
     AccessTokenContext, AccessTokenPolicy, AuthGrant, PolicyError, TokenPolicyDecision,
@@ -244,8 +244,10 @@ where
         &service.config.pending_path,
         pending_id,
     );
-    let accepted = deferred_accepted(&location, &requirement)?;
-    Ok(AuthTokenFlowOutcome::deferred(accepted))
+    Ok(AuthTokenFlowOutcome::deferred(DeferCreated {
+        location,
+        requirement,
+    }))
 }
 
 async fn create_deferred_access_response<P, S, M>(
@@ -285,8 +287,10 @@ where
         .await
         .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?;
 
-    let accepted = deferred_accepted(&location, &requirement)?;
-    Ok(AuthTokenFlowOutcome::deferred(accepted))
+    Ok(AuthTokenFlowOutcome::deferred(DeferCreated {
+        location,
+        requirement,
+    }))
 }
 
 fn mint_access_auth<M: AccessAuthJwtMinter>(

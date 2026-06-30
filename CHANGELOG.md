@@ -25,7 +25,8 @@ Changes since [0.0.1].
 - `ResourceAccessMode::ResourceManaged` holds a `ResourceAccessService` instead of inline `policy`, `pending`, and `opaque` fields.
 - Token and pending endpoint internal failures return `500` with JSON `{ "error": "server_error" }` per spec (via `InternalServiceError`), replacing bare empty `500` responses.
 - Flow outcome types live under each role module (`server/access/outcome`, `server/person/outcome`, `server/resource/outcome`) instead of `server/service`.
-- `AAuthProtocolError.error` is now `AAuthErrorCode` (spec-defined variants + `Custom(String)`); unknown codes deserialize into `Custom`.
+- Flow outcomes carry `DeferCreated` / `DeferWaiting` instead of `AcceptedResponse`; HTTP assembly is axum `IntoResponse` only (`server/axum/respond.rs`).
+- `AAuthProtocolError::polling_status()` moved to `server::axum::polling_status` (no axum on protocol types).
 
 ### Added
 
@@ -36,7 +37,9 @@ Changes since [0.0.1].
 - Flow outcome types with axum `IntoResponse`: `AuthTokenFlowOutcome`, `AuthTokenPollOutcome`, `PersonTokenFlowOutcome`, `ResourceConsentFlowOutcome`, `ResourcePollOutcome`.
 - `AAuthErrorCode` enum for spec token/polling/signature/interaction error codes, with `Custom(String)` for extensions.
 - `InternalServiceError` and `AAuthProtocolError::server_error()` for spec-shaped infrastructure failures on token/pending endpoints.
-- Shared deferred helpers: `build_accepted`, `map_snapshot_to_poll_parts`, pending poll/post route handlers.
+- Semantic defer types: `DeferCreated`, `DeferWaiting`, `PaymentRequiredDefer`, `PendingBody`, `PendingPostBody`, `parse_pending_post_body`.
+- `PendingResumeInput` axum extractor for typed pending POST bodies (`#[serde(untagged)]` until spec adds a wire discriminator).
+- Pending poll/post route handlers; `parse_deferred_response` uses header-driven typed body deserialize.
 - **Federation deferred loop**: when the Access Server returns `202` during PS→AS token exchange, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready (`FederationOutcome`, `FederationPendingState`, `parse_deferred_response`, `post_pending_input`, `poll_pending_http`).
 - Access Server pending routes and reference policies: `ClarificationThenGrantAccessPolicy`, `DeferInteractionAccessPolicy`, `DeferClaimsAccessPolicy`, `DeferApprovalAccessPolicy`.
 - `federated` example and matching E2E tests (`example_flows`, `axum_integration`).
@@ -54,11 +57,13 @@ Changes since [0.0.1].
 - `PendingContext` and `PendingKind` (each server store is typed to its own pending record).
 - `InteractionManager`, `InteractionManagerOptions`, `PendingRequest`.
 - Test-only server flags: `deferred_mode`, `clarification_prompt`, `pending_id_capture`.
+- `AcceptedResponse`, `PollResponse`, `build_accepted`, `build_payment_required_stub`, `map_snapshot_to_poll_parts`, `deferred_accepted`, `parse_pending_input`.
 
 ### Fixed
 
 - `post_pending_input` sends `{}` for interaction/cancel completions so axum accepts the POST body.
 - `post_pending_input` parses a `200` response body directly as an auth token, avoiding an extra poll when the pending POST completes immediately.
+- Resource-managed `202` defer responses include spec JSON body via `IntoResponse` (was empty body).
 
 ## [0.0.1] - 2026-06-28
 

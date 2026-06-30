@@ -159,7 +159,7 @@ cargo build --examples --all-features
 
 ## Spec and reference
 
-- Protocol spec: [draft-hardt-oauth-aauth-protocol.md](https://raw.githubusercontent.com/dickhardt/AAuth/refs/heads/main/draft-hardt-oauth-aauth-protocol.md)
+- Protocol spec: [draft-hardt-oauth-aauth-protocol.md](./docs/specs/draft-hardt-oauth-aauth-protocol.md)
 - Reference implementation: [`aauth-dev/packages-js`](https://github.com/aauth-dev/packages-js)
 
 ## Out of scope (initial release)

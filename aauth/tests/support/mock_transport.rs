@@ -10,8 +10,8 @@ use aauth::headers::build_aauth_requirement;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::resolve_resource_token_audience;
 use aauth::server::{
-    DEFAULT_PENDING_TTL_SECS, DeferRequirement, PendingSnapshot, PersonPendingContext,
-    PersonPendingRecord, ResourceTokenOptions, VerifyTokenOptions, build_accepted,
+    DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, PendingSnapshot,
+    PersonPendingContext, PersonPendingRecord, ResourceTokenOptions, VerifyTokenOptions,
     create_resource_token, generate_pending_id, pending_location, verify_token,
 };
 use aauth::types::{
@@ -19,6 +19,7 @@ use aauth::types::{
     PersonServerMetadata, TokenExchangeRequest, TokenResponseBody,
 };
 use async_trait::async_trait;
+use axum::response::IntoResponse;
 use http::StatusCode;
 use http_body_util::BodyExt;
 use reqwest::{Request, Response, ResponseBuilderExt, Url};
@@ -347,17 +348,26 @@ impl MockServerState {
             );
             let _ = self.pending.create(record).await;
 
-            if let Ok(accepted) = build_accepted(&location, &requirement) {
-                let mut builder = http::Response::builder()
-                    .status(StatusCode::ACCEPTED)
-                    .url(Url::parse(url).expect("valid url"));
-                for (name, value) in accepted.headers.iter() {
-                    builder = builder.header(name, value);
-                }
-                return Ok(Response::from(
-                    builder.body(Vec::new()).expect("valid http response"),
-                ));
+            let defer_response = DeferCreated {
+                location: location.clone(),
+                requirement: requirement.clone(),
             }
+            .into_response();
+            let mut builder = http::Response::builder()
+                .status(defer_response.status())
+                .url(Url::parse(url).expect("valid url"));
+            for (name, value) in defer_response.headers().iter() {
+                builder = builder.header(name, value);
+            }
+            let body = defer_response
+                .into_body()
+                .collect()
+                .await
+                .map(|c| c.to_bytes().to_vec())
+                .unwrap_or_default();
+            return Ok(Response::from(
+                builder.body(body).expect("valid http response"),
+            ));
         }
 
         let auth_jwt = mint_auth_jwt(

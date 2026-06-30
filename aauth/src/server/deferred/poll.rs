@@ -227,7 +227,9 @@ fn parse_retry_after(headers: &HeaderMap) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::deferred::build_accepted;
+    use axum::response::IntoResponse;
+
+    use crate::server::deferred::DeferCreated;
 
     #[tokio::test]
     async fn poll_pending_http_returns_auth_token_on_200() {
@@ -305,14 +307,23 @@ mod tests {
             question: "Why?".into(),
             timeout: None,
         };
-        let accepted =
-            build_accepted(&format!("{}/pending/abc", mock.uri()), &requirement).expect("accepted");
+        let defer_response = DeferCreated {
+            location: format!("{}/pending/abc", mock.uri()),
+            requirement: requirement.clone(),
+        }
+        .into_response();
+
+        let headers = defer_response.headers().clone();
+        let body = axum::body::to_bytes(defer_response.into_body(), usize::MAX)
+            .await
+            .expect("bytes");
+        let body = String::from_utf8(body.to_vec()).expect("utf8");
 
         let mut template = wiremock::ResponseTemplate::new(202);
-        for (name, value) in accepted.headers.iter() {
+        for (name, value) in headers.iter() {
             template = template.insert_header(name.as_str(), value.to_str().unwrap());
         }
-        template = template.set_body_string(accepted.body.to_string());
+        template = template.set_body_string(body);
 
         wiremock::Mock::given(wiremock::matchers::method("GET"))
             .and(wiremock::matchers::path("/pending/abc"))

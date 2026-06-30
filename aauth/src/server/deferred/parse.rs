@@ -2,7 +2,7 @@ use http::HeaderMap;
 
 use crate::error::{AAuthError, Result};
 use crate::headers::parse_aauth_requirement;
-use crate::types::TokenResponseBody;
+use crate::types::{ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody};
 
 use super::types::DeferRequirement;
 
@@ -44,13 +44,7 @@ pub fn parse_deferred_response(
     })?;
     let challenge = parse_aauth_requirement(requirement_header)?;
 
-    let json_body: Option<serde_json::Value> = if body.is_empty() {
-        None
-    } else {
-        serde_json::from_slice(body).ok()
-    };
-
-    let requirement = map_challenge_to_defer(&challenge, json_body.as_ref())?;
+    let requirement = defer_requirement_from(&challenge, body)?;
 
     Ok(ParsedDeferred {
         location,
@@ -67,31 +61,39 @@ pub fn parse_auth_token_response(status: u16, body: &[u8]) -> Result<TokenRespon
     serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))
 }
 
-fn map_challenge_to_defer(
+fn defer_requirement_from(
     challenge: &crate::types::AAuthChallenge,
-    body: Option<&serde_json::Value>,
+    body: &[u8],
 ) -> Result<DeferRequirement> {
     match challenge {
         crate::types::AAuthChallenge::Clarification => {
-            let question = body
-                .and_then(|v| v.get("clarification"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("Please clarify your request")
-                .to_string();
-            let timeout = body.and_then(|v| v.get("timeout")).and_then(|v| v.as_u64());
-            Ok(DeferRequirement::Clarification { question, timeout })
+            let c: ClarificationChallenge = if body.is_empty() {
+                ClarificationChallenge {
+                    status: PendingStatus::Pending,
+                    clarification: "Please clarify your request".into(),
+                    timeout: None,
+                    options: None,
+                }
+            } else {
+                serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))?
+            };
+            Ok(DeferRequirement::Clarification {
+                question: c.clarification,
+                timeout: c.timeout,
+            })
         }
         crate::types::AAuthChallenge::Claims => {
-            let required_claims = body
-                .and_then(|v| v.get("required_claims"))
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default();
-            Ok(DeferRequirement::Claims { required_claims })
+            let c: ClaimsChallenge = if body.is_empty() {
+                ClaimsChallenge {
+                    status: PendingStatus::Pending,
+                    required_claims: vec![],
+                }
+            } else {
+                serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))?
+            };
+            Ok(DeferRequirement::Claims {
+                required_claims: c.required_claims,
+            })
         }
         crate::types::AAuthChallenge::Interaction { url, code } => {
             Ok(DeferRequirement::Interaction {
@@ -122,7 +124,24 @@ fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::deferred::build_accepted;
+    use axum::response::IntoResponse;
+
+    use crate::server::deferred::DeferCreated;
+
+    fn response_parts_sync(response: axum::response::Response) -> (u16, HeaderMap, Vec<u8>) {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let status = response.status().as_u16();
+            let headers = response.headers().clone();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("bytes");
+            (status, headers, body.to_vec())
+        })
+    }
 
     #[test]
     fn round_trip_clarification_defer() {
@@ -130,15 +149,14 @@ mod tests {
             question: "Why?".into(),
             timeout: Some(60),
         };
-        let accepted = build_accepted("https://as.example/pending/abc", &requirement).unwrap();
-        let body = accepted.body.to_string();
-        let parsed = parse_deferred_response(
-            202,
-            &accepted.headers,
-            body.as_bytes(),
-            "https://as.example",
-        )
-        .unwrap();
+        let response = DeferCreated {
+            location: "https://as.example/pending/abc".into(),
+            requirement: requirement.clone(),
+        }
+        .into_response();
+        let (status, headers, body) = response_parts_sync(response);
+        let parsed =
+            parse_deferred_response(status, &headers, &body, "https://as.example").unwrap();
         assert_eq!(parsed.location, "https://as.example/pending/abc");
         assert_eq!(parsed.requirement, requirement);
     }
@@ -149,14 +167,14 @@ mod tests {
             url: "https://as.example/interact".into(),
             code: "AB-CD".into(),
         };
-        let accepted = build_accepted("https://as.example/pending/x", &requirement).unwrap();
-        let parsed = parse_deferred_response(
-            202,
-            &accepted.headers,
-            accepted.body.to_string().as_bytes(),
-            "https://as.example",
-        )
-        .unwrap();
+        let response = DeferCreated {
+            location: "https://as.example/pending/x".into(),
+            requirement: requirement.clone(),
+        }
+        .into_response();
+        let (status, headers, body) = response_parts_sync(response);
+        let parsed =
+            parse_deferred_response(status, &headers, &body, "https://as.example").unwrap();
         assert_eq!(parsed.requirement, requirement);
     }
 }

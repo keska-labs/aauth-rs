@@ -1,15 +1,15 @@
 use axum::Json;
-use axum::body::Body;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
+use crate::headers::build_aauth_requirement;
 use crate::server::access::outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 use crate::server::deferred::{
-    AcceptedResponse, PendingOutcome, PollResponse, map_snapshot_to_poll_parts,
+    DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingBody, PendingOutcome, PendingSnapshot,
 };
 use crate::server::person::outcome::PersonTokenFlowOutcome;
 use crate::server::resource::{ResourceConsentFlowOutcome, ResourcePollOutcome};
-use crate::types::AAuthProtocolError;
+use crate::types::{AAuthErrorCode, AAuthProtocolError};
 
 /// Infrastructure failure from a role service. Maps to spec `server_error` (500 + JSON).
 #[derive(Debug)]
@@ -31,21 +31,122 @@ impl IntoResponse for InternalServiceError {
     }
 }
 
-fn accepted_into_response(accepted: AcceptedResponse) -> Response {
-    let mut response = Response::builder().status(accepted.status);
-    for (k, v) in accepted.headers.iter() {
-        response = response.header(k, v);
+/// HTTP status for a polling error response.
+///
+/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#polling-error-codes
+pub fn polling_status(err: &AAuthProtocolError) -> StatusCode {
+    match err.error {
+        AAuthErrorCode::Denied | AAuthErrorCode::Abandoned | AAuthErrorCode::AccessDenied => {
+            StatusCode::FORBIDDEN
+        }
+        AAuthErrorCode::Expired | AAuthErrorCode::InteractionExpired => StatusCode::REQUEST_TIMEOUT,
+        AAuthErrorCode::InvalidCode => StatusCode::GONE,
+        AAuthErrorCode::SlowDown => StatusCode::TOO_MANY_REQUESTS,
+        AAuthErrorCode::ServerError | AAuthErrorCode::TemporarilyUnavailable => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+        AAuthErrorCode::Custom(ref code) => match code.as_str() {
+            "denied" | "abandoned" | "access_denied" => StatusCode::FORBIDDEN,
+            "expired" | "interaction_expired" => StatusCode::REQUEST_TIMEOUT,
+            "invalid_code" => StatusCode::GONE,
+            "slow_down" => StatusCode::TOO_MANY_REQUESTS,
+            "server_error" | "temporarily_unavailable" => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => StatusCode::FORBIDDEN,
+        },
+        _ => StatusCode::FORBIDDEN,
     }
-    response
-        .body(Body::from(accepted.body.to_string()))
-        .unwrap_or_else(|_| InternalServiceError.into_response())
+}
+
+fn insert_poll_headers(
+    headers: &mut HeaderMap,
+    requirement: &crate::server::deferred::DeferRequirement,
+) {
+    headers.insert("Retry-After", "0".parse().expect("valid header"));
+    headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
+    if let Ok(challenge) = requirement.header_challenge() {
+        if let Ok(req) = build_aauth_requirement(&challenge) {
+            headers.insert(
+                "AAuth-Requirement",
+                req.parse().expect("valid requirement header"),
+            );
+        }
+    }
+}
+
+fn insert_defer_created_headers(
+    headers: &mut HeaderMap,
+    location: &str,
+    requirement: &crate::server::deferred::DeferRequirement,
+) {
+    headers.insert("Location", location.parse().expect("valid location"));
+    insert_poll_headers(headers, requirement);
+    headers.insert(
+        "Content-Type",
+        "application/json".parse().expect("valid content-type"),
+    );
+}
+
+impl IntoResponse for DeferCreated {
+    fn into_response(self) -> Response {
+        let body = match PendingBody::for_created(&self.requirement) {
+            Ok(b) => b,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        };
+        let mut headers = HeaderMap::new();
+        insert_defer_created_headers(&mut headers, &self.location, &self.requirement);
+        (StatusCode::ACCEPTED, headers, Json(body)).into_response()
+    }
+}
+
+impl IntoResponse for DeferWaiting {
+    fn into_response(self) -> Response {
+        let body = match PendingBody::for_waiting(&self.requirement, self.status) {
+            Ok(b) => b,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        };
+        let mut headers = HeaderMap::new();
+        insert_poll_headers(&mut headers, &self.requirement);
+        headers.insert(
+            "Content-Type",
+            "application/json".parse().expect("valid content-type"),
+        );
+        (StatusCode::ACCEPTED, headers, Json(body)).into_response()
+    }
+}
+
+#[derive(serde::Serialize)]
+struct PaymentRequiredBody {
+    status: &'static str,
+    error: &'static str,
+    error_description: &'static str,
+}
+
+impl IntoResponse for PaymentRequiredDefer {
+    fn into_response(self) -> Response {
+        let mut headers = HeaderMap::new();
+        headers.insert("Location", self.location.parse().expect("valid location"));
+        headers.insert(
+            "Content-Type",
+            "application/json".parse().expect("valid content-type"),
+        );
+        (
+            StatusCode::PAYMENT_REQUIRED,
+            headers,
+            Json(PaymentRequiredBody {
+                status: "pending",
+                error: "payment_required",
+                error_description: "Payment required (stub — settlement not implemented)",
+            }),
+        )
+            .into_response()
+    }
 }
 
 impl IntoResponse for AuthTokenFlowOutcome {
     fn into_response(self) -> Response {
         match self {
             Self::Granted(body) => (StatusCode::OK, Json(body)).into_response(),
-            Self::Deferred(accepted) => accepted_into_response(accepted),
+            Self::Deferred(defer) => defer.into_response(),
             Self::Denied(err) => (StatusCode::FORBIDDEN, Json(err)).into_response(),
             Self::Gone => StatusCode::GONE.into_response(),
         }
@@ -55,8 +156,8 @@ impl IntoResponse for AuthTokenFlowOutcome {
 impl IntoResponse for AuthTokenPollOutcome {
     fn into_response(self) -> Response {
         match self {
-            Self::Pending(accepted) => accepted_into_response(accepted),
-            Self::Complete(outcome) => pending_outcome_into_response(outcome),
+            Self::Pending(waiting) => waiting.into_response(),
+            Self::Complete(outcome) => outcome.into_response(),
             Self::Gone => StatusCode::GONE.into_response(),
         }
     }
@@ -81,86 +182,41 @@ impl IntoResponse for ResourceConsentFlowOutcome {
                 headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
                 (StatusCode::OK, headers).into_response()
             }
-            Self::Deferred(accepted) => accepted_into_response(accepted),
+            Self::Deferred(defer) => defer.into_response(),
             Self::Denied(err) => (StatusCode::FORBIDDEN, Json(err)).into_response(),
         }
     }
 }
 
-fn pending_outcome_into_response(outcome: PendingOutcome) -> Response {
-    match outcome {
-        PendingOutcome::AuthToken(body) => (StatusCode::OK, Json(body)).into_response(),
-        PendingOutcome::OpaqueAccess(token) => {
-            let mut headers = HeaderMap::new();
-            headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
-            (StatusCode::OK, headers).into_response()
+impl IntoResponse for PendingOutcome {
+    fn into_response(self) -> Response {
+        match self {
+            Self::AuthToken(body) => (StatusCode::OK, Json(body)).into_response(),
+            Self::OpaqueAccess(token) => {
+                let mut headers = HeaderMap::new();
+                headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
+                (StatusCode::OK, headers).into_response()
+            }
+            Self::Error(err) => (polling_status(&err), Json(err)).into_response(),
         }
-        PendingOutcome::Error(err) => (err.polling_status(), Json(err)).into_response(),
     }
 }
 
 /// Map a pending snapshot to a poll outcome (for service poll methods).
-pub fn poll_outcome_from_snapshot(
-    snapshot: &crate::server::deferred::PendingSnapshot,
-) -> AuthTokenPollOutcome {
-    match map_snapshot_to_poll_parts(snapshot) {
-        PollResponse::OkAuthToken(body) => {
-            AuthTokenPollOutcome::Complete(PendingOutcome::AuthToken(body))
-        }
-        PollResponse::OkOpaque(token) => {
-            AuthTokenPollOutcome::Complete(PendingOutcome::OpaqueAccess(token))
-        }
-        PollResponse::Error { status: _, error } => {
-            AuthTokenPollOutcome::Complete(PendingOutcome::Error(error))
-        }
-        PollResponse::Gone => AuthTokenPollOutcome::Gone,
-        PollResponse::Accepted { headers, body } => {
-            let mut accepted_headers = HeaderMap::new();
-            for (k, v) in headers.iter() {
-                accepted_headers.insert(k.clone(), v.clone());
-            }
-            AuthTokenPollOutcome::Pending(AcceptedResponse {
-                status: StatusCode::ACCEPTED,
-                headers: accepted_headers,
-                body: body.unwrap_or_else(|| serde_json::json!({ "status": "pending" })),
-            })
-        }
+pub fn poll_outcome_from_snapshot(snapshot: &PendingSnapshot) -> AuthTokenPollOutcome {
+    match snapshot {
+        PendingSnapshot::Complete(outcome) => AuthTokenPollOutcome::Complete(outcome.clone()),
+        PendingSnapshot::Waiting {
+            status,
+            requirement,
+        } => AuthTokenPollOutcome::Pending(DeferWaiting {
+            status: *status,
+            requirement: requirement.clone(),
+        }),
     }
 }
 
 /// Resource poll mapping (same wire shape; removes completed record in handler if needed).
-pub fn resource_poll_outcome_from_snapshot(
-    snapshot: &crate::server::deferred::PendingSnapshot,
-) -> ResourcePollOutcome {
-    match poll_outcome_from_snapshot(snapshot) {
-        AuthTokenPollOutcome::Pending(a) => ResourcePollOutcome::Pending(a),
-        AuthTokenPollOutcome::Complete(o) => ResourcePollOutcome::Complete(o),
-        AuthTokenPollOutcome::Gone => ResourcePollOutcome::Gone,
-    }
-}
-
-/// Build deferred accepted response from location + requirement.
-pub fn deferred_accepted(
-    location: &str,
-    requirement: &crate::server::deferred::DeferRequirement,
-) -> Result<AcceptedResponse, crate::error::AAuthError> {
-    crate::server::deferred::build_accepted(location, requirement)
-}
-
-/// Parse POST body on a pending URL into agent input.
-pub fn parse_pending_input(
-    body: Option<&serde_json::Value>,
-) -> crate::server::deferred::PendingInput {
-    use crate::server::deferred::{ClaimsSubmission, PendingInput};
-    use crate::types::ClarificationResponse;
-
-    if let Some(value) = body {
-        if let Ok(clarification) = serde_json::from_value::<ClarificationResponse>(value.clone()) {
-            return PendingInput::ClarificationResponse(clarification.clarification_response);
-        }
-        if let Ok(claims) = serde_json::from_value::<ClaimsSubmission>(value.clone()) {
-            return PendingInput::ClaimsSubmission(claims);
-        }
-    }
-    PendingInput::InteractionCompleted
+pub fn resource_poll_outcome_from_snapshot(snapshot: &PendingSnapshot) -> ResourcePollOutcome {
+    poll_outcome_from_snapshot(snapshot)
 }

@@ -1,9 +1,115 @@
 use serde::{Deserialize, Serialize};
 
+use crate::error::AAuthError;
 use crate::jwt::{AgentClaims, ResourceClaims};
 use crate::types::{
-    AAuthChallenge, AAuthProtocolError, PendingStatus, TokenExchangeRequest, TokenResponseBody,
+    AAuthChallenge, AAuthProtocolError, ClaimsChallenge, ClarificationChallenge,
+    ClarificationResponse, PendingStatus, TokenExchangeRequest, TokenResponseBody,
 };
+
+/// Initial `202` from token exchange, resource consent, or pending POST resume.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeferCreated {
+    pub location: String,
+    pub requirement: DeferRequirement,
+}
+
+/// `202` while polling a pending URL (no new `Location`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeferWaiting {
+    pub status: PendingStatus,
+    pub requirement: DeferRequirement,
+}
+
+/// `402 Payment Required` defer stub — poll `Location` after payment settlement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaymentRequiredDefer {
+    pub location: String,
+}
+
+/// JSON body on a `202` pending / defer response.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum PendingBody {
+    Status(PendingStatusBody),
+    Clarification(ClarificationChallenge),
+    Claims(ClaimsChallenge),
+}
+
+/// Status-only pending response body (`interaction` / `approval`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingStatusBody {
+    pub status: PendingStatus,
+}
+
+impl PendingBody {
+    pub fn for_created(requirement: &DeferRequirement) -> Result<Self, AAuthError> {
+        Self::for_waiting(requirement, PendingStatus::Pending)
+    }
+
+    pub fn for_waiting(
+        requirement: &DeferRequirement,
+        status: PendingStatus,
+    ) -> Result<Self, AAuthError> {
+        match requirement {
+            DeferRequirement::Clarification { question, timeout } => {
+                Ok(Self::Clarification(ClarificationChallenge {
+                    status,
+                    clarification: question.clone(),
+                    timeout: *timeout,
+                    options: None,
+                }))
+            }
+            DeferRequirement::Claims { required_claims } => Ok(Self::Claims(ClaimsChallenge {
+                status,
+                required_claims: required_claims.clone(),
+            })),
+            DeferRequirement::Interaction { .. } | DeferRequirement::Approval => {
+                Ok(Self::Status(PendingStatusBody { status }))
+            }
+            DeferRequirement::Payment { .. } => Err(AAuthError::Message(
+                "payment defer uses 402, not pending JSON body".into(),
+            )),
+        }
+    }
+}
+
+/// Empty `{}` or omitted body = interaction completed on a pending URL.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InteractionCompletedBody {}
+
+/// Agent POST body on a pending URL (no wire discriminator in spec yet).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum PendingPostBody {
+    Clarification(ClarificationResponse),
+    Claims(ClaimsSubmission),
+    InteractionCompleted(InteractionCompletedBody),
+}
+
+impl From<PendingPostBody> for PendingInput {
+    fn from(body: PendingPostBody) -> Self {
+        match body {
+            PendingPostBody::Clarification(r) => {
+                Self::ClarificationResponse(r.clarification_response)
+            }
+            PendingPostBody::Claims(c) => Self::ClaimsSubmission(c),
+            PendingPostBody::InteractionCompleted(_) => Self::InteractionCompleted,
+        }
+    }
+}
+
+/// Parse POST body on a pending URL into agent input.
+///
+/// Spec gap: no wire-level type tag on pending POST bodies yet — uses shape matching.
+pub fn parse_pending_post_body(body: &[u8]) -> Result<PendingInput, AAuthError> {
+    if body.is_empty() || body.iter().all(|b| b.is_ascii_whitespace()) {
+        return Ok(PendingInput::InteractionCompleted);
+    }
+    let wire: PendingPostBody =
+        serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))?;
+    Ok(wire.into())
+}
 
 /// Deferred `AAuth-Requirement` encoded for server-side pending state.
 ///

@@ -3,8 +3,6 @@ mod memory;
 mod parse;
 #[cfg(feature = "server-axum")]
 mod poll;
-#[cfg(feature = "server-axum")]
-mod response;
 mod util;
 
 pub mod types;
@@ -21,11 +19,6 @@ pub use parse::{
 pub use poll::{
     OutboundRequestSigner, ServerPollOptions, ServerPollOutcome, poll_pending_http,
     post_pending_input,
-};
-#[cfg(feature = "server-axum")]
-pub use response::{
-    AcceptedResponse, PollResponse, build_accepted, build_payment_required_stub,
-    map_snapshot_to_poll_parts,
 };
 pub use store::{PendingStorable, PendingStore};
 pub use types::*;

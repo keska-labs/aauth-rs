@@ -60,7 +60,7 @@ pub use server::access::{
     AccessAuthJwtMinter, AccessServerMetadata, TestAccessAuthJwtMinter, mint_access_auth_jwt,
 };
 #[cfg(all(feature = "server", feature = "server-axum"))]
-pub use server::deferred::{build_accepted, build_payment_required_stub};
+pub use server::axum::PendingResumeInput;
 #[cfg(feature = "server")]
 pub use server::person::{
     FederationConfig, FederationOutcome, federate_to_access_server, fulfill_token_exchange,
@@ -72,18 +72,20 @@ pub use server::{
     AlwaysGrantAccessPolicy, AlwaysGrantPersonPolicy, AlwaysGrantResourcePolicy, AuthGrant,
     AuthJwtMinter, ClaimsSubmission, ClarificationThenGrantAccessPolicy,
     ClarificationThenGrantPersonPolicy, DEFAULT_PENDING_TTL_SECS, DeferApprovalAccessPolicy,
-    DeferClaimsAccessPolicy, DeferInteractionAccessPolicy, DeferInteractionPersonPolicy,
-    DeferInteractionResourcePolicy, DeferRequirement, Ed25519ResourceTokenSigner,
-    FederationPendingState, FixedSubPersonPolicy, InMemoryAccessPendingStore,
-    InMemoryOpaqueAccessStore, InMemoryPendingStore, InMemoryPersonPendingStore,
-    InMemoryResourcePendingStore, OpaqueAccessStore, PendingInput, PendingOutcome, PendingRecord,
-    PendingSnapshot, PendingStorable, PendingStore, PersonPendingContext, PersonPendingRecord,
-    PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError, ResourceAccessContext,
-    ResourceAccessMode, ResourceAccessPolicy, ResourceAccessService, ResourceAccessServiceError,
-    ResourceConsentDecision, ResourceConsentPolicy, ResourcePendingContext, ResourcePendingRecord,
-    ResourceTokenOptions, ResourceTokenSigner, TestAuthJwtMinter, TokenPolicyDecision,
-    VerifyResourceTokenOptions, VerifyTokenOptions, create_resource_token, generate_pending_id,
-    mint_auth_jwt, pending_location, resolve_resource_token_audience, verify_auth_token_binding,
+    DeferClaimsAccessPolicy, DeferCreated, DeferInteractionAccessPolicy,
+    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, DeferRequirement, DeferWaiting,
+    Ed25519ResourceTokenSigner, FederationPendingState, FixedSubPersonPolicy,
+    InMemoryAccessPendingStore, InMemoryOpaqueAccessStore, InMemoryPendingStore,
+    InMemoryPersonPendingStore, InMemoryResourcePendingStore, OpaqueAccessStore,
+    PaymentRequiredDefer, PendingBody, PendingInput, PendingOutcome, PendingPostBody,
+    PendingRecord, PendingSnapshot, PendingStorable, PendingStore, PersonPendingContext,
+    PersonPendingRecord, PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError,
+    ResourceAccessContext, ResourceAccessMode, ResourceAccessPolicy, ResourceAccessService,
+    ResourceAccessServiceError, ResourceConsentDecision, ResourceConsentPolicy,
+    ResourcePendingContext, ResourcePendingRecord, ResourceTokenOptions, ResourceTokenSigner,
+    TestAuthJwtMinter, TokenPolicyDecision, VerifyResourceTokenOptions, VerifyTokenOptions,
+    create_resource_token, generate_pending_id, mint_auth_jwt, parse_pending_post_body,
+    pending_location, resolve_resource_token_audience, verify_auth_token_binding,
     verify_client_auth_token, verify_resource_challenge, verify_resource_token, verify_token,
 };
 #[cfg(all(feature = "server", feature = "server-axum"))]
