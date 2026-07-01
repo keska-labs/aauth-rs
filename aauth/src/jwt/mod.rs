@@ -14,7 +14,7 @@ use jsonwebtoken::{decode_header, jwk::JwkSet};
 use sha2::{Digest, Sha256};
 
 use crate::error::{JwtError, Result};
-use crate::types::JwtTyp;
+use crate::protocol::JwtTyp;
 
 impl JwtTyp {
     /// Reads and parses the JWT `typ` header.

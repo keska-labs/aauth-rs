@@ -4,7 +4,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Json, http::StatusCode};
 
 use crate::deferred::{PendingInput, parse_pending_post_body};
-use crate::types::{AAuthErrorCode, AAuthProtocolError};
+use crate::protocol::{AAuthErrorCode, AAuthProtocolError};
 
 /// Parsed agent input from POST on a pending URL.
 pub struct PendingResumeInput(pub PendingInput);

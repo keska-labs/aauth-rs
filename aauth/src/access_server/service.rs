@@ -10,8 +10,8 @@ use crate::jwt::{VerifiedToken, decode_resource_token_unverified};
 use crate::policy::{
     AccessTokenContext, AccessTokenPolicy, AuthGrant, PolicyError, TokenPolicyDecision,
 };
+use crate::protocol::TokenResponseBody;
 use crate::server_axum::poll_outcome_from_snapshot;
-use crate::types::TokenResponseBody;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AccessTokenServiceError {
@@ -122,7 +122,7 @@ where
 
 pub fn build_access_context(
     config: &AccessServerConfig,
-    request: &crate::types::AccessTokenExchangeRequest,
+    request: &crate::protocol::AccessTokenExchangeRequest,
 ) -> Result<AccessTokenContext, AAuthError> {
     let agent = match VerifiedToken::decode_unverified(&request.agent_token)? {
         VerifiedToken::Agent(c) => c,

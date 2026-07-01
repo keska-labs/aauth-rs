@@ -1,6 +1,6 @@
 use crate::deferred::AuthTokenPollOutcome;
 use crate::deferred::DeferCreated;
-use crate::types::AAuthProtocolError;
+use crate::protocol::AAuthProtocolError;
 
 /// Resource-managed consent evaluation result.
 #[derive(Debug, Clone, PartialEq)]

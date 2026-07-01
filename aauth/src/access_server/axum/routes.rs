@@ -14,9 +14,9 @@ use crate::deferred::{AccessPendingRecord, PendingStore};
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 use crate::policy::AccessTokenPolicy;
+use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
 use crate::server_axum::{InternalServiceError, PendingResumeInput};
 use crate::signature::verify_request_signature;
-use crate::types::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
 
 #[derive(Clone)]
 pub struct AccessServerConfig {
@@ -64,7 +64,7 @@ where
         issuer: Some(state.config.access_server_url.clone()),
         token_endpoint: format!("{}/access/aauth/token", state.config.access_server_url),
         jwks_uri: Some(state.config.access_jwks_uri.clone()),
-        name: None,
+        ..Default::default()
     })
 }
 

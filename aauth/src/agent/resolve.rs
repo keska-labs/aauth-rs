@@ -1,6 +1,6 @@
 use crate::error::{AAuthError, Result};
 use crate::jwt::{AgentClaims, decode_resource_token_unverified};
-use crate::types::SignatureKey;
+use crate::protocol::SignatureKey;
 
 /// Resolve the Person Server URL for token exchange.
 ///

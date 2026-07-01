@@ -6,13 +6,13 @@ use aauth::PendingOutcome;
 use aauth::PendingStore;
 use aauth::VerifiedToken;
 use aauth::error::Result;
-use aauth::headers::build_aauth_requirement;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
-use aauth::resolve_resource_token_audience;
-use aauth::types::{
-    AAuthChallenge, AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument,
+use aauth::protocol::build_aauth_requirement;
+use aauth::protocol::{
+    AAuthChallenge, AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument,
     PersonServerMetadata, TokenExchangeRequest, TokenResponseBody,
 };
+use aauth::resolve_resource_token_audience;
 use aauth::{
     DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, PendingSnapshot,
     PersonPendingContext, PersonPendingRecord, ResourceTokenOptions, VerifyTokenOptions,
@@ -80,10 +80,7 @@ impl MockServerState {
                 issuer: Some(self.person_server_url.clone()),
                 token_endpoint: format!("{}/aauth/token", self.person_server_url),
                 jwks_uri: Some(format!("{}/jwks", self.person_server_url)),
-                name: None,
-                permission_endpoint: None,
-                interaction_endpoint: None,
-                mission_endpoint: None,
+                ..Default::default()
             };
             return Ok(Response::from(
                 http::Response::builder()
@@ -106,10 +103,7 @@ impl MockServerState {
 
         let agent_metadata = format!("{}/.well-known/aauth-agent.json", self.agent_url);
         if url == agent_metadata {
-            let body = MetadataDocument {
-                jwks_uri: format!("{}/jwks", self.agent_url),
-                extra: HashMap::new(),
-            };
+            let body = AgentProviderMetadata::from_jwks_uri(format!("{}/jwks", self.agent_url));
             return Ok(Response::from(
                 http::Response::builder()
                     .status(StatusCode::OK)
@@ -296,7 +290,6 @@ impl MockServerState {
                 upstream_token: None,
                 subagent_token: None,
                 justification: None,
-                localhost_callback: None,
                 login_hint: None,
                 tenant: None,
                 domain_hint: None,

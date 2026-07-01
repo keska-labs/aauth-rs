@@ -1,6 +1,6 @@
 use crate::deferred::AuthTokenFlowOutcome;
 use crate::deferred::DeferCreated;
-use crate::types::{AAuthProtocolError, TokenResponseBody};
+use crate::protocol::{AAuthProtocolError, TokenResponseBody};
 
 /// Person Server token exchange / resume result (includes federation-specific outcomes).
 #[derive(Debug, Clone, PartialEq)]

@@ -1,5 +1,43 @@
+//! AAuth HTTP response/request headers.
+
 use crate::error::{AAuthError, Result};
-use crate::types::{AAuthChallenge, Capability, Mission, RequirementLevel};
+
+use super::common::{Capability, Mission, RequirementLevel};
+
+/// Parsed `AAuth-Requirement` response header.
+///
+/// Direction: Resource -> Agent 401/402 `{AAuth-Requirement}`; PS -> Agent 202 `{AAuth-Requirement}`;
+/// AS -> PS 202 `{AAuth-Requirement}` (federation pass-through).
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AAuthChallenge {
+    /// `401` — AAuth agent token required.
+    AgentToken,
+    /// `401`/`402` — auth token required with embedded resource token.
+    AuthToken { resource_token: String },
+    /// `202` — approval pending; poll `Location`.
+    Approval,
+    /// `202` — user action required at interaction endpoint.
+    Interaction { url: String, code: String },
+    /// `202` — question posed (details in response body).
+    Clarification,
+    /// `202` — identity claims required (AS only; details in body).
+    Claims,
+}
+
+impl AAuthChallenge {
+    pub fn level(&self) -> RequirementLevel {
+        match self {
+            Self::AgentToken => RequirementLevel::AgentToken,
+            Self::AuthToken { .. } => RequirementLevel::AuthToken,
+            Self::Approval => RequirementLevel::Approval,
+            Self::Interaction { .. } => RequirementLevel::Interaction,
+            Self::Clarification => RequirementLevel::Clarification,
+            Self::Claims => RequirementLevel::Claims,
+        }
+    }
+}
 
 pub fn build_capabilities_header(capabilities: &[Capability]) -> String {
     capabilities
@@ -47,7 +85,7 @@ pub fn build_aauth_requirement(challenge: &AAuthChallenge) -> Result<String> {
     }
 }
 
-/// Parse an `AAuth-Requirement` response header value into a structured challenge.
+/// Parse an `AAuth-Requirement` response header value.
 pub fn parse_aauth_requirement(header_value: &str) -> Result<AAuthChallenge> {
     let trimmed = header_value.trim();
     if trimmed.is_empty() {
@@ -118,14 +156,6 @@ mod tests {
             url: "https://auth.example/interact".into(),
             code: "CODE1234".into(),
         };
-        let header = build_aauth_requirement(&challenge).unwrap();
-        let parsed = parse_aauth_requirement(&header).unwrap();
-        assert_eq!(parsed, challenge);
-    }
-
-    #[test]
-    fn round_trip_approval() {
-        let challenge = AAuthChallenge::Approval;
         let header = build_aauth_requirement(&challenge).unwrap();
         let parsed = parse_aauth_requirement(&header).unwrap();
         assert_eq!(parsed, challenge);

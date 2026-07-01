@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use aauth::InMemoryPersonPendingStore;
-use aauth::types::TokenExchangeRequest;
+use aauth::protocol::TokenExchangeRequest;
 
 use aauth::TestKeys;
 

@@ -13,9 +13,9 @@ use crate::person_server::keys::AuthJwtMinter;
 use crate::person_server::orchestrate::{PersonOrchestrateConfig, verify_person_token_request};
 use crate::person_server::service::{PersonTokenService, PolicyPersonTokenService};
 use crate::policy::PersonTokenPolicy;
+use crate::protocol::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
 use crate::server_axum::{InternalServiceError, PendingResumeInput};
 use crate::signature::verify_request_signature;
-use crate::types::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
 
 #[derive(Clone)]
 pub struct PersonServerConfig {
@@ -88,10 +88,8 @@ where
         issuer: Some(state.config.person_server_url.clone()),
         token_endpoint: format!("{}/aauth/token", state.config.person_server_url),
         jwks_uri: Some(state.config.person_jwks_uri.clone()),
-        name: None,
-        permission_endpoint: None,
         interaction_endpoint: Some(state.config.interaction_url.clone()),
-        mission_endpoint: None,
+        ..Default::default()
     })
 }
 

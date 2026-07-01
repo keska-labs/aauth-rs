@@ -4,14 +4,14 @@ use axum::response::{IntoResponse, Response};
 
 use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 use crate::deferred::{
-    DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingBody, PendingOutcome, PendingSnapshot,
+    DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingOutcome, PendingSnapshot,
 };
-use crate::headers::build_aauth_requirement;
 #[cfg(feature = "person-server-axum")]
 use crate::person_server::outcome::PersonTokenFlowOutcome;
+use crate::protocol::build_aauth_requirement;
+use crate::protocol::{AAuthErrorCode, AAuthProtocolError, PaymentRequiredBody, PendingBody};
 #[cfg(feature = "resource-axum")]
 use crate::resource::{ResourceConsentFlowOutcome, ResourcePollOutcome};
-use crate::types::{AAuthErrorCode, AAuthProtocolError};
 
 /// Infrastructure failure from a role service. Maps to spec `server_error` (500 + JSON).
 #[derive(Debug)]
@@ -113,13 +113,6 @@ impl IntoResponse for DeferWaiting {
     }
 }
 
-#[derive(serde::Serialize)]
-struct PaymentRequiredBody {
-    status: &'static str,
-    error: &'static str,
-    error_description: &'static str,
-}
-
 impl IntoResponse for PaymentRequiredDefer {
     fn into_response(self) -> Response {
         let mut headers = HeaderMap::new();
@@ -131,11 +124,7 @@ impl IntoResponse for PaymentRequiredDefer {
         (
             StatusCode::PAYMENT_REQUIRED,
             headers,
-            Json(PaymentRequiredBody {
-                status: "pending",
-                error: "payment_required",
-                error_description: "Payment required (stub — settlement not implemented)",
-            }),
+            Json(PaymentRequiredBody::pending()),
         )
             .into_response()
     }

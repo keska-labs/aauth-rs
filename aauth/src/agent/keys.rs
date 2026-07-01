@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::error::Result;
 use crate::jwt::{AgentClaims, CnfClaim};
 use crate::keys::TestKeys;
-use crate::types::{JwtTyp, KeyMaterial, SignatureKey, SignatureKeyJwt};
+use crate::protocol::{JwtTyp, KeyMaterial, SignatureKey, SignatureKeyJwt};
 
 #[async_trait]
 pub trait KeyMaterialProvider: Send + Sync {

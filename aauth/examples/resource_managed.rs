@@ -4,7 +4,7 @@ mod support;
 
 use std::sync::Arc;
 
-use aauth::types::AgentOkResponse;
+use aauth::protocol::AgentOkResponse;
 use aauth::{OpaqueAccessStore, PendingStore};
 
 use support::{ServerConfig, build_client, spawn_test_server};

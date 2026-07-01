@@ -16,8 +16,8 @@ use crate::person_server::keys::AuthJwtMinter;
 use crate::person_server::orchestrate::{PersonOrchestrateConfig, mint_person_auth};
 use crate::person_server::outcome::PersonTokenFlowOutcome;
 use crate::policy::{PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError};
+use crate::protocol::{AAuthErrorCode, AAuthProtocolError};
 use crate::server_axum::poll_outcome_from_snapshot;
-use crate::types::{AAuthErrorCode, AAuthProtocolError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersonTokenServiceError {

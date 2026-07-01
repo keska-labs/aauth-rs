@@ -2,7 +2,7 @@
 //!
 //! # Features
 //!
-//! Protocol-wide modules (`error`, `headers`, `jwt`, `signature`, `types`, …) are always available.
+//! Protocol-wide modules (`error`, `protocol`, `jwt`, `signature`, …) are always available.
 //! Enable role-specific features to compile only what you need:
 //!
 //! - `agent` / `agent-reqwest` — agent runtime and reqwest middleware
@@ -20,13 +20,12 @@
 //! - **Access server** — [`access_server`]
 
 pub mod error;
-pub mod headers;
 pub mod interaction_code;
 pub mod jwt;
 pub mod keys;
 pub mod metadata;
+pub mod protocol;
 pub mod signature;
-pub mod types;
 
 #[cfg(feature = "agent")]
 pub mod agent;
@@ -64,10 +63,6 @@ pub use agent::resolve::{
     resource_token_audience_unverified,
 };
 pub use error::{AAuthError, Result, TokenError};
-pub use headers::{
-    build_aauth_requirement, build_capabilities_header, build_mission_header,
-    parse_aauth_requirement, parse_capabilities_header, parse_mission_header,
-};
 pub use interaction_code::{canonicalize_code, generate_code};
 pub use jwt::{
     ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
@@ -79,16 +74,31 @@ pub use keys::{
     static_person_metadata_fetcher,
 };
 pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
+pub use protocol::{
+    AAuthChallenge, AAuthErrorCode, AAuthProtocolError, AccessServerMetadata,
+    AccessTokenExchangeRequest, AgentOkResponse, AgentProviderMetadata, AuditRequest,
+    AuthOkResponse, AuthorizationGrantedResponse, AuthorizationRequest, Capability,
+    ClaimsChallenge, ClaimsSubmission, ClarificationChallenge, ClarificationResponse,
+    InteractionQuestionResponse, InteractionRequest, InteractionType, JwksDocument, JwtTyp,
+    KeyMaterial, Mission, MissionBlob, MissionProposalRequest, MissionStatusError, MissionTool,
+    ParseStrError, PendingBody, PendingPostBody, PendingStatus, PendingStatusBody,
+    PermissionDecision, PermissionRequest, PermissionResponse, PersonServerMetadata,
+    RequirementLevel, ResourceAccessModeWire, ResourceServerMetadata, ResourceTokenResponse,
+    RevocationRequest, SignatureKey, SignatureKeyHwk, SignatureKeyJktJwt, SignatureKeyJwt,
+    TokenExchangeRequest, TokenResponseBody, UpdatedTokenRequest, build_aauth_requirement,
+    build_capabilities_header, build_mission_header, parse_aauth_requirement,
+    parse_capabilities_header, parse_mission_header,
+};
 
 #[cfg(feature = "deferred")]
 pub use deferred::{
-    AccessPendingContext, AccessPendingRecord, ClaimsSubmission, DEFAULT_PENDING_TTL_SECS,
-    DeferCreated, DeferRequirement, DeferWaiting, FederationPendingState,
-    InMemoryAccessPendingStore, InMemoryPendingStore, InMemoryPersonPendingStore,
-    InMemoryResourcePendingStore, PaymentRequiredDefer, PendingBody, PendingInput, PendingOutcome,
-    PendingPostBody, PendingRecord, PendingSnapshot, PendingStorable, PendingStore,
-    PersonPendingContext, PersonPendingRecord, ResourcePendingContext, ResourcePendingRecord,
-    generate_pending_id, parse_pending_post_body, pending_location,
+    AccessPendingContext, AccessPendingRecord, DEFAULT_PENDING_TTL_SECS, DeferCreated,
+    DeferRequirement, DeferWaiting, FederationPendingState, InMemoryAccessPendingStore,
+    InMemoryPendingStore, InMemoryPersonPendingStore, InMemoryResourcePendingStore,
+    PaymentRequiredDefer, PendingInput, PendingOutcome, PendingRecord, PendingSnapshot,
+    PendingStorable, PendingStore, PersonPendingContext, PersonPendingRecord,
+    ResourcePendingContext, ResourcePendingRecord, generate_pending_id, parse_pending_post_body,
+    pending_location,
 };
 #[cfg(feature = "deferred")]
 pub use deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
@@ -142,8 +152,6 @@ pub use access_server::{AccessAuthJwtMinter, TestAccessAuthJwtMinter, mint_acces
 pub use access_server::{
     AccessTokenService, AccessTokenServiceError, PolicyAccessTokenService, build_access_context,
 };
-#[cfg(feature = "access-server")]
-pub use types::AccessServerMetadata;
 
 #[cfg(feature = "resource")]
 pub use resource::{
@@ -175,5 +183,3 @@ pub use server_axum::{
 pub use server_axum::{
     ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, resource_pending_poll_handler,
 };
-
-pub use types::*;

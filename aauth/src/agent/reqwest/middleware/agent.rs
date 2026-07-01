@@ -14,11 +14,11 @@ use crate::agent::reqwest::signed::SigningOptions;
 use crate::agent::reqwest::token_exchange::{TokenExchangeOptions, exchange_token_with};
 use crate::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use crate::error::{AAuthError, Result};
-use crate::headers::parse_aauth_requirement;
 use crate::jwt::{VerifiedToken, jwk_thumbprint};
+use crate::protocol::AAuthChallenge;
+use crate::protocol::parse_aauth_requirement;
 #[cfg(feature = "agent-reqwest-verify")]
 use crate::resource_verify::{verify_client_auth_token, verify_resource_challenge};
-use crate::types::AAuthChallenge;
 
 pub struct AgentMiddleware {
     options: AgentOptions,

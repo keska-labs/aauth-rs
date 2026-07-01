@@ -6,10 +6,10 @@ use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use reqwest::Request;
 
 use crate::error::{AAuthError, Result};
-use crate::headers::{build_capabilities_header, build_mission_header};
 use crate::jwt::OkpSigningJwk;
+use crate::protocol::{Capability, KeyMaterial, Mission, SignatureKey};
+use crate::protocol::{build_capabilities_header, build_mission_header};
 use crate::signature::build_signature_base_with_extras;
-use crate::types::{Capability, KeyMaterial, Mission, SignatureKey};
 
 #[derive(Debug, Clone, Default)]
 pub struct SigningOptions {
@@ -128,7 +128,7 @@ pub fn sign_request_with_auth_token(
     auth_token: &str,
 ) -> Result<()> {
     let mut auth_material = material.clone();
-    auth_material.signature_key = SignatureKey::Jwt(crate::types::SignatureKeyJwt {
+    auth_material.signature_key = SignatureKey::Jwt(crate::protocol::SignatureKeyJwt {
         jwt: auth_token.to_string(),
     });
     sign_request(request, &auth_material)

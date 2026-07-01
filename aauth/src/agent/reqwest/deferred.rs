@@ -8,8 +8,8 @@ use tokio::time::sleep;
 use crate::agent::injector::{ClarificationCallback, InteractionCallback};
 use crate::agent::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
-use crate::headers::parse_aauth_requirement;
-use crate::types::{
+use crate::protocol::parse_aauth_requirement;
+use crate::protocol::{
     AAuthChallenge, AAuthProtocolError, ClarificationChallenge, ClarificationResponse,
 };
 

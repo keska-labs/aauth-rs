@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use jsonwebtoken::{Algorithm, Header};
 
 use crate::jwt::ResourceClaims;
+use crate::protocol::JwtTyp;
 use crate::resource::keys::ResourceTokenSigner;
-use crate::types::JwtTyp;
 
 #[derive(Debug, Clone)]
 pub struct ResourceTokenOptions {
@@ -13,7 +13,7 @@ pub struct ResourceTokenOptions {
     pub agent: String,
     pub agent_jkt: String,
     pub scope: Option<String>,
-    pub mission: Option<crate::types::Mission>,
+    pub mission: Option<crate::protocol::Mission>,
     pub lifetime: Option<u64>,
 }
 

@@ -5,8 +5,10 @@ use tokio::time::sleep;
 
 use crate::error::{AAuthError, Result};
 use crate::jwt::OkpSigningJwk;
+use crate::protocol::{
+    AAuthErrorCode, AAuthProtocolError, ClarificationResponse, TokenResponseBody,
+};
 use crate::signature::apply_outbound_signature;
-use crate::types::{AAuthErrorCode, AAuthProtocolError, ClarificationResponse, TokenResponseBody};
 
 use super::parse::{parse_auth_token_response, parse_deferred_response};
 use super::types::{DeferRequirement, PendingInput};
@@ -69,6 +71,10 @@ pub async fn post_pending_input(
         PendingInput::InteractionCompleted | PendingInput::Cancelled => {
             ("{}".into(), "application/json")
         }
+        PendingInput::UpdatedToken(updated) => (
+            serde_json::to_string(updated).map_err(|e| AAuthError::Message(e.to_string()))?,
+            "application/json",
+        ),
     };
 
     let mut request = client.post(url).header("content-type", content_type);

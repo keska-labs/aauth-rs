@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aauth::agent::reqwest::{ClarificationCallback, InteractionCallback};
-use aauth::types::AuthOkResponse;
+use aauth::protocol::AuthOkResponse;
 use aauth::{PendingStore, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt};
 use rstest::rstest;
 
@@ -102,7 +102,7 @@ async fn deferred_interaction_over_http() {
                 pending
                     .complete(
                         &id,
-                        aauth::PendingOutcome::AuthToken(aauth::types::TokenResponseBody {
+                        aauth::PendingOutcome::AuthToken(aauth::protocol::TokenResponseBody {
                             auth_token: auth_jwt,
                             expires_in: 3600,
                         }),

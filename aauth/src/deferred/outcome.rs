@@ -1,4 +1,4 @@
-use crate::types::{AAuthProtocolError, TokenResponseBody};
+use crate::protocol::{AAuthProtocolError, TokenResponseBody};
 
 use super::{DeferCreated, DeferWaiting, PendingOutcome};
 

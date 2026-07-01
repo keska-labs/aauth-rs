@@ -8,7 +8,7 @@ use reqwest::Client;
 
 use crate::error::Result;
 use crate::metadata::MetadataFetcher;
-use crate::types::MetadataDocument;
+use crate::protocol::AgentProviderMetadata;
 
 const METADATA_CACHE_TTL: Duration = Duration::from_secs(600);
 const MIN_FETCH_INTERVAL: Duration = Duration::from_secs(60);
@@ -76,22 +76,16 @@ impl CachedMetadataFetcher {
         self.cache.clear();
     }
 
-    async fn fetch_metadata(&self, metadata_url: &str) -> Result<MetadataDocument> {
+    async fn fetch_metadata(&self, metadata_url: &str) -> Result<AgentProviderMetadata> {
         if let Some(entry) = self.cache.metadata.lock().unwrap().get(metadata_url) {
             if entry.fetched_at.elapsed() < METADATA_CACHE_TTL {
-                return Ok(MetadataDocument {
-                    jwks_uri: entry.jwks_uri.clone(),
-                    extra: HashMap::new(),
-                });
+                return Ok(AgentProviderMetadata::from_jwks_uri(entry.jwks_uri.clone()));
             }
         }
 
         if !self.cache.can_fetch(metadata_url) {
             if let Some(entry) = self.cache.metadata.lock().unwrap().get(metadata_url) {
-                return Ok(MetadataDocument {
-                    jwks_uri: entry.jwks_uri.clone(),
-                    extra: HashMap::new(),
-                });
+                return Ok(AgentProviderMetadata::from_jwks_uri(entry.jwks_uri.clone()));
             }
         }
 
@@ -114,7 +108,7 @@ impl CachedMetadataFetcher {
             });
         }
 
-        let metadata: MetadataDocument = response
+        let metadata: AgentProviderMetadata = response
             .json()
             .await
             .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;

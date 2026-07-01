@@ -5,8 +5,8 @@ use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::person_server::keys::AuthJwtMinter;
 use crate::policy::{AuthGrant, PersonTokenContext, PersonTokenDecision};
+use crate::protocol::TokenExchangeRequest;
 use crate::resource_verify::{VerifyResourceTokenOptions, verify_resource_token};
-use crate::types::TokenExchangeRequest;
 
 use super::federation::FederationConfig;
 
@@ -64,7 +64,7 @@ pub fn mint_person_auth<M: AuthJwtMinter>(
     config: &PersonOrchestrateConfig,
     grant: &AuthGrant,
     agent_sub: &str,
-) -> crate::types::TokenResponseBody {
+) -> crate::protocol::TokenResponseBody {
     let auth_jwt = minter.mint_auth_jwt(
         &config.person_server_url,
         &config.resource_url,
@@ -72,7 +72,7 @@ pub fn mint_person_auth<M: AuthJwtMinter>(
         Some(&grant.sub),
         grant.scope.as_deref(),
     );
-    crate::types::TokenResponseBody {
+    crate::protocol::TokenResponseBody {
         auth_token: auth_jwt,
         expires_in: 3600,
     }

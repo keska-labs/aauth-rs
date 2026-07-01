@@ -7,7 +7,7 @@ use crate::jwt::{
     AuthClaims, ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint,
 };
 use crate::metadata::MetadataFetcher;
-use crate::types::JwtTyp;
+use crate::protocol::JwtTyp;
 
 const CLOCK_SKEW: i64 = 60;
 

@@ -8,10 +8,11 @@ use axum::http::{Request, Response, StatusCode};
 use axum::response::IntoResponse;
 use tower::{Layer, Service};
 
-use crate::headers::build_aauth_requirement;
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::policy::ResourceAccessContext;
+use crate::protocol::AAuthChallenge;
+use crate::protocol::build_aauth_requirement;
 use crate::resource::keys::ResourceTokenSigner;
 use crate::resource::mode::ResourceAccessMode;
 use crate::resource::service::ResourceAccessService;
@@ -21,7 +22,6 @@ use crate::resource::{
 };
 use crate::resource_verify::resolve_resource_token_audience;
 use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
-use crate::types::AAuthChallenge;
 
 #[derive(Clone)]
 pub struct ResourceAuthLayer<RAS>

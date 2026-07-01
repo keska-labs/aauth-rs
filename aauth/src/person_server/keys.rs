@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::jwt::{AgentClaims, AuthClaims, CnfClaim};
 use crate::keys::TestKeys;
-use crate::types::JwtTyp;
+use crate::protocol::JwtTyp;
 
 pub trait AuthJwtMinter: Send + Sync {
     fn mint_auth_jwt(

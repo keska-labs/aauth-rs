@@ -1,8 +1,8 @@
 use http::HeaderMap;
 
 use crate::error::{AAuthError, Result};
-use crate::headers::parse_aauth_requirement;
-use crate::types::{ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody};
+use crate::protocol::parse_aauth_requirement;
+use crate::protocol::{ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody};
 
 use super::types::DeferRequirement;
 
@@ -62,11 +62,11 @@ pub fn parse_auth_token_response(status: u16, body: &[u8]) -> Result<TokenRespon
 }
 
 fn defer_requirement_from(
-    challenge: &crate::types::AAuthChallenge,
+    challenge: &crate::protocol::AAuthChallenge,
     body: &[u8],
 ) -> Result<DeferRequirement> {
     match challenge {
-        crate::types::AAuthChallenge::Clarification => {
+        crate::protocol::AAuthChallenge::Clarification => {
             let c: ClarificationChallenge = if body.is_empty() {
                 ClarificationChallenge {
                     status: PendingStatus::Pending,
@@ -82,7 +82,7 @@ fn defer_requirement_from(
                 timeout: c.timeout,
             })
         }
-        crate::types::AAuthChallenge::Claims => {
+        crate::protocol::AAuthChallenge::Claims => {
             let c: ClaimsChallenge = if body.is_empty() {
                 ClaimsChallenge {
                     status: PendingStatus::Pending,
@@ -95,15 +95,15 @@ fn defer_requirement_from(
                 required_claims: c.required_claims,
             })
         }
-        crate::types::AAuthChallenge::Interaction { url, code } => {
+        crate::protocol::AAuthChallenge::Interaction { url, code } => {
             Ok(DeferRequirement::Interaction {
                 url: url.clone(),
                 code: code.clone(),
             })
         }
-        crate::types::AAuthChallenge::Approval => Ok(DeferRequirement::Approval),
-        crate::types::AAuthChallenge::AgentToken
-        | crate::types::AAuthChallenge::AuthToken { .. } => Err(AAuthError::Message(
+        crate::protocol::AAuthChallenge::Approval => Ok(DeferRequirement::Approval),
+        crate::protocol::AAuthChallenge::AgentToken
+        | crate::protocol::AAuthChallenge::AuthToken { .. } => Err(AAuthError::Message(
             "agent-token/auth-token requirements are not defer requirements".into(),
         )),
     }

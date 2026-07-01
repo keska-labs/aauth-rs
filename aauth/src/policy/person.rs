@@ -1,6 +1,6 @@
 use crate::deferred::PendingInput;
 use crate::jwt::{AgentClaims, ResourceClaims};
-use crate::types::TokenExchangeRequest;
+use crate::protocol::TokenExchangeRequest;
 
 use super::decision::PersonTokenDecision;
 use super::error::PolicyError;

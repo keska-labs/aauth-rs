@@ -6,7 +6,7 @@
 
 mod support;
 
-use aauth::types::AuthOkResponse;
+use aauth::protocol::AuthOkResponse;
 
 use support::{ServerConfig, build_client, spawn_test_server};
 

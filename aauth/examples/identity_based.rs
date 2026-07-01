@@ -6,7 +6,7 @@
 
 mod support;
 
-use aauth::types::AgentOkResponse;
+use aauth::protocol::AgentOkResponse;
 
 use support::{ServerConfig, build_client, spawn_test_server};
 

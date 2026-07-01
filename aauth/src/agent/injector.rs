@@ -5,10 +5,10 @@ use std::time::{Duration, Instant};
 use http::{HeaderMap, StatusCode};
 
 use crate::error::{AAuthError, Result};
-use crate::headers::parse_aauth_requirement;
 #[cfg(feature = "agent-reqwest-verify")]
 use crate::metadata::MetadataFetcher;
-use crate::types::{Capability, Mission, PersonServerMetadata};
+use crate::protocol::parse_aauth_requirement;
+use crate::protocol::{Capability, Mission, PersonServerMetadata};
 
 pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
 
@@ -328,7 +328,8 @@ impl AgentAuth {
             AgentAuthAttempt::AgentSigned => {
                 if let Some(header) = header_value(headers, "aauth-requirement") {
                     let challenge = parse_aauth_requirement(header)?;
-                    if let crate::types::AAuthChallenge::AuthToken { resource_token } = challenge {
+                    if let crate::protocol::AAuthChallenge::AuthToken { resource_token } = challenge
+                    {
                         return Ok(AgentAuthStep::ExchangeToken { resource_token });
                     }
                 }

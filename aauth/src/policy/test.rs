@@ -1,6 +1,6 @@
 use crate::deferred::{DeferRequirement, PendingInput};
 use crate::interaction_code::generate_code;
-use crate::types::{AAuthErrorCode, AAuthProtocolError};
+use crate::protocol::{AAuthErrorCode, AAuthProtocolError};
 
 #[cfg(feature = "access-server")]
 use super::access::{AccessTokenContext, AccessTokenPolicy};
@@ -60,6 +60,7 @@ impl PersonTokenPolicy for AlwaysGrantPersonPolicy {
             PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
                 "claims submission not expected".into(),
             )),
+            PendingInput::UpdatedToken(_) => self.evaluate(ctx).await,
         }
     }
 }
@@ -127,6 +128,7 @@ impl AccessTokenPolicy for AlwaysGrantAccessPolicy {
                 ),
             )),
             PendingInput::ClaimsSubmission(_) => self.evaluate(ctx).await,
+            PendingInput::UpdatedToken(_) => self.evaluate(ctx).await,
         }
     }
 }
@@ -249,6 +251,16 @@ impl PersonTokenPolicy for ClarificationThenGrantPersonPolicy {
             PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
                 "claims submission not expected".into(),
             )),
+            PendingInput::UpdatedToken(_) => {
+                if ctx.audience_is_person_server() {
+                    Ok(PersonTokenDecision::Grant(AuthGrant {
+                        sub: self.sub.clone(),
+                        scope: ctx.resource_claims.scope.clone(),
+                    }))
+                } else {
+                    Ok(PersonTokenDecision::Federate)
+                }
+            }
         }
     }
 }
@@ -328,6 +340,10 @@ impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
             PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
                 "claims submission not expected".into(),
             )),
+            PendingInput::UpdatedToken(_) => Ok(TokenPolicyDecision::Grant(AuthGrant {
+                sub: self.sub.clone(),
+                scope: ctx.resource_claims.scope.clone(),
+            })),
         }
     }
 }
@@ -389,12 +405,12 @@ impl AccessTokenPolicy for DeferClaimsAccessPolicy {
         input: PendingInput,
     ) -> Result<TokenPolicyDecision, PolicyError> {
         match input {
-            PendingInput::ClaimsSubmission(_) | PendingInput::InteractionCompleted => {
-                Ok(TokenPolicyDecision::Grant(AuthGrant {
-                    sub: self.sub.clone(),
-                    scope: ctx.resource_claims.scope.clone(),
-                }))
-            }
+            PendingInput::ClaimsSubmission(_)
+            | PendingInput::InteractionCompleted
+            | PendingInput::UpdatedToken(_) => Ok(TokenPolicyDecision::Grant(AuthGrant {
+                sub: self.sub.clone(),
+                scope: ctx.resource_claims.scope.clone(),
+            })),
             PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
                 AAuthProtocolError::with_description(
                     AAuthErrorCode::AccessDenied,

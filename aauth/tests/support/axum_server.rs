@@ -12,6 +12,7 @@ use aauth::VerifiedToken;
 use aauth::access_server::keys::TestAccessAuthJwtMinter;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::person_server::keys::TestAuthJwtMinter;
+use aauth::protocol::{AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument};
 use aauth::resource::{PolicyResourceAccessService, ResourceAccessConfig};
 use aauth::server_axum::{
     AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
@@ -20,7 +21,6 @@ use aauth::server_axum::{
     access_token_exchange_handler, pending_poll_handler, pending_post_handler, person_jwks_handler,
     person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
 };
-use aauth::types::{AgentOkResponse, AuthOkResponse, JwksDocument, MetadataDocument};
 use aauth::{
     AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
     DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, ResourceAccessMode,
@@ -92,7 +92,7 @@ impl SpawnedServer {
                 .person_pending
                 .complete(
                     &id,
-                    PendingOutcome::AuthToken(aauth::types::TokenResponseBody {
+                    PendingOutcome::AuthToken(aauth::protocol::TokenResponseBody {
                         auth_token: auth_token.to_string(),
                         expires_in: 3600,
                     }),
@@ -392,11 +392,10 @@ async fn api_data_handler(token: VerifiedAAuthToken) -> Json<serde_json::Value> 
     }
 }
 
-async fn agent_metadata_handler(State(state): State<TestServerState>) -> Json<MetadataDocument> {
-    Json(MetadataDocument {
-        jwks_uri: state.agent_jwks_uri,
-        extra: Default::default(),
-    })
+async fn agent_metadata_handler(
+    State(state): State<TestServerState>,
+) -> Json<AgentProviderMetadata> {
+    Json(AgentProviderMetadata::from_jwks_uri(state.agent_jwks_uri))
 }
 
 async fn agent_jwks_handler(State(state): State<TestServerState>) -> Json<JwksDocument> {

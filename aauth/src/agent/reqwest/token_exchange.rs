@@ -8,8 +8,8 @@ use crate::agent::injector::InteractionCallback;
 use crate::agent::reqwest::deferred::{AgentDeferredOptions, poll_deferred_with};
 use crate::agent::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
-use crate::headers::parse_aauth_requirement;
-use crate::types::{
+use crate::protocol::parse_aauth_requirement;
+use crate::protocol::{
     AAuthChallenge, AAuthProtocolError, PersonServerMetadata, TokenExchangeRequest,
     TokenResponseBody,
 };
@@ -29,11 +29,10 @@ pub struct TokenExchangeOptions {
     pub(crate) on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
     pub(crate) resource_token: String,
     pub(crate) justification: Option<String>,
-    pub(crate) localhost_callback: Option<String>,
     pub(crate) login_hint: Option<String>,
     pub(crate) tenant: Option<String>,
     pub(crate) domain_hint: Option<String>,
-    pub(crate) capabilities: Option<Vec<crate::types::Capability>>,
+    pub(crate) capabilities: Option<Vec<crate::protocol::Capability>>,
     pub(crate) prompt: Option<String>,
     pub(crate) on_interaction: Option<InteractionCallback>,
     pub(crate) on_clarification: Option<crate::agent::injector::ClarificationCallback>,
@@ -47,11 +46,10 @@ pub struct TokenExchangeOptionsBuilder {
     person_server_metadata: Option<PersonServerMetadata>,
     on_metadata: Option<Arc<dyn Fn(PersonServerMetadata) + Send + Sync>>,
     justification: Option<String>,
-    localhost_callback: Option<String>,
     login_hint: Option<String>,
     tenant: Option<String>,
     domain_hint: Option<String>,
-    capabilities: Option<Vec<crate::types::Capability>>,
+    capabilities: Option<Vec<crate::protocol::Capability>>,
     prompt: Option<String>,
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<crate::agent::injector::ClarificationCallback>,
@@ -75,7 +73,6 @@ impl TokenExchangeOptionsBuilder {
             person_server_metadata: None,
             on_metadata: None,
             justification: None,
-            localhost_callback: None,
             login_hint: None,
             tenant: None,
             domain_hint: None,
@@ -105,11 +102,6 @@ impl TokenExchangeOptionsBuilder {
         self
     }
 
-    pub fn localhost_callback(mut self, url: impl Into<String>) -> Self {
-        self.localhost_callback = Some(url.into());
-        self
-    }
-
     pub fn login_hint(mut self, login_hint: impl Into<String>) -> Self {
         self.login_hint = Some(login_hint.into());
         self
@@ -125,7 +117,7 @@ impl TokenExchangeOptionsBuilder {
         self
     }
 
-    pub fn capabilities(mut self, capabilities: Vec<crate::types::Capability>) -> Self {
+    pub fn capabilities(mut self, capabilities: Vec<crate::protocol::Capability>) -> Self {
         self.capabilities = Some(capabilities);
         self
     }
@@ -160,7 +152,6 @@ impl TokenExchangeOptionsBuilder {
             person_server_metadata: self.person_server_metadata,
             on_metadata: self.on_metadata,
             justification: self.justification,
-            localhost_callback: self.localhost_callback,
             login_hint: self.login_hint,
             tenant: self.tenant,
             domain_hint: self.domain_hint,
@@ -240,7 +231,6 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
         upstream_token: None,
         subagent_token: None,
         justification: options.justification,
-        localhost_callback: options.localhost_callback,
         login_hint: options.login_hint,
         tenant: options.tenant,
         domain_hint: options.domain_hint,

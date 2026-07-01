@@ -10,9 +10,9 @@ use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 use crate::person_server::keys::mint_person_server_signature_jwt;
 use crate::person_server::orchestrate::PersonOrchestrateConfig;
+use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
 use crate::resource_verify::{VerifyTokenOptions, verify_token};
 use crate::signature::apply_outbound_signature;
-use crate::types::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
 
 #[derive(Clone)]
 pub struct FederationConfig {

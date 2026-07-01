@@ -5,7 +5,7 @@ mod support;
 use std::sync::Arc;
 use std::time::Duration;
 
-use aauth::types::{AgentOkResponse, AuthOkResponse};
+use aauth::protocol::{AgentOkResponse, AuthOkResponse};
 use aauth::{OpaqueAccessStore, PendingStore};
 use rstest::rstest;
 
