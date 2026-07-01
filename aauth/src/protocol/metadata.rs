@@ -8,45 +8,31 @@ use serde::{Deserialize, Serialize};
 /// Direction: Any -> PS GET `/.well-known/aauth-person.json`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#ps-metadata`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PersonServerMetadata {
     /// PS HTTPS URL. MUST match the fetch URL.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
     /// URL where agents send token requests.
     pub token_endpoint: String,
     /// URL to the PS JSON Web Key Set.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwks_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_dark_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub documentation_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tos_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mission_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audit_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interaction_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mission_control_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revocation_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scopes_supported: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claims_supported: Option<Vec<String>>,
 }
 
@@ -64,28 +50,21 @@ impl PersonServerMetadata {
 /// Direction: PS/Agent/Resource -> AS GET `/.well-known/aauth-access.json`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#access-server-metadata`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AccessServerMetadata {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
     pub token_endpoint: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwks_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_dark_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub documentation_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tos_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revocation_endpoint: Option<String>,
 }
 
@@ -114,41 +93,27 @@ pub enum ResourceAccessModeWire {
 /// Direction: Agent/PS/AS -> Resource GET `/.well-known/aauth-resource.json`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#resource-metadata`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceServerMetadata {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwks_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_mode: Option<ResourceAccessModeWire>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_dark_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub documentation_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tos_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope_descriptions: Option<std::collections::HashMap<String, String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature_window: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub additional_signature_components: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revocation_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r3_vocabularies: Option<Vec<String>>,
 }
 
@@ -157,32 +122,23 @@ pub struct ResourceServerMetadata {
 /// Direction: Any -> AP GET `/.well-known/aauth-agent.json`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#agent-provider-metadata`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentProviderMetadata {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
     pub jwks_uri: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo_dark_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub documentation_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callback_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login_endpoint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub localhost_callback_allowed: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tos_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_uri: Option<String>,
 }
 

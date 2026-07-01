@@ -10,14 +10,14 @@ use super::common::Mission;
 /// Direction: Agent -> PS POST `{permission_endpoint}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#permission-endpoint`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PermissionRequest {
     pub action: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub mission: Option<Mission>,
 }
 
@@ -26,10 +26,12 @@ pub struct PermissionRequest {
 /// Direction: PS -> Agent 200 POST `{permission_endpoint}` or 200 GET `{Location}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#permission-response`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PermissionResponse {
     pub permission: PermissionDecision,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 

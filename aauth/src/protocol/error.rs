@@ -141,12 +141,13 @@ impl FromStr for AAuthErrorCode {
 /// Direction: PS/Resource/AS -> Agent|PS 4xx/5xx JSON error bodies.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#error-response-format`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AAuthProtocolError {
     pub error: AAuthErrorCode,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_uri: Option<String>,
 }
 

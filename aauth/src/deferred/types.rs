@@ -168,6 +168,9 @@ pub struct FederationPendingState {
     pub as_pending_url: String,
 }
 
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonPendingContext {
     pub person_server_url: String,
@@ -176,7 +179,6 @@ pub struct PersonPendingContext {
     pub resource_claims: ResourceClaims,
     pub exchange_request: TokenExchangeRequest,
     pub agent_token: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub federation: Option<FederationPendingState>,
 }
 
@@ -191,11 +193,13 @@ pub struct AccessPendingContext {
     pub agent_token: String,
 }
 
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourcePendingContext {
     pub resource_url: String,
     pub agent_claims: AgentClaims,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
 }
 

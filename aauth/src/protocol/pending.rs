@@ -23,14 +23,15 @@ pub struct PendingStatusBody {
 /// Direction: PS -> Agent 202 GET/POST `{Location}`; Resource -> Agent 202 `{Location}`; AS -> PS 202 `{Location}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#clarification-required-requirement-clarification`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClarificationChallenge {
     #[serde(default = "default_pending_status")]
     pub status: PendingStatus,
     pub clarification: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<Vec<String>>,
 }
 
@@ -73,12 +74,13 @@ pub struct ClarificationResponse {
 /// Direction: PS -> AS POST `{Location}`; Agent -> PS POST `{Location}` (pass-through).
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#claims-required-requirement-claims`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClaimsSubmission {
     pub sub: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant: Option<String>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, serde_json::Value>,
@@ -89,10 +91,12 @@ pub struct ClaimsSubmission {
 /// Direction: Agent -> PS POST `{Location}`; Agent -> Resource POST `{Location}`; PS -> AS POST `{Location}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#updated-request`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdatedTokenRequest {
     pub resource_token: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub justification: Option<String>,
 }
 

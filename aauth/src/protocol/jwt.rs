@@ -63,6 +63,9 @@ impl FromStr for JwtTyp {
 /// Direction: Any -> Any GET `{jwks_uri}`; embedded in JWT `cnf.jwk` claims.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#jwks-discovery-and-caching-jwks-discovery`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OkpJwk {
     /// Key type. OKP keys use `"OKP"`.
@@ -72,7 +75,6 @@ pub struct OkpJwk {
     /// Base64url-encoded public key coordinate.
     pub x: String,
     /// Key identifier, matched against the JWT header `kid` during verification.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub kid: Option<String>,
 }
 
@@ -81,6 +83,9 @@ pub struct OkpJwk {
 /// Direction: local signing material; public half published via GET `{jwks_uri}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#keying-material`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OkpSigningJwk {
     /// Key type. OKP keys use `"OKP"`.
@@ -92,7 +97,6 @@ pub struct OkpSigningJwk {
     /// Base64url-encoded private key coordinate.
     pub d: String,
     /// Key identifier published in JWKS and referenced by JWT header `kid`.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub kid: Option<String>,
 }
 
@@ -123,12 +127,14 @@ pub struct CnfClaim {
 /// Direction: embedded in auth JWT payload (PS -> Agent or AS -> PS -> Agent).
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#delegation-chain`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActClaim {
     /// `aauth:` URI of the immediate upstream agent.
     pub agent: String,
     /// Nested upstream delegation, when present.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub act: Option<Box<ActClaim>>,
 }
 
@@ -138,6 +144,9 @@ pub struct ActClaim {
 /// via `Signature-Key: sig=jwt`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#agent-token-agent-tokens`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentClaims {
     /// Agent provider URL.
@@ -155,10 +164,8 @@ pub struct AgentClaims {
     /// Expiration timestamp.
     pub exp: i64,
     /// HTTPS URL of the agent's person server. Distinct from `iss`.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ps: Option<String>,
     /// Parent agent identifier when this token belongs to a sub-agent.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_agent: Option<String>,
 }
 
@@ -174,6 +181,9 @@ impl AgentClaims {
 /// Agent -> Resource any signed request via `Signature-Key`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#auth-token-auth-tokens`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthClaims {
     /// URL of the server that issued the auth token (AS or PS).
@@ -187,7 +197,6 @@ pub struct AuthClaims {
     /// Agent identifier authorized to use this token.
     pub agent: String,
     /// Upstream delegation chain. Absent when the agent obtained the token directly.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub act: Option<ActClaim>,
     /// Confirmation claim with the agent's public key.
     pub cnf: CnfClaim,
@@ -196,16 +205,12 @@ pub struct AuthClaims {
     /// Expiration timestamp.
     pub exp: i64,
     /// Directed user identifier.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sub: Option<String>,
     /// Authorized scopes as a space-separated string.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
     /// Tenant identifier per OpenID Connect Enterprise Extensions.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant: Option<String>,
     /// Mission reference when the auth token was issued in mission context.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub mission: Option<Mission>,
 }
 
@@ -229,6 +234,9 @@ pub struct ResourceInteractionClaim {
 /// `resource_token`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#resource-token-structure`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourceClaims {
     /// Resource URL.
@@ -248,13 +256,10 @@ pub struct ResourceClaims {
     /// Expiration timestamp.
     pub exp: u64,
     /// Requested scopes as a space-separated string.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
     /// Mission reference when the resource is mission-aware.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub mission: Option<Mission>,
     /// Present when the resource requires its own user-facing flow before authorization.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub interaction: Option<ResourceInteractionClaim>,
 }
 

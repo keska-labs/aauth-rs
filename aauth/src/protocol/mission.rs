@@ -18,10 +18,12 @@ pub struct MissionTool {
 /// Direction: Agent -> PS POST `{mission_endpoint}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#mission-creation`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MissionProposalRequest {
     pub description: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<MissionTool>>,
 }
 
@@ -30,14 +32,15 @@ pub struct MissionProposalRequest {
 /// Direction: PS -> Agent 200 POST `{mission_endpoint}`; PS -> Agent 200 GET `{Location}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#mission-approval`
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MissionBlob {
     pub approver: String,
     pub agent: String,
     pub approved_at: String,
     pub description: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_tools: Option<Vec<MissionTool>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Vec<Capability>>,
 }

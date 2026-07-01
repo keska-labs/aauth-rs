@@ -48,6 +48,9 @@ pub struct AgentOkResponse {
 /// Auth-token access success response (optional illustrative body).
 ///
 /// Direction: Resource -> Agent 200 any protected API path.
+#[serde_with::apply(
+    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthOkResponse {
     pub status: String,
