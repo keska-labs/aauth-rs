@@ -9,8 +9,7 @@ use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
 
 use super::axum_server::SpawnedServer;
 use super::timeout::TEST_POLL_MAX_SECS;
-
-pub const AGENT_ID: &str = "aauth:test@example.com";
+pub use super::AGENT_ID;
 
 pub fn build_client(
     spawned: &SpawnedServer,

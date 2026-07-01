@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use aauth::InMemoryPersonPendingStore;
@@ -25,7 +24,7 @@ use http_body_util::BodyExt;
 use reqwest::{Request, Response, ResponseBuilderExt, Url};
 use reqwest_middleware::{Error, Middleware, Next};
 
-use super::client::AGENT_ID;
+use super::AGENT_ID;
 
 use aauth::{TestKeys, mint_auth_jwt};
 
