@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use aauth::InMemoryAccessPendingStore;
@@ -71,7 +73,6 @@ impl Default for ServerConfig {
     }
 }
 
-#[allow(dead_code)]
 pub struct SpawnedServer {
     pub keys: TestKeys,
     pub agent_url: String,

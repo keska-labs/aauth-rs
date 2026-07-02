@@ -19,7 +19,8 @@ use aauth::{
     static_agent_metadata_fetcher, static_person_metadata_fetcher,
 };
 
-use support::{MockServer, MockServerConfig, AGENT_ID};
+use support::mock_server::{MockServer, MockServerConfig};
+use support::AGENT_ID;
 
 const AGENT_URL: &str = "https://agent.example";
 const PERSON_SERVER_URL: &str = "https://person.example";

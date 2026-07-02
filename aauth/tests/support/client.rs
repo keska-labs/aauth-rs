@@ -7,9 +7,9 @@ use aauth::agent::reqwest::{
 };
 use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
 
+pub use super::AGENT_ID;
 use super::axum_server::SpawnedServer;
 use super::timeout::TEST_POLL_MAX_SECS;
-pub use super::AGENT_ID;
 
 pub fn build_client(
     spawned: &SpawnedServer,

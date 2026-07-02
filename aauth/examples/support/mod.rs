@@ -12,6 +12,6 @@ mod client;
 #[path = "../../tests/support/timeout.rs"]
 mod timeout;
 
-pub use constants::AGENT_ID;
 pub use axum_server::{ServerConfig, spawn_test_server};
 pub use client::build_client;
+pub use constants::AGENT_ID;
