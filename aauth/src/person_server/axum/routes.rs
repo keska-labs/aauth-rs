@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use serde::Deserialize;
 
 use crate::deferred::AuthTokenPollOutcome;
 use crate::deferred::{PendingStore, PersonPendingRecord};
@@ -178,3 +179,44 @@ where
 
 pub use pending_post_handler as pending_clarification_post_handler;
 pub use token_exchange_handler as token_exchange_deferred_handler;
+
+#[derive(Debug, Deserialize)]
+pub struct InteractionStartQuery {
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InteractionCallbackQuery {
+    pub id: String,
+    pub error: Option<String>,
+}
+
+pub async fn interaction_start_handler<S>(
+    State(state): State<PersonServerState<S>>,
+    Query(query): Query<InteractionStartQuery>,
+) -> Response
+where
+    S: PersonTokenService,
+{
+    match state.service.begin_interaction(&query.code).await {
+        Ok(outcome) => outcome.into_response(),
+        Err(e) => InternalServiceError::from(e).into_response(),
+    }
+}
+
+pub async fn interaction_callback_handler<S>(
+    State(state): State<PersonServerState<S>>,
+    Query(query): Query<InteractionCallbackQuery>,
+) -> Response
+where
+    S: PersonTokenService,
+{
+    match state
+        .service
+        .resolve_interaction_callback(&query.id, query.error.as_deref())
+        .await
+    {
+        Ok(outcome) => outcome.into_response(),
+        Err(e) => InternalServiceError::from(e).into_response(),
+    }
+}

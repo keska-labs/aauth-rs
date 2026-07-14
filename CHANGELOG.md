@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AuthorizationRequest`, `ResourceTokenResponse`, `AuthorizationGrantedResponse`, and resource authorization response bodies in `protocol::authorization`.
 - `AgentProviderMetadata` (replaces loose `MetadataDocument`) with typed agent-provider metadata fields from the spec.
 - `PaymentRequiredBody` in `protocol::pending` for `402` deferred poll responses.
+- Resource-initiated interaction: `ResourceInteractionProvider` and `interaction` on `ResourceTokenOptions`; PS `begin_interaction` / `resolve_interaction_callback` with `GET /interact` and `GET /interact/callback` axum handlers.
+- Public `sign_request`, `sign_request_with_auth_token`, and related helpers on `aauth::agent::reqwest` for custom transport adapters.
 
 ### Changed
 

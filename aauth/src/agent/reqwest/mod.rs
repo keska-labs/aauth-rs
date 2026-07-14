@@ -2,7 +2,7 @@ mod deferred;
 mod metadata;
 mod middleware;
 pub(crate) mod send;
-pub(crate) mod signed;
+pub mod signed;
 mod token_exchange;
 
 pub use super::injector::{
@@ -14,6 +14,10 @@ pub use deferred::{
 };
 pub use metadata::CachedMetadataFetcher;
 pub use middleware::{AgentMiddleware, ClientBuilder, ClientWithMiddleware};
+pub use signed::{
+    SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,
+    sign_request_with_auth_token,
+};
 pub use token_exchange::{
     TokenExchangeError, TokenExchangeOptions, TokenExchangeOptionsBuilder, TokenExchangeResult,
     exchange_token,

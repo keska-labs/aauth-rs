@@ -14,6 +14,35 @@ use rstest::rstest;
 use support::axum_server::{ServerConfig, spawn_test_server};
 use support::client::{AGENT_ID, build_client};
 
+async fn signed_request(
+    spawned: &support::axum_server::SpawnedServer,
+    method: reqwest::Method,
+    url: &str,
+    body: Option<String>,
+) -> reqwest::Response {
+    use aauth::agent::reqwest::signed::sign_request;
+    use aauth::{create_key_provider, mint_agent_jwt};
+
+    let agent_jwt = mint_agent_jwt(
+        &spawned.keys,
+        &spawned.agent_url,
+        AGENT_ID,
+        Some(&spawned.person_server_url),
+    );
+    let provider = create_key_provider(&spawned.keys, agent_jwt);
+    let material = provider.key_material().await.expect("key material");
+    let client = reqwest::Client::new();
+    let mut builder = client.request(method, url);
+    if let Some(body) = body {
+        builder = builder
+            .header("content-type", "application/json")
+            .body(body);
+    }
+    let mut req = builder.build().expect("request");
+    sign_request(&mut req, &material).expect("sign");
+    client.execute(req).await.expect("send")
+}
+
 #[rstest]
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
@@ -341,4 +370,210 @@ async fn invalid_signature_rejected_over_http() {
         .expect("request");
 
     assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+}
+
+#[rstest]
+#[timeout(Duration::from_secs(2))]
+#[tokio::test]
+async fn resource_initiated_interaction_over_http() {
+    let spawned = spawn_test_server(ServerConfig {
+        require_auth_token: true,
+        with_auth_routes: true,
+        resource_initiated_interaction: true,
+        ..Default::default()
+    })
+    .await;
+
+    let ps_interaction_url = format!("{}/interact", spawned.person_server_url);
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("client");
+
+    // Signed requests without agent middleware auto-polling.
+    let challenge = signed_request(
+        &spawned,
+        reqwest::Method::GET,
+        &format!("{}/api/data", spawned.resource_url),
+        None,
+    )
+    .await;
+    assert_eq!(challenge.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let requirement = challenge
+        .headers()
+        .get("aauth-requirement")
+        .and_then(|v| v.to_str().ok())
+        .expect("requirement");
+    let aauth::protocol::AAuthChallenge::AuthToken { resource_token } =
+        aauth::protocol::parse_aauth_requirement(requirement).expect("auth-token challenge")
+    else {
+        panic!("expected auth-token challenge");
+    };
+
+    let exchange_body = aauth::protocol::TokenExchangeRequest {
+        resource_token,
+        upstream_token: None,
+        subagent_token: None,
+        justification: None,
+        login_hint: None,
+        tenant: None,
+        domain_hint: None,
+        capabilities: None,
+        prompt: None,
+        platform: None,
+        device: None,
+    };
+    let exchange = signed_request(
+        &spawned,
+        reqwest::Method::POST,
+        &format!("{}/aauth/token", spawned.person_server_url),
+        Some(serde_json::to_string(&exchange_body).expect("exchange json")),
+    )
+    .await;
+    assert_eq!(exchange.status(), reqwest::StatusCode::ACCEPTED);
+    let defer_requirement = exchange
+        .headers()
+        .get("aauth-requirement")
+        .and_then(|v| v.to_str().ok())
+        .expect("defer requirement");
+    let aauth::protocol::AAuthChallenge::Interaction { url, code } =
+        aauth::protocol::parse_aauth_requirement(defer_requirement).expect("interaction defer")
+    else {
+        panic!("expected interaction defer");
+    };
+    assert_eq!(url, ps_interaction_url);
+
+    let start = http
+        .get(format!("{url}?code={code}"))
+        .send()
+        .await
+        .expect("interaction start");
+    assert_eq!(start.status(), reqwest::StatusCode::FOUND);
+    let location = start
+        .headers()
+        .get("location")
+        .expect("redirect")
+        .to_str()
+        .expect("location")
+        .to_string();
+    assert!(location.contains("/resource-interact"));
+    let parsed = url::Url::parse(&location).expect("redirect url");
+    let callback = parsed
+        .query_pairs()
+        .find(|(k, _)| k == "callback")
+        .map(|(_, v)| v.into_owned())
+        .expect("callback");
+    let complete = http.get(callback).send().await.expect("callback");
+    assert!(complete.status().is_success());
+
+    let pending_url = exchange
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .expect("pending location")
+        .to_string();
+    let poll = signed_request(&spawned, reqwest::Method::GET, &pending_url, None).await;
+    assert_eq!(poll.status(), reqwest::StatusCode::OK);
+    let token_body: aauth::protocol::TokenResponseBody = poll.json().await.expect("auth token");
+    assert!(!token_body.auth_token.is_empty());
+}
+
+#[rstest]
+#[timeout(Duration::from_secs(2))]
+#[tokio::test]
+async fn resource_initiated_interaction_callback_denied_over_http() {
+    let spawned = spawn_test_server(ServerConfig {
+        require_auth_token: true,
+        with_auth_routes: true,
+        resource_initiated_interaction: true,
+        ..Default::default()
+    })
+    .await;
+
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("client");
+    let challenge = signed_request(
+        &spawned,
+        reqwest::Method::GET,
+        &format!("{}/api/data", spawned.resource_url),
+        None,
+    )
+    .await;
+    let requirement = challenge
+        .headers()
+        .get("aauth-requirement")
+        .and_then(|v| v.to_str().ok())
+        .expect("requirement");
+    let aauth::protocol::AAuthChallenge::AuthToken { resource_token } =
+        aauth::protocol::parse_aauth_requirement(requirement).expect("auth-token challenge")
+    else {
+        panic!("expected auth-token challenge");
+    };
+
+    let exchange_body = aauth::protocol::TokenExchangeRequest {
+        resource_token,
+        upstream_token: None,
+        subagent_token: None,
+        justification: None,
+        login_hint: None,
+        tenant: None,
+        domain_hint: None,
+        capabilities: None,
+        prompt: None,
+        platform: None,
+        device: None,
+    };
+    let exchange = signed_request(
+        &spawned,
+        reqwest::Method::POST,
+        &format!("{}/aauth/token", spawned.person_server_url),
+        Some(serde_json::to_string(&exchange_body).expect("exchange json")),
+    )
+    .await;
+    let defer_requirement = exchange
+        .headers()
+        .get("aauth-requirement")
+        .and_then(|v| v.to_str().ok())
+        .expect("defer requirement");
+    let aauth::protocol::AAuthChallenge::Interaction { url, code } =
+        aauth::protocol::parse_aauth_requirement(defer_requirement).expect("interaction defer")
+    else {
+        panic!("expected interaction defer");
+    };
+
+    let start = http
+        .get(format!("{url}?code={code}"))
+        .send()
+        .await
+        .expect("interaction start");
+    let location = start
+        .headers()
+        .get("location")
+        .expect("redirect")
+        .to_str()
+        .expect("location")
+        .to_string();
+    let parsed = url::Url::parse(&location).expect("redirect url");
+    let callback = parsed
+        .query_pairs()
+        .find(|(k, _)| k == "callback")
+        .map(|(_, v)| v.into_owned())
+        .expect("callback");
+    let denied = http
+        .get(format!("{callback}&error=access_denied"))
+        .send()
+        .await
+        .expect("callback denied");
+    assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
+
+    let pending_url = exchange
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .expect("pending location")
+        .to_string();
+    let poll = signed_request(&spawned, reqwest::Method::GET, &pending_url, None).await;
+    assert_eq!(poll.status(), reqwest::StatusCode::FORBIDDEN);
 }

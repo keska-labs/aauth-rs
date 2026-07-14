@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use jsonwebtoken::{Algorithm, Header};
 
 use crate::jwt::ResourceClaims;
-use crate::protocol::JwtTyp;
+use crate::protocol::{JwtTyp, Mission, ResourceInteractionClaim};
 use crate::resource::keys::ResourceTokenSigner;
 
 #[derive(Debug, Clone)]
@@ -13,8 +13,9 @@ pub struct ResourceTokenOptions {
     pub agent: String,
     pub agent_jkt: String,
     pub scope: Option<String>,
-    pub mission: Option<crate::protocol::Mission>,
+    pub mission: Option<Mission>,
     pub lifetime: Option<u64>,
+    pub interaction: Option<ResourceInteractionClaim>,
 }
 
 pub async fn create_resource_token(
@@ -38,7 +39,7 @@ pub async fn create_resource_token(
         exp: now + lifetime,
         scope: options.scope,
         mission: options.mission,
-        interaction: None,
+        interaction: options.interaction,
     };
 
     let mut header = Header::new(Algorithm::EdDSA);

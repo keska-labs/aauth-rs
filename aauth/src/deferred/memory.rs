@@ -85,4 +85,15 @@ where
         self.inner.lock().unwrap().remove(id);
         Ok(())
     }
+
+    async fn find_if<F>(&self, pred: F) -> Result<Option<(String, R)>, Self::Error>
+    where
+        F: Fn(&R) -> bool + Send,
+    {
+        let guard = self.inner.lock().unwrap();
+        Ok(guard
+            .iter()
+            .find(|(_, record)| pred(record))
+            .map(|(id, record)| (id.clone(), record.clone())))
+    }
 }

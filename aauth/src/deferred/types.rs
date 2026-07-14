@@ -4,7 +4,8 @@ use crate::error::AAuthError;
 use crate::jwt::{AgentClaims, ResourceClaims};
 use crate::protocol::{
     AAuthChallenge, AAuthProtocolError, ClaimsChallenge, ClaimsSubmission, ClarificationChallenge,
-    PendingStatus, TokenExchangeRequest, TokenResponseBody, UpdatedTokenRequest,
+    PendingStatus, ResourceInteractionClaim, TokenExchangeRequest, TokenResponseBody,
+    UpdatedTokenRequest,
 };
 
 /// Initial `202` from token exchange, resource consent, or pending POST resume.
@@ -180,6 +181,12 @@ pub struct PersonPendingContext {
     pub exchange_request: TokenExchangeRequest,
     pub agent_token: String,
     pub federation: Option<FederationPendingState>,
+    /// Unresolved resource-initiated interaction claim from the resource token.
+    pub resource_interaction: Option<ResourceInteractionClaim>,
+    /// PS-local interaction code (`XXXX-XXXX`) for pending lookup.
+    pub ps_interaction_code: Option<String>,
+    /// Whether the PS interaction code has been consumed (single-use).
+    pub interaction_code_consumed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

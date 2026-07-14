@@ -158,7 +158,8 @@ pub use resource::{
     Ed25519ResourceTokenSigner, InMemoryOpaqueAccessStore, OpaqueAccessStore,
     PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessMode, ResourceAccessPolicy,
     ResourceAccessPolicyService, ResourceAccessService, ResourceAccessServiceError,
-    ResourceConsentFlowOutcome, ResourcePollOutcome, ResourceTokenOptions, ResourceTokenSigner,
+    ResourceConsentFlowOutcome, ResourcePollOutcome, ResourceInteractionContext,
+    ResourceInteractionProvider, ResourceTokenOptions, ResourceTokenSigner,
     create_resource_token,
 };
 
@@ -175,8 +176,9 @@ pub use server_axum::{
 pub use server_axum::{InternalServiceError, PendingResumeInput, polling_status};
 #[cfg(feature = "person-server-axum")]
 pub use server_axum::{
-    PersonServerConfig, PersonServerState, pending_clarification_post_handler,
-    pending_poll_handler, pending_post_handler, person_jwks_handler, person_metadata_handler,
+    PersonServerConfig, PersonServerState, interaction_callback_handler,
+    interaction_start_handler, pending_clarification_post_handler, pending_poll_handler,
+    pending_post_handler, person_jwks_handler, person_metadata_handler,
     token_exchange_deferred_handler, token_exchange_handler,
 };
 #[cfg(feature = "resource-axum")]

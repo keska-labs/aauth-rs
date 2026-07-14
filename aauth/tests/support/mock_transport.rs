@@ -215,6 +215,7 @@ impl MockServerState {
                         scope: None,
                         mission: None,
                         lifetime: None,
+                        interaction: None,
                     },
                     &signer,
                 )
@@ -334,6 +335,9 @@ impl MockServerState {
                     exchange_request: exchange,
                     agent_token: String::new(),
                     federation: None,
+                    resource_interaction: None,
+                    ps_interaction_code: None,
+                    interaction_code_consumed: false,
                 },
                 PendingSnapshot::waiting(requirement.clone()),
                 DEFAULT_PENDING_TTL_SECS,

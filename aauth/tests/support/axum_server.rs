@@ -14,13 +14,14 @@ use aauth::VerifiedToken;
 use aauth::access_server::keys::TestAccessAuthJwtMinter;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::person_server::keys::TestAuthJwtMinter;
-use aauth::protocol::{AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument};
-use aauth::resource::{PolicyResourceAccessService, ResourceAccessConfig};
+use aauth::protocol::{AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument, ResourceInteractionClaim};
+use aauth::resource::{PolicyResourceAccessService, ResourceAccessConfig, ResourceInteractionContext, ResourceInteractionProvider};
 use aauth::server_axum::{
     AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
     ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, access_jwks_handler,
     access_metadata_handler, access_pending_poll_handler, access_pending_post_handler,
-    access_token_exchange_handler, pending_poll_handler, pending_post_handler, person_jwks_handler,
+    access_token_exchange_handler, interaction_callback_handler, interaction_start_handler,
+    pending_poll_handler, pending_post_handler, person_jwks_handler,
     person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
 };
 use aauth::{
@@ -46,6 +47,17 @@ use harness_access_policy::HarnessAccessPolicy;
 
 use super::timeout::TEST_POLL_MAX_SECS;
 
+#[derive(Clone)]
+struct StaticResourceInteractionProvider {
+    claim: ResourceInteractionClaim,
+}
+
+impl ResourceInteractionProvider for StaticResourceInteractionProvider {
+    fn interaction_for(&self, _ctx: &ResourceInteractionContext) -> Option<ResourceInteractionClaim> {
+        Some(self.claim.clone())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub require_auth_token: bool,
@@ -56,6 +68,7 @@ pub struct ServerConfig {
     pub as_deferred_mode: bool,
     pub as_clarification: bool,
     pub resource_managed: bool,
+    pub resource_initiated_interaction: bool,
 }
 
 impl Default for ServerConfig {
@@ -69,6 +82,7 @@ impl Default for ServerConfig {
             as_deferred_mode: false,
             as_clarification: false,
             resource_managed: false,
+            resource_initiated_interaction: false,
         }
     }
 }
@@ -261,12 +275,27 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         }
     };
 
-    let resource_auth_layer = ResourceAuthLayer::new(
-        Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
-        resource_url.clone(),
-        mode,
-        resource_token_signer,
-    );
+    let resource_auth_layer = {
+        let layer = ResourceAuthLayer::new(
+            Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
+            resource_url.clone(),
+            mode,
+            resource_token_signer,
+        );
+        if config.resource_initiated_interaction {
+            layer.with_interaction_provider(Arc::new(StaticResourceInteractionProvider {
+                claim: ResourceInteractionClaim {
+                    url: format!(
+                        "{}/resource-interact",
+                        resource_url.replace("http://", "https://")
+                    ),
+                    code: "R1S2-C3D4".into(),
+                },
+            }))
+        } else {
+            layer
+        }
+    };
 
     let test_state = TestServerState {
         person: PersonServerState::from_policy(
@@ -330,7 +359,9 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
             .route(
                 "/pending/{id}",
                 get(pending_poll_handler).post(pending_post_handler),
-            );
+            )
+            .route("/interact", get(interaction_start_handler))
+            .route("/interact/callback", get(interaction_callback_handler));
     }
 
     if config.federated {

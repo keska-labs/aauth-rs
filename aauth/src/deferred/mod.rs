@@ -65,6 +65,15 @@ mod store {
         async fn load(&self, id: &str) -> Result<Option<R>, Self::Error>;
         async fn save(&self, id: &str, record: R) -> Result<(), Self::Error>;
         async fn complete(&self, id: &str, outcome: PendingOutcome) -> Result<(), Self::Error>;
-        async fn remove(&self, id: &str) -> Result<(), Self::Error>;
+    async fn remove(&self, id: &str) -> Result<(), Self::Error>;
+
+    /// Linear scan for the first record matching `pred`. Default: not supported.
+    async fn find_if<F>(&self, pred: F) -> Result<Option<(String, R)>, Self::Error>
+    where
+        F: Fn(&R) -> bool + Send,
+    {
+        let _ = pred;
+        Ok(None)
     }
+}
 }

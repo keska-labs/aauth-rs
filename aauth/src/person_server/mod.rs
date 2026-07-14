@@ -15,5 +15,5 @@ pub use federation::{
 };
 pub use keys::*;
 pub use outbound::PersonServerOutboundSigner;
-pub use outcome::PersonTokenFlowOutcome;
+pub use outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
 pub use service::{PersonTokenService, PersonTokenServiceError, PolicyPersonTokenService};

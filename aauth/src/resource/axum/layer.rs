@@ -17,8 +17,8 @@ use crate::resource::keys::ResourceTokenSigner;
 use crate::resource::mode::ResourceAccessMode;
 use crate::resource::service::ResourceAccessService;
 use crate::resource::{
-    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, verify_auth_token_binding,
-    verify_token,
+    ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenOptions,
+    VerifyTokenOptions, create_resource_token, verify_auth_token_binding, verify_token,
 };
 use crate::resource_verify::resolve_resource_token_audience;
 use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
@@ -32,6 +32,7 @@ where
     pub resource_url: String,
     pub mode: ResourceAccessMode<RAS>,
     pub resource_token_signer: Arc<dyn ResourceTokenSigner>,
+    pub interaction_provider: Option<Arc<dyn ResourceInteractionProvider>>,
 }
 
 impl<RAS> ResourceAuthLayer<RAS>
@@ -49,7 +50,16 @@ where
             resource_url: resource_url.into(),
             mode,
             resource_token_signer,
+            interaction_provider: None,
         }
+    }
+
+    pub fn with_interaction_provider(
+        mut self,
+        provider: Arc<dyn ResourceInteractionProvider>,
+    ) -> Self {
+        self.interaction_provider = Some(provider);
+        self
     }
 }
 
@@ -66,6 +76,7 @@ where
             resource_url: self.resource_url.clone(),
             mode: self.mode.clone(),
             resource_token_signer: Arc::clone(&self.resource_token_signer),
+            interaction_provider: self.interaction_provider.clone(),
         }
     }
 }
@@ -80,6 +91,7 @@ where
     resource_url: String,
     mode: ResourceAccessMode<RAS>,
     resource_token_signer: Arc<dyn ResourceTokenSigner>,
+    interaction_provider: Option<Arc<dyn ResourceInteractionProvider>>,
 }
 
 impl<S, B, RAS> Service<Request<B>> for ResourceAuthService<S, RAS>
@@ -103,6 +115,7 @@ where
         let resource_url = self.resource_url.clone();
         let mode = self.mode.clone();
         let resource_token_signer = Arc::clone(&self.resource_token_signer);
+        let interaction_provider = self.interaction_provider.clone();
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
@@ -185,6 +198,14 @@ where
                         Err(e) => return Ok(unauthorized(e.to_string())),
                     };
 
+                    let interaction = interaction_provider.as_ref().and_then(|provider| {
+                        provider.interaction_for(&ResourceInteractionContext {
+                            resource_url: resource_url.clone(),
+                            agent: agent.clone(),
+                            agent_jkt: verified_sig.thumbprint.clone(),
+                        })
+                    });
+
                     let resource_token = match create_resource_token(
                         ResourceTokenOptions {
                             resource: resource_url,
@@ -194,6 +215,7 @@ where
                             scope: None,
                             mission: None,
                             lifetime: None,
+                            interaction,
                         },
                         resource_token_signer.as_ref(),
                     )

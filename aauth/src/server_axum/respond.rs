@@ -169,6 +169,33 @@ impl IntoResponse for PersonTokenFlowOutcome {
     }
 }
 
+#[cfg(feature = "person-server-axum")]
+impl IntoResponse for crate::person_server::outcome::PersonInteractionOutcome {
+    fn into_response(self) -> Response {
+        use crate::person_server::outcome::PersonInteractionOutcome;
+        use crate::protocol::AAuthProtocolError;
+
+        match self {
+            PersonInteractionOutcome::Redirect(location) => (
+                StatusCode::FOUND,
+                [(http::header::LOCATION, location)],
+            )
+                .into_response(),
+            PersonInteractionOutcome::InvalidCode => (
+                StatusCode::GONE,
+                Json(AAuthProtocolError::new(AAuthErrorCode::InvalidCode)),
+            )
+                .into_response(),
+            PersonInteractionOutcome::Expired => (
+                polling_status(&AAuthProtocolError::new(AAuthErrorCode::Expired)),
+                Json(AAuthProtocolError::new(AAuthErrorCode::Expired)),
+            )
+                .into_response(),
+            PersonInteractionOutcome::Pending(body) => (StatusCode::OK, Json(body)).into_response(),
+        }
+    }
+}
+
 #[cfg(feature = "resource-axum")]
 impl IntoResponse for ResourceConsentFlowOutcome {
     fn into_response(self) -> Response {
