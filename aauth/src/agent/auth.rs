@@ -9,6 +9,7 @@ use crate::error::{AAuthError, Result};
 use crate::metadata::MetadataFetcher;
 use crate::protocol::parse_aauth_requirement;
 use crate::protocol::{Capability, Mission, PersonServerMetadata};
+use crate::signature::header_value;
 
 pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
 
@@ -27,7 +28,6 @@ pub enum AgentAuthAttempt {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentAuthStep {
-    Continue,
     Finish,
     ExchangeToken { resource_token: String },
     PollDeferred,
@@ -79,7 +79,7 @@ pub struct AgentOptions {
     pub(crate) on_clarification: Option<ClarificationCallback>,
     /// Max seconds to poll a pending URL before failing (default 300).
     pub(crate) max_poll_duration_secs: Option<u64>,
-    /// When set (requires `server` feature), resource and auth tokens are verified before use.
+    /// When set (requires `agent-reqwest-verify` feature), resource and auth tokens are verified before use.
     #[cfg(feature = "agent-reqwest-verify")]
     pub(crate) metadata_fetcher: Option<Arc<dyn MetadataFetcher>>,
 }
@@ -399,18 +399,6 @@ impl AgentAuth {
 
 fn cache_key(resource_origin: &str, person_server: &str) -> String {
     format!("{resource_origin}|{person_server}")
-}
-
-fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers.get(name).and_then(|v| v.to_str().ok()).or_else(|| {
-        headers.iter().find_map(|(k, v)| {
-            if k.as_str().eq_ignore_ascii_case(name) {
-                v.to_str().ok()
-            } else {
-                None
-            }
-        })
-    })
 }
 
 #[cfg(test)]

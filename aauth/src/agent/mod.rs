@@ -1,4 +1,4 @@
-pub mod injector;
+pub mod auth;
 pub mod keys;
 pub mod resolve;
 

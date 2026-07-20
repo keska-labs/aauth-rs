@@ -25,7 +25,7 @@ use reqwest_middleware::{Error, Middleware, Next};
 
 use super::AGENT_ID;
 
-use aauth::{TestKeys, mint_auth_jwt};
+use aauth::{TestKeys, mint_person_auth_jwt};
 
 pub struct MockTransport {
     inner: Arc<MockServerState>,
@@ -364,7 +364,7 @@ impl MockServerState {
             ));
         }
 
-        let auth_jwt = mint_auth_jwt(
+        let auth_jwt = mint_person_auth_jwt(
             &self.keys,
             &self.person_server_url,
             &self.resource_url,

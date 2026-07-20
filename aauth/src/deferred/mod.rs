@@ -1,4 +1,5 @@
 mod memory;
+mod ops;
 mod outcome;
 #[cfg(feature = "deferred-http")]
 mod parse;
@@ -12,6 +13,7 @@ pub use memory::{
     InMemoryAccessPendingStore, InMemoryPendingStore, InMemoryPersonPendingStore,
     InMemoryResourcePendingStore,
 };
+pub use ops::poll_auth_pending;
 pub use outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
 #[cfg(feature = "deferred-http")]
 pub use parse::{

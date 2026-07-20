@@ -1,8 +1,9 @@
 //! Test harness policies that dispatch to concrete reference policies.
 
-use aauth::{
+use aauth::PendingInput;
+use aauth::policy::{
     AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionPersonPolicy,
-    PendingInput, PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError,
+    PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError,
 };
 
 #[derive(Clone)]

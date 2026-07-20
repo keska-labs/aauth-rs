@@ -8,7 +8,9 @@ use std::time::Duration;
 
 use aauth::agent::reqwest::{ClarificationCallback, InteractionCallback};
 use aauth::protocol::AuthOkResponse;
-use aauth::{PendingStore, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt};
+use aauth::{
+    PendingStore, create_key_provider, create_test_keys, mint_agent_jwt, mint_person_auth_jwt,
+};
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
@@ -116,7 +118,7 @@ async fn deferred_interaction_over_http() {
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
-        let auth_jwt = mint_auth_jwt(
+        let auth_jwt = mint_person_auth_jwt(
             &keys_cb,
             &person_server_url,
             &resource_url,

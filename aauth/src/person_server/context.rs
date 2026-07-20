@@ -2,32 +2,14 @@ use std::sync::Arc;
 
 use crate::error::{AAuthError, Result};
 use crate::jwt::VerifiedToken;
-use crate::metadata::MetadataFetcher;
-use crate::person_server::keys::AuthJwtMinter;
-use crate::policy::{AuthGrant, PersonTokenContext, PersonTokenDecision};
-use crate::protocol::TokenExchangeRequest;
+use crate::person_server::config::PersonServerConfig;
+use crate::person_server::keys::PersonAuthJwtMinter;
+use crate::policy::{AuthGrant, PersonTokenContext};
+use crate::protocol::{TokenExchangeRequest, TokenResponseBody};
 use crate::resource_verify::{VerifyResourceTokenOptions, verify_resource_token};
 
-use super::federation::FederationConfig;
-
-#[derive(Clone)]
-pub struct PersonOrchestrateConfig {
-    pub person_server_url: String,
-    pub resource_url: String,
-    pub interaction_url: String,
-    pub pending_base_url: String,
-    pub pending_path: String,
-    pub pending_ttl_secs: u64,
-    pub fetcher: Arc<dyn MetadataFetcher>,
-    pub http_client: reqwest::Client,
-    pub federation: FederationConfig,
-    pub federation_poll_max_secs: Option<u64>,
-    pub keys: crate::keys::TestKeys,
-    pub person_server_signing_jwk: crate::jwt::OkpSigningJwk,
-}
-
 pub async fn verify_person_token_request(
-    config: &PersonOrchestrateConfig,
+    config: &PersonServerConfig,
     agent_jwt: &str,
     agent_jkt: &str,
     resource_token: &str,
@@ -59,37 +41,21 @@ pub async fn verify_person_token_request(
     })
 }
 
-pub fn mint_person_auth<M: AuthJwtMinter>(
+pub fn mint_person_auth<M: PersonAuthJwtMinter>(
     minter: &M,
-    config: &PersonOrchestrateConfig,
+    config: &PersonServerConfig,
     grant: &AuthGrant,
     agent_sub: &str,
-) -> crate::protocol::TokenResponseBody {
-    let auth_jwt = minter.mint_auth_jwt(
+) -> TokenResponseBody {
+    let auth_jwt = minter.mint_person_auth_jwt(
         &config.person_server_url,
         &config.resource_url,
         agent_sub,
         Some(&grant.sub),
         grant.scope.as_deref(),
     );
-    crate::protocol::TokenResponseBody {
+    TokenResponseBody {
         auth_token: auth_jwt,
         expires_in: 3600,
-    }
-}
-
-pub fn person_decision_aud_is_ps(ctx: &PersonTokenContext) -> bool {
-    ctx.audience_is_person_server()
-}
-
-pub fn map_person_decision_for_aud(
-    ctx: &PersonTokenContext,
-    decision: PersonTokenDecision,
-) -> PersonTokenDecision {
-    match decision {
-        PersonTokenDecision::Grant(_grant) if !ctx.audience_is_person_server() => {
-            PersonTokenDecision::Federate
-        }
-        other => other,
     }
 }

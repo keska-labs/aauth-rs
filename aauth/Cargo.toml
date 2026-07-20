@@ -43,7 +43,6 @@ resource-verify = []
 
 # --- Protocol roles ---
 person-server = [
-    "agent",
     "deferred",
     "policy",
     "resource-verify",

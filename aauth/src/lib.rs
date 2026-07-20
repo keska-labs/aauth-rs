@@ -15,6 +15,11 @@
 //! For axum HTTP adapters (handlers, `ResourceAuthLayer`), use the companion
 //! crate `aauth-axum`.
 //!
+//! Role services, policy traits, and deferred store types live under their modules
+//! (`person_server`, `access_server`, `resource`, `policy`, `deferred`). Spec wire
+//! types that have no runtime yet (missions, permissions, authorization endpoint, …)
+//! live under [`protocol`] only — they are not re-exported at the crate root.
+//!
 //! # Protocol roles
 //!
 //! - **Agent** — [`agent`]
@@ -56,7 +61,6 @@ pub use agent::keys::{
 #[cfg(feature = "agent")]
 pub use agent::resolve::{
     agent_jwt_from_signature_key, person_server_from_agent_jwt, resolve_person_server_url,
-    resource_token_audience_unverified,
 };
 pub use error::{AAuthError, Result, TokenError};
 pub use interaction_code::{canonicalize_code, generate_code};
@@ -70,20 +74,17 @@ pub use keys::{
     static_person_metadata_fetcher,
 };
 pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
+
+// Common protocol prelude used across roles (not the full governance surface).
 pub use protocol::{
     AAuthChallenge, AAuthErrorCode, AAuthProtocolError, AccessServerMetadata,
-    AccessTokenExchangeRequest, AgentOkResponse, AgentProviderMetadata, AuditRequest,
-    AuthOkResponse, AuthorizationGrantedResponse, AuthorizationRequest, Capability,
-    ClaimsChallenge, ClaimsSubmission, ClarificationChallenge, ClarificationResponse,
-    InteractionQuestionResponse, InteractionRequest, InteractionType, JwksDocument, JwtTyp,
-    KeyMaterial, Mission, MissionBlob, MissionProposalRequest, MissionStatusError, MissionTool,
-    ParseStrError, PendingBody, PendingPostBody, PendingStatus, PendingStatusBody,
-    PermissionDecision, PermissionRequest, PermissionResponse, PersonServerMetadata,
-    RequirementLevel, ResourceAccessModeWire, ResourceServerMetadata, ResourceTokenResponse,
-    RevocationRequest, SignatureKey, SignatureKeyHwk, SignatureKeyJktJwt, SignatureKeyJwt,
-    TokenExchangeRequest, TokenResponseBody, UpdatedTokenRequest, build_aauth_requirement,
-    build_capabilities_header, build_mission_header, parse_aauth_requirement,
-    parse_capabilities_header, parse_mission_header,
+    AccessTokenExchangeRequest, AgentOkResponse, AgentProviderMetadata, AuthOkResponse, Capability,
+    ClaimsChallenge, ClaimsSubmission, ClarificationChallenge, ClarificationResponse, JwksDocument,
+    JwtTyp, KeyMaterial, Mission, ParseStrError, PendingBody, PendingPostBody, PendingStatus,
+    PendingStatusBody, PersonServerMetadata, RequirementLevel, SignatureKey, SignatureKeyHwk,
+    SignatureKeyJktJwt, SignatureKeyJwt, TokenExchangeRequest, TokenResponseBody,
+    UpdatedTokenRequest, build_aauth_requirement, build_capabilities_header, build_mission_header,
+    parse_aauth_requirement, parse_capabilities_header, parse_mission_header,
 };
 
 #[cfg(feature = "deferred")]
@@ -106,19 +107,7 @@ pub use deferred::{
 };
 
 #[cfg(all(feature = "policy", feature = "access-server"))]
-pub use policy::{AccessTokenContext, AccessTokenPolicy, TokenPolicyDecision};
-#[cfg(all(feature = "policy", feature = "access-server"))]
-pub use policy::{
-    AlwaysGrantAccessPolicy, ClarificationThenGrantAccessPolicy, DeferApprovalAccessPolicy,
-    DeferClaimsAccessPolicy, DeferInteractionAccessPolicy,
-};
-#[cfg(all(feature = "policy", feature = "person-server"))]
-pub use policy::{
-    AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionPersonPolicy,
-    FixedSubPersonPolicy,
-};
-#[cfg(all(feature = "policy", feature = "resource"))]
-pub use policy::{AlwaysGrantResourcePolicy, DeferInteractionResourcePolicy};
+pub use policy::{AccessTokenContext, AccessTokenDecision, AccessTokenPolicy};
 #[cfg(feature = "policy")]
 pub use policy::{AuthGrant, PolicyError};
 #[cfg(all(feature = "policy", feature = "person-server"))]
@@ -134,28 +123,24 @@ pub use resource_verify::{
 };
 
 #[cfg(feature = "person-server")]
-pub use person_server::{AuthJwtMinter, TestAuthJwtMinter, mint_auth_jwt};
-#[cfg(feature = "person-server")]
 pub use person_server::{
-    FederationConfig, FederationOutcome, PersonServerConfig, PersonServerOutboundSigner,
+    FederationOutcome, PersonAuthJwtMinter, PersonServerConfig, PersonServerOutboundSigner,
     PersonTokenFlowOutcome, PersonTokenService, PersonTokenServiceError, PolicyPersonTokenService,
-    federate_to_access_server, fulfill_token_exchange, verify_federated_auth_token,
+    TestPersonAuthJwtMinter, federate_to_access_server, mint_person_auth_jwt,
+    verify_federated_auth_token, verify_person_token_request,
 };
 
 #[cfg(feature = "access-server")]
-pub use access_server::{AccessAuthJwtMinter, TestAccessAuthJwtMinter, mint_access_auth_jwt};
-#[cfg(feature = "access-server")]
 pub use access_server::{
-    AccessServerConfig, AccessTokenService, AccessTokenServiceError, PolicyAccessTokenService,
-    build_access_context,
+    AccessAuthJwtMinter, AccessServerConfig, AccessTokenService, AccessTokenServiceError,
+    PolicyAccessTokenService, TestAccessAuthJwtMinter, build_access_context, mint_access_auth_jwt,
 };
 
 #[cfg(feature = "resource")]
 pub use resource::{
     Ed25519ResourceTokenSigner, InMemoryOpaqueAccessStore, OpaqueAccessStore,
-    PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessMode, ResourceAccessPolicy,
+    PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessMode,
     ResourceAccessPolicyService, ResourceAccessService, ResourceAccessServiceError,
     ResourceConsentFlowOutcome, ResourceInteractionContext, ResourceInteractionProvider,
     ResourcePollOutcome, ResourceTokenOptions, ResourceTokenSigner, create_resource_token,
-    resource_poll_outcome_from_snapshot,
 };

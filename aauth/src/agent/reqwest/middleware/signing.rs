@@ -5,7 +5,7 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::agent::injector::AgentAuthAttempt;
+use crate::agent::auth::AgentAuthAttempt;
 use crate::agent::keys::KeyMaterialProvider;
 use crate::agent::reqwest::signed::{
     SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,

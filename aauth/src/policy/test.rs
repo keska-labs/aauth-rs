@@ -4,10 +4,10 @@ use crate::protocol::{AAuthErrorCode, AAuthProtocolError};
 
 #[cfg(feature = "access-server")]
 use super::access::{AccessTokenContext, AccessTokenPolicy};
+#[cfg(feature = "access-server")]
+use super::decision::AccessTokenDecision;
 #[cfg(feature = "resource")]
 use super::decision::ResourceConsentDecision;
-#[cfg(feature = "access-server")]
-use super::decision::TokenPolicyDecision;
 use super::decision::{AuthGrant, PersonTokenDecision};
 use super::error::PolicyError;
 #[cfg(feature = "person-server")]
@@ -65,30 +65,6 @@ impl PersonTokenPolicy for AlwaysGrantPersonPolicy {
     }
 }
 
-#[cfg(feature = "person-server")]
-#[derive(Debug, Clone)]
-pub struct FixedSubPersonPolicy {
-    pub sub: String,
-}
-
-#[cfg(feature = "person-server")]
-#[async_trait::async_trait]
-impl PersonTokenPolicy for FixedSubPersonPolicy {
-    async fn evaluate(&self, ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError> {
-        AlwaysGrantPersonPolicy::new(&self.sub).evaluate(ctx).await
-    }
-
-    async fn resume(
-        &self,
-        ctx: &PersonTokenContext,
-        input: PendingInput,
-    ) -> Result<PersonTokenDecision, PolicyError> {
-        AlwaysGrantPersonPolicy::new(&self.sub)
-            .resume(ctx, input)
-            .await
-    }
-}
-
 #[cfg(feature = "access-server")]
 #[derive(Debug, Clone, Default)]
 pub struct AlwaysGrantAccessPolicy {
@@ -105,8 +81,8 @@ impl AlwaysGrantAccessPolicy {
 #[cfg(feature = "access-server")]
 #[async_trait::async_trait]
 impl AccessTokenPolicy for AlwaysGrantAccessPolicy {
-    async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
-        Ok(TokenPolicyDecision::Grant(AuthGrant {
+    async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<AccessTokenDecision, PolicyError> {
+        Ok(AccessTokenDecision::Grant(AuthGrant {
             sub: self.sub.clone(),
             scope: ctx.resource_claims.scope.clone(),
         }))
@@ -116,12 +92,12 @@ impl AccessTokenPolicy for AlwaysGrantAccessPolicy {
         &self,
         ctx: &AccessTokenContext,
         input: PendingInput,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
+    ) -> Result<AccessTokenDecision, PolicyError> {
         match input {
             PendingInput::InteractionCompleted | PendingInput::ClarificationResponse(_) => {
                 self.evaluate(ctx).await
             }
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+            PendingInput::Cancelled => Ok(AccessTokenDecision::Deny(
                 AAuthProtocolError::with_description(
                     AAuthErrorCode::AccessDenied,
                     "Request cancelled",
@@ -310,8 +286,8 @@ impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
     async fn evaluate(
         &self,
         _ctx: &AccessTokenContext,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
-        Ok(TokenPolicyDecision::Defer(
+    ) -> Result<AccessTokenDecision, PolicyError> {
+        Ok(AccessTokenDecision::Defer(
             DeferRequirement::Clarification {
                 question: self.question.clone(),
                 timeout: None,
@@ -323,15 +299,15 @@ impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
         &self,
         ctx: &AccessTokenContext,
         input: PendingInput,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
+    ) -> Result<AccessTokenDecision, PolicyError> {
         match input {
             PendingInput::ClarificationResponse(_) | PendingInput::InteractionCompleted => {
-                Ok(TokenPolicyDecision::Grant(AuthGrant {
+                Ok(AccessTokenDecision::Grant(AuthGrant {
                     sub: self.sub.clone(),
                     scope: ctx.resource_claims.scope.clone(),
                 }))
             }
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+            PendingInput::Cancelled => Ok(AccessTokenDecision::Deny(
                 AAuthProtocolError::with_description(
                     AAuthErrorCode::AccessDenied,
                     "Request cancelled",
@@ -340,7 +316,7 @@ impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
             PendingInput::ClaimsSubmission(_) => Err(PolicyError::Message(
                 "claims submission not expected".into(),
             )),
-            PendingInput::UpdatedToken(_) => Ok(TokenPolicyDecision::Grant(AuthGrant {
+            PendingInput::UpdatedToken(_) => Ok(AccessTokenDecision::Grant(AuthGrant {
                 sub: self.sub.clone(),
                 scope: ctx.resource_claims.scope.clone(),
             })),
@@ -364,8 +340,8 @@ where
     async fn evaluate(
         &self,
         _ctx: &AccessTokenContext,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
-        Ok(TokenPolicyDecision::Defer(DeferRequirement::Interaction {
+    ) -> Result<AccessTokenDecision, PolicyError> {
+        Ok(AccessTokenDecision::Defer(DeferRequirement::Interaction {
             url: self.interaction_url.clone(),
             code: generate_code(),
         }))
@@ -375,7 +351,7 @@ where
         &self,
         ctx: &AccessTokenContext,
         input: PendingInput,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
+    ) -> Result<AccessTokenDecision, PolicyError> {
         self.inner.resume(ctx, input).await
     }
 }
@@ -393,8 +369,8 @@ impl AccessTokenPolicy for DeferClaimsAccessPolicy {
     async fn evaluate(
         &self,
         _ctx: &AccessTokenContext,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
-        Ok(TokenPolicyDecision::Defer(DeferRequirement::Claims {
+    ) -> Result<AccessTokenDecision, PolicyError> {
+        Ok(AccessTokenDecision::Defer(DeferRequirement::Claims {
             required_claims: self.required_claims.clone(),
         }))
     }
@@ -403,15 +379,15 @@ impl AccessTokenPolicy for DeferClaimsAccessPolicy {
         &self,
         ctx: &AccessTokenContext,
         input: PendingInput,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
+    ) -> Result<AccessTokenDecision, PolicyError> {
         match input {
             PendingInput::ClaimsSubmission(_)
             | PendingInput::InteractionCompleted
-            | PendingInput::UpdatedToken(_) => Ok(TokenPolicyDecision::Grant(AuthGrant {
+            | PendingInput::UpdatedToken(_) => Ok(AccessTokenDecision::Grant(AuthGrant {
                 sub: self.sub.clone(),
                 scope: ctx.resource_claims.scope.clone(),
             })),
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+            PendingInput::Cancelled => Ok(AccessTokenDecision::Deny(
                 AAuthProtocolError::with_description(
                     AAuthErrorCode::AccessDenied,
                     "Request cancelled",
@@ -436,27 +412,27 @@ impl AccessTokenPolicy for DeferApprovalAccessPolicy {
     async fn evaluate(
         &self,
         _ctx: &AccessTokenContext,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
-        Ok(TokenPolicyDecision::Defer(DeferRequirement::Approval))
+    ) -> Result<AccessTokenDecision, PolicyError> {
+        Ok(AccessTokenDecision::Defer(DeferRequirement::Approval))
     }
 
     async fn resume(
         &self,
         ctx: &AccessTokenContext,
         input: PendingInput,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
+    ) -> Result<AccessTokenDecision, PolicyError> {
         match input {
-            PendingInput::InteractionCompleted => Ok(TokenPolicyDecision::Grant(AuthGrant {
+            PendingInput::InteractionCompleted => Ok(AccessTokenDecision::Grant(AuthGrant {
                 sub: self.sub.clone(),
                 scope: ctx.resource_claims.scope.clone(),
             })),
-            PendingInput::Cancelled => Ok(TokenPolicyDecision::Deny(
+            PendingInput::Cancelled => Ok(AccessTokenDecision::Deny(
                 AAuthProtocolError::with_description(
                     AAuthErrorCode::AccessDenied,
                     "Request cancelled",
                 ),
             )),
-            _ => Ok(TokenPolicyDecision::Grant(AuthGrant {
+            _ => Ok(AccessTokenDecision::Grant(AuthGrant {
                 sub: self.sub.clone(),
                 scope: ctx.resource_claims.scope.clone(),
             })),

@@ -1,9 +1,8 @@
 //! Test harness access policies that dispatch to concrete reference policies.
 
-use aauth::{
-    AccessTokenContext, AccessTokenPolicy, AlwaysGrantAccessPolicy,
+use aauth::policy::{
+    AccessTokenContext, AccessTokenDecision, AccessTokenPolicy, AlwaysGrantAccessPolicy,
     ClarificationThenGrantAccessPolicy, DeferInteractionAccessPolicy, PolicyError,
-    TokenPolicyDecision,
 };
 
 #[derive(Clone)]
@@ -15,7 +14,7 @@ pub enum HarnessAccessPolicy {
 
 #[async_trait::async_trait]
 impl AccessTokenPolicy for HarnessAccessPolicy {
-    async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<TokenPolicyDecision, PolicyError> {
+    async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<AccessTokenDecision, PolicyError> {
         match self {
             Self::Grant(p) => p.evaluate(ctx).await,
             Self::Clarify(p) => p.evaluate(ctx).await,
@@ -27,7 +26,7 @@ impl AccessTokenPolicy for HarnessAccessPolicy {
         &self,
         ctx: &AccessTokenContext,
         input: aauth::PendingInput,
-    ) -> Result<TokenPolicyDecision, PolicyError> {
+    ) -> Result<AccessTokenDecision, PolicyError> {
         match self {
             Self::Grant(p) => p.resume(ctx, input).await,
             Self::Clarify(p) => p.resume(ctx, input).await,

@@ -1,15 +1,14 @@
 use crate::deferred::{
     DeferCreated, DeferRequirement, PendingOutcome, PendingSnapshot, PendingStore,
     ResourcePendingContext, ResourcePendingRecord, generate_pending_id, pending_location,
+    poll_auth_pending,
 };
 use crate::error::AAuthError;
 use crate::policy::{
     PolicyError, ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy,
 };
 use crate::resource::opaque::OpaqueAccessStore;
-use crate::resource::outcome::{
-    ResourceConsentFlowOutcome, ResourcePollOutcome, resource_poll_outcome_from_snapshot,
-};
+use crate::resource::outcome::{ResourceConsentFlowOutcome, ResourcePollOutcome};
 
 #[derive(Clone)]
 pub struct ResourceAccessConfig {
@@ -88,21 +87,9 @@ where
     }
 
     async fn poll_pending(&self, pending_id: &str) -> Result<ResourcePollOutcome, Self::Error> {
-        let Some(record) = self
-            .pending
-            .load(pending_id)
+        let outcome = poll_auth_pending(&self.pending, pending_id)
             .await
-            .map_err(|e| ResourceAccessServiceError::PendingStore(e.to_string()))?
-        else {
-            return Ok(ResourcePollOutcome::Gone);
-        };
-
-        if record.is_expired() {
-            let _ = self.pending.remove(pending_id).await;
-            return Ok(ResourcePollOutcome::Gone);
-        }
-
-        let outcome = resource_poll_outcome_from_snapshot(&record.snapshot);
+            .map_err(|e| ResourceAccessServiceError::PendingStore(e.to_string()))?;
 
         if matches!(
             &outcome,

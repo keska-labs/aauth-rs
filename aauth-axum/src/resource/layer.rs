@@ -18,9 +18,11 @@ use aauth::protocol::build_aauth_requirement;
 use aauth::resource::keys::ResourceTokenSigner;
 use aauth::resource::{
     ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenOptions,
-    VerifyTokenOptions, create_resource_token, verify_auth_token_binding, verify_token,
+    create_resource_token,
 };
-use aauth::resource_verify::resolve_resource_token_audience;
+use aauth::resource_verify::{
+    VerifyTokenOptions, resolve_resource_token_audience, verify_auth_token_binding, verify_token,
+};
 use aauth::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
 
 use crate::AauthResponse;

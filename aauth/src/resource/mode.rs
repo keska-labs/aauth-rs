@@ -25,6 +25,3 @@ pub type ResourceAccessPolicyService = PolicyResourceAccessService<
     InMemoryResourcePendingStore,
     crate::resource::InMemoryOpaqueAccessStore,
 >;
-
-/// Type-erased mode for callers that do not need resource-managed generics.
-pub type ResourceAccessPolicy = ResourceAccessMode<ResourceAccessPolicyService>;

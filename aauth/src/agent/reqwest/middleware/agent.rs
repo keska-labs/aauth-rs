@@ -6,7 +6,7 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::agent::injector::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
+use crate::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
 use crate::agent::reqwest::deferred::{AgentDeferredOptions, poll_deferred_with};
 use crate::agent::reqwest::middleware::signing::{SigningMiddleware, sign_and_run};
 use crate::agent::reqwest::send::SignedSend;
@@ -129,21 +129,14 @@ impl AgentMiddleware {
                 AgentAuthStep::PollDeferred => {
                     let (interaction_url, interaction_code) = interaction_from_response(&resp);
                     let location = location_header(&resp)?;
-                    let mut deferred = AgentDeferredOptions::builder(location);
-                    if let (Some(url), Some(code)) = (interaction_url, interaction_code) {
-                        deferred = deferred.interaction(url, code);
-                    }
-                    if let Some(cb) = self.options.on_interaction.clone() {
-                        deferred = deferred.on_interaction(cb);
-                    }
-                    if let Some(cb) = self.options.on_clarification.clone() {
-                        deferred = deferred.on_clarification(cb);
-                    }
-                    if let Some(secs) = self.options.max_poll_duration_secs {
-                        deferred = deferred.max_poll_duration_secs(secs);
-                    }
+                    let deferred = AgentDeferredOptions::from_agent_options(
+                        &self.options,
+                        location,
+                        interaction_url,
+                        interaction_code,
+                    );
                     let result = poll_deferred_with(
-                        deferred.build(),
+                        deferred,
                         &mut AgentSend {
                             middleware: self,
                             extensions,
@@ -169,7 +162,6 @@ impl AgentMiddleware {
                     return Ok(result.response);
                 }
                 AgentAuthStep::Invalidate(_) => continue,
-                AgentAuthStep::Continue => continue,
                 AgentAuthStep::ExchangeToken { resource_token } => {
                     let material = self.options.provider.key_material().await?;
                     let agent_jwt = agent_jwt_from_signature_key(&material.signature_key)?;
@@ -200,46 +192,14 @@ impl AgentMiddleware {
                         agent_jwt,
                     )?;
 
-                    let capabilities = self.options.capabilities.clone();
-
-                    let mut exchange =
-                        TokenExchangeOptions::builder(person_server_url.clone(), resource_token);
-                    if let Some(metadata) = self.options.person_server_metadata.clone() {
-                        exchange = exchange.person_server_metadata(metadata);
-                    }
-                    if let Some(on_metadata) = self.options.on_metadata.clone() {
-                        exchange = exchange.on_metadata(on_metadata);
-                    }
-                    if let Some(justification) = self.options.justification.clone() {
-                        exchange = exchange.justification(justification);
-                    }
-                    if let Some(login_hint) = self.options.login_hint.clone() {
-                        exchange = exchange.login_hint(login_hint);
-                    }
-                    if let Some(tenant) = self.options.tenant.clone() {
-                        exchange = exchange.tenant(tenant);
-                    }
-                    if let Some(domain_hint) = self.options.domain_hint.clone() {
-                        exchange = exchange.domain_hint(domain_hint);
-                    }
-                    if let Some(caps) = capabilities {
-                        exchange = exchange.capabilities(caps);
-                    }
-                    if let Some(prompt) = self.options.prompt.clone() {
-                        exchange = exchange.prompt(prompt);
-                    }
-                    if let Some(on_interaction) = self.options.on_interaction.clone() {
-                        exchange = exchange.on_interaction(on_interaction);
-                    }
-                    if let Some(on_clarification) = self.options.on_clarification.clone() {
-                        exchange = exchange.on_clarification(on_clarification);
-                    }
-                    if let Some(secs) = self.options.max_poll_duration_secs {
-                        exchange = exchange.max_poll_duration_secs(secs);
-                    }
+                    let exchange = TokenExchangeOptions::from_agent_options(
+                        &self.options,
+                        person_server_url.clone(),
+                        resource_token,
+                    );
 
                     let result = exchange_token_with(
-                        exchange.build(),
+                        exchange,
                         &mut AgentSend {
                             middleware: self,
                             extensions,

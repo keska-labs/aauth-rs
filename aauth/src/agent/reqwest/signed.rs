@@ -1,15 +1,14 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use ed25519_dalek::{Signer, SigningKey};
+use ed25519_dalek::Signer;
 use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use reqwest::Request;
 
 use crate::error::{AAuthError, Result};
-use crate::jwt::OkpSigningJwk;
 use crate::protocol::{Capability, KeyMaterial, Mission, SignatureKey};
 use crate::protocol::{build_capabilities_header, build_mission_header};
-use crate::signature::build_signature_base_with_extras;
+use crate::signature::{build_signature_base_with_extras, signing_key_from_jwk};
 
 #[derive(Debug, Clone, Default)]
 pub struct SigningOptions {
@@ -132,14 +131,4 @@ pub fn sign_request_with_auth_token(
         jwt: auth_token.to_string(),
     });
     sign_request(request, &auth_material)
-}
-
-fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<SigningKey> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(&jwk.d)
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
-    let key_bytes: [u8; 32] = bytes
-        .try_into()
-        .map_err(|_| AAuthError::Message("invalid Ed25519 private key length".into()))?;
-    Ok(SigningKey::from_bytes(&key_bytes))
 }

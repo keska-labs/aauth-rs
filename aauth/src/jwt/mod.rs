@@ -1,11 +1,13 @@
 mod claims;
 mod decode;
+mod mint;
 
 pub use claims::{
     ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
     ResourceInteractionClaim, VerifiedToken, decode_resource_token_unverified,
 };
 pub use decode::{decode_unverified, decode_verified, verified_validation};
+pub(crate) use mint::{AuthJwtMintParams, encode_auth_jwt};
 
 use std::collections::BTreeMap;
 

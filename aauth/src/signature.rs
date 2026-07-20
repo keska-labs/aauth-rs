@@ -283,7 +283,7 @@ pub fn apply_outbound_signature(
     Ok(())
 }
 
-fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<ed25519_dalek::SigningKey> {
+pub(crate) fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<ed25519_dalek::SigningKey> {
     let bytes = URL_SAFE_NO_PAD
         .decode(&jwk.d)
         .map_err(|e| AAuthError::Message(e.to_string()))?;
@@ -303,7 +303,7 @@ fn verifying_key_from_jwk(jwk: &crate::jwt::OkpJwk) -> Result<VerifyingKey> {
     VerifyingKey::from_bytes(&key_bytes).map_err(|e| AAuthError::Message(e.to_string()))
 }
 
-fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+pub(crate) fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name).and_then(|v| v.to_str().ok()).or_else(|| {
         headers.iter().find_map(|(k, v)| {
             if k.as_str().eq_ignore_ascii_case(name) {

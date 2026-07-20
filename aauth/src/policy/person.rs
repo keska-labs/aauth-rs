@@ -21,7 +21,7 @@ impl PersonTokenContext {
 }
 
 fn normalize_url(url: &str) -> String {
-    url.trim_end_matches('/').to_string()
+    url.trim_end_matches('/').to_lowercase()
 }
 
 #[async_trait::async_trait]

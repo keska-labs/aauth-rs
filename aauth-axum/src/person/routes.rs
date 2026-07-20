@@ -10,9 +10,9 @@ use aauth::AuthTokenPollOutcome;
 use aauth::PendingStore;
 use aauth::PersonPendingRecord;
 use aauth::PersonServerConfig;
-use aauth::person_server::keys::AuthJwtMinter;
-use aauth::person_server::orchestrate::verify_person_token_request;
+use aauth::person_server::keys::PersonAuthJwtMinter;
 use aauth::person_server::service::{PersonTokenService, PolicyPersonTokenService};
+use aauth::person_server::verify_person_token_request;
 use aauth::policy::PersonTokenPolicy;
 use aauth::protocol::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
 use aauth::signature::verify_request_signature;
@@ -32,7 +32,7 @@ impl<P, S, M> PersonServerState<PolicyPersonTokenService<P, S, M>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
-    M: AuthJwtMinter + Clone,
+    M: PersonAuthJwtMinter + Clone,
 {
     pub fn from_policy(policy: P, pending: S, minter: M, config: PersonServerConfig) -> Self {
         Self {
@@ -75,7 +75,6 @@ pub async fn token_exchange_handler<S>(
 where
     S: PersonTokenService,
 {
-    let orch = state.config.orchestrate();
     let authority = headers
         .get("host")
         .and_then(|h| h.to_str().ok())
@@ -94,7 +93,7 @@ where
 
     let resource_token = request.resource_token.clone();
     let ctx = match verify_person_token_request(
-        &orch,
+        &state.config,
         &verified_sig.jwt,
         &verified_sig.thumbprint,
         &resource_token,

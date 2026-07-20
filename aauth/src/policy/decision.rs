@@ -8,7 +8,7 @@ pub struct AuthGrant {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TokenPolicyDecision {
+pub enum AccessTokenDecision {
     Grant(AuthGrant),
     Deny(AAuthProtocolError),
     Defer(DeferRequirement),

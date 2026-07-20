@@ -1,5 +1,5 @@
 use crate::error::{AAuthError, Result};
-use crate::jwt::{AgentClaims, decode_resource_token_unverified};
+use crate::jwt::AgentClaims;
 use crate::protocol::SignatureKey;
 
 /// Resolve the Person Server URL for token exchange.
@@ -39,9 +39,4 @@ fn decode_agent_claims_unverified(jwt: &str) -> Result<AgentClaims> {
             "expected agent JWT for person server resolution".into(),
         )),
     }
-}
-
-/// Read the `aud` claim from a resource token without signature verification.
-pub fn resource_token_audience_unverified(resource_token: &str) -> Result<String> {
-    Ok(decode_resource_token_unverified(resource_token)?.aud)
 }

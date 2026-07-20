@@ -6,18 +6,12 @@ use url::Url;
 use crate::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response};
 use crate::error::{AAuthError, Result};
 use crate::jwt::VerifiedToken;
-use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
+use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::mint_person_server_signature_jwt;
-use crate::person_server::orchestrate::PersonOrchestrateConfig;
 use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
 use crate::resource_verify::{VerifyTokenOptions, verify_token};
 use crate::signature::apply_outbound_signature;
-
-#[derive(Clone)]
-pub struct FederationConfig {
-    pub fetcher: Arc<dyn MetadataFetcher>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FederationOutcome {
@@ -31,7 +25,7 @@ pub enum FederationOutcome {
 
 pub async fn federate_to_access_server(
     client: &reqwest::Client,
-    orch: &PersonOrchestrateConfig,
+    config: &PersonServerConfig,
     resource_token: &str,
     agent_token: &str,
 ) -> Result<FederationOutcome> {
@@ -76,8 +70,8 @@ pub async fn federate_to_access_server(
         "POST",
         &authority,
         &path,
-        &mint_person_server_signature_jwt(&orch.keys, &orch.person_server_url),
-        &orch.person_server_signing_jwk,
+        &mint_person_server_signature_jwt(&config.keys, &config.person_server_url),
+        &config.person_server_signing_jwk(),
         None,
     )?;
 
@@ -131,9 +125,9 @@ pub async fn federate_to_access_server(
     verify_federated_auth_token(
         &token_body.auth_token,
         &access_server_url,
-        &orch.resource_url,
+        &config.resource_url,
         agent_token,
-        Arc::clone(&orch.fetcher),
+        Arc::clone(&config.fetcher),
     )
     .await?;
 
@@ -204,81 +198,4 @@ fn response_headers_to_http(headers: &reqwest::header::HeaderMap) -> http::Heade
         }
     }
     map
-}
-
-/// Legacy helper used by integration tests.
-pub async fn fulfill_token_exchange(
-    keys: &TestKeys,
-    person_server_url: &str,
-    resource_url: &str,
-    agent_id: &str,
-    resource_token: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
-    client: &reqwest::Client,
-) -> Result<TokenResponseBody> {
-    use crate::person_server::keys::AuthJwtMinter;
-
-    let minter = keys.auth_jwt_minter();
-    let claims = crate::resource_verify::verify_resource_token(
-        crate::resource_verify::VerifyResourceTokenOptions {
-            jwt: resource_token.to_string(),
-            expected_agent: Some(agent_id.to_string()),
-            expected_agent_jkt: None,
-            fetcher: Arc::clone(&fetcher),
-        },
-    )
-    .await?;
-
-    let ps = person_server_url.trim_end_matches('/');
-    let aud = claims.aud.trim_end_matches('/');
-
-    if aud == ps {
-        let auth_jwt = minter.mint_auth_jwt(
-            person_server_url,
-            resource_url,
-            agent_id,
-            Some("user-123"),
-            claims.scope.as_deref(),
-        );
-        return Ok(TokenResponseBody {
-            auth_token: auth_jwt,
-            expires_in: 3600,
-        });
-    }
-
-    let orch = PersonOrchestrateConfig {
-        person_server_url: person_server_url.to_string(),
-        resource_url: resource_url.to_string(),
-        interaction_url: String::new(),
-        pending_base_url: person_server_url.to_string(),
-        pending_path: "/pending".into(),
-        pending_ttl_secs: 300,
-        fetcher: Arc::clone(&fetcher),
-        http_client: client.clone(),
-        federation: FederationConfig {
-            fetcher: Arc::clone(&fetcher),
-        },
-        federation_poll_max_secs: None,
-        keys: keys.clone(),
-        person_server_signing_jwk: keys.person_server.signing_jwk(),
-    };
-
-    match federate_to_access_server(
-        client,
-        &orch,
-        resource_token,
-        &crate::agent::keys::mint_agent_jwt(
-            keys,
-            person_server_url,
-            agent_id,
-            Some(person_server_url),
-        ),
-    )
-    .await?
-    {
-        FederationOutcome::Complete(body) => Ok(body),
-        FederationOutcome::Deferred { .. } => Err(AAuthError::Message(
-            "unexpected deferred response from access server in fulfill_token_exchange".into(),
-        )),
-    }
 }

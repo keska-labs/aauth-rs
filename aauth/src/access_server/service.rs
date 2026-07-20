@@ -1,15 +1,15 @@
 use crate::access_server::config::AccessServerConfig;
 use crate::access_server::keys::AccessAuthJwtMinter;
-use crate::access_server::outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
-use crate::deferred::poll_outcome_from_snapshot;
+use crate::deferred::poll_auth_pending;
 use crate::deferred::{
     AccessPendingContext, AccessPendingRecord, DeferCreated, DeferRequirement, PendingInput,
     PendingOutcome, PendingSnapshot, PendingStore, generate_pending_id, pending_location,
 };
+use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 use crate::error::AAuthError;
 use crate::jwt::{VerifiedToken, decode_resource_token_unverified};
 use crate::policy::{
-    AccessTokenContext, AccessTokenPolicy, AuthGrant, PolicyError, TokenPolicyDecision,
+    AccessTokenContext, AccessTokenDecision, AccessTokenPolicy, AuthGrant, PolicyError,
 };
 use crate::protocol::TokenResponseBody;
 
@@ -78,21 +78,9 @@ where
     }
 
     async fn poll_pending(&self, pending_id: &str) -> Result<AuthTokenPollOutcome, Self::Error> {
-        let Some(record) = self
-            .pending
-            .load(pending_id)
+        poll_auth_pending(&self.pending, pending_id)
             .await
-            .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?
-        else {
-            return Ok(AuthTokenPollOutcome::Gone);
-        };
-
-        if record.is_expired() {
-            let _ = self.pending.remove(pending_id).await;
-            return Ok(AuthTokenPollOutcome::Gone);
-        }
-
-        Ok(poll_outcome_from_snapshot(&record.snapshot))
+            .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))
     }
 
     async fn resume_pending(
@@ -160,7 +148,7 @@ fn access_context_from_pending(c: AccessPendingContext) -> AccessTokenContext {
 async fn apply_access_decision<P, S, M>(
     service: &PolicyAccessTokenService<P, S, M>,
     ctx: &AccessTokenContext,
-    decision: TokenPolicyDecision,
+    decision: AccessTokenDecision,
 ) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError>
 where
     P: AccessTokenPolicy,
@@ -168,12 +156,12 @@ where
     M: AccessAuthJwtMinter + Clone,
 {
     match decision {
-        TokenPolicyDecision::Grant(grant) => {
+        AccessTokenDecision::Grant(grant) => {
             let body = mint_access_auth(&service.minter, &service.config, grant, ctx);
             Ok(AuthTokenFlowOutcome::granted(body))
         }
-        TokenPolicyDecision::Deny(err) => Ok(AuthTokenFlowOutcome::denied(err)),
-        TokenPolicyDecision::Defer(requirement) => {
+        AccessTokenDecision::Deny(err) => Ok(AuthTokenFlowOutcome::denied(err)),
+        AccessTokenDecision::Defer(requirement) => {
             create_deferred_access_response(service, ctx, requirement).await
         }
     }
@@ -183,7 +171,7 @@ async fn apply_access_pending_decision<P, S, M>(
     service: &PolicyAccessTokenService<P, S, M>,
     ctx: &AccessTokenContext,
     pending_id: &str,
-    decision: TokenPolicyDecision,
+    decision: AccessTokenDecision,
 ) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError>
 where
     P: AccessTokenPolicy,
@@ -191,7 +179,7 @@ where
     M: AccessAuthJwtMinter + Clone,
 {
     match decision {
-        TokenPolicyDecision::Grant(grant) => {
+        AccessTokenDecision::Grant(grant) => {
             let body = mint_access_auth(&service.minter, &service.config, grant, ctx);
             service
                 .pending
@@ -200,7 +188,7 @@ where
                 .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?;
             Ok(AuthTokenFlowOutcome::granted(body))
         }
-        TokenPolicyDecision::Deny(err) => {
+        AccessTokenDecision::Deny(err) => {
             service
                 .pending
                 .complete(pending_id, PendingOutcome::Error(err.clone()))
@@ -208,7 +196,7 @@ where
                 .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?;
             Ok(AuthTokenFlowOutcome::denied(err))
         }
-        TokenPolicyDecision::Defer(requirement) => {
+        AccessTokenDecision::Defer(requirement) => {
             update_access_pending_defer(service, pending_id, requirement).await
         }
     }

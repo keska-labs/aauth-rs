@@ -3,6 +3,7 @@ use http::HeaderMap;
 use crate::error::{AAuthError, Result};
 use crate::protocol::parse_aauth_requirement;
 use crate::protocol::{ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody};
+use crate::signature::header_value;
 
 use super::types::DeferRequirement;
 
@@ -107,18 +108,6 @@ fn defer_requirement_from(
             "agent-token/auth-token requirements are not defer requirements".into(),
         )),
     }
-}
-
-fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers.get(name).and_then(|v| v.to_str().ok()).or_else(|| {
-        headers.iter().find_map(|(k, v)| {
-            if k.as_str().eq_ignore_ascii_case(name) {
-                v.to_str().ok()
-            } else {
-                None
-            }
-        })
-    })
 }
 
 #[cfg(test)]

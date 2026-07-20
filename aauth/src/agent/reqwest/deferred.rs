@@ -5,7 +5,7 @@ use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 use tokio::time::sleep;
 
-use crate::agent::injector::{ClarificationCallback, InteractionCallback};
+use crate::agent::auth::{ClarificationCallback, InteractionCallback};
 use crate::agent::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
 use crate::protocol::parse_aauth_requirement;
@@ -39,6 +39,29 @@ pub struct AgentDeferredOptionsBuilder {
 impl AgentDeferredOptions {
     pub fn builder(location_url: impl Into<String>) -> AgentDeferredOptionsBuilder {
         AgentDeferredOptionsBuilder::new(location_url)
+    }
+
+    /// Build deferred poll options from shared [`AgentOptions`] callbacks/limits.
+    pub(crate) fn from_agent_options(
+        options: &crate::agent::auth::AgentOptions,
+        location_url: String,
+        interaction_url: Option<String>,
+        interaction_code: Option<String>,
+    ) -> Self {
+        let mut builder = Self::builder(location_url);
+        if let (Some(url), Some(code)) = (interaction_url, interaction_code) {
+            builder = builder.interaction(url, code);
+        }
+        if let Some(cb) = options.on_interaction.clone() {
+            builder = builder.on_interaction(cb);
+        }
+        if let Some(cb) = options.on_clarification.clone() {
+            builder = builder.on_clarification(cb);
+        }
+        if let Some(secs) = options.max_poll_duration_secs {
+            builder = builder.max_poll_duration_secs(secs);
+        }
+        builder.build()
     }
 }
 

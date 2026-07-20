@@ -15,7 +15,7 @@ mod test;
 
 #[cfg(feature = "access-server")]
 pub use access::{AccessTokenContext, AccessTokenPolicy};
-pub use decision::{AuthGrant, PersonTokenDecision, ResourceConsentDecision, TokenPolicyDecision};
+pub use decision::{AccessTokenDecision, AuthGrant, PersonTokenDecision, ResourceConsentDecision};
 pub use error::PolicyError;
 #[cfg(feature = "person-server")]
 pub use person::{PersonTokenContext, PersonTokenPolicy};
@@ -29,7 +29,6 @@ pub use test::{
 #[cfg(feature = "person-server")]
 pub use test::{
     AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionPersonPolicy,
-    FixedSubPersonPolicy,
 };
 #[cfg(feature = "resource")]
 pub use test::{AlwaysGrantResourcePolicy, DeferInteractionResourcePolicy};

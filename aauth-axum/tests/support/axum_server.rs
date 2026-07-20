@@ -15,18 +15,17 @@ use aauth::TestKeys;
 use aauth::VerifiedToken;
 use aauth::access_server::keys::TestAccessAuthJwtMinter;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
-use aauth::person_server::keys::TestAuthJwtMinter;
+use aauth::person_server::keys::TestPersonAuthJwtMinter;
+use aauth::policy::{
+    AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
+    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy,
+};
 use aauth::protocol::{
     AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument, ResourceInteractionClaim,
 };
 use aauth::resource::{
-    PolicyResourceAccessService, ResourceAccessConfig, ResourceInteractionContext,
-    ResourceInteractionProvider,
-};
-use aauth::{
-    AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
-    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, ResourceAccessMode,
-    ResourceTokenSigner,
+    PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessMode,
+    ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenSigner,
 };
 use aauth_axum::{
     AccessServerState, PersonServerState, ResourceAuthLayer, ResourceServerState,
@@ -143,7 +142,7 @@ type TestPersonState = PersonServerState<
     aauth::person_server::PolicyPersonTokenService<
         HarnessPersonPolicy,
         InMemoryPersonPendingStore,
-        TestAuthJwtMinter,
+        TestPersonAuthJwtMinter,
     >,
 >;
 type TestAccessState = AccessServerState<
@@ -238,17 +237,19 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     };
 
     let access_policy = if config.federated && config.as_clarification {
-        HarnessAccessPolicy::Clarify(aauth::ClarificationThenGrantAccessPolicy {
+        HarnessAccessPolicy::Clarify(aauth::policy::ClarificationThenGrantAccessPolicy {
             sub: "user-federated".into(),
             question: "What is your purpose?".into(),
         })
     } else if config.federated && config.as_deferred_mode {
         HarnessAccessPolicy::Defer(DeferInteractionAccessPolicy {
-            inner: aauth::AlwaysGrantAccessPolicy::new("user-federated"),
+            inner: aauth::policy::AlwaysGrantAccessPolicy::new("user-federated"),
             interaction_url: format!("{access_server_url}/interact"),
         })
     } else {
-        HarnessAccessPolicy::Grant(aauth::AlwaysGrantAccessPolicy::new("user-federated"))
+        HarnessAccessPolicy::Grant(aauth::policy::AlwaysGrantAccessPolicy::new(
+            "user-federated",
+        ))
     };
 
     let resource_service = PolicyResourceAccessService::new(
@@ -307,12 +308,11 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         person: PersonServerState::from_policy(
             person_policy,
             person_pending.clone(),
-            keys.auth_jwt_minter(),
+            keys.person_auth_jwt_minter(),
             PersonServerConfig {
                 keys: keys.clone(),
                 person_server_url: person_server_url.clone(),
                 resource_url: resource_url.clone(),
-                agent_url: agent_url.clone(),
                 person_jwks_uri: person_jwks_uri.clone(),
                 interaction_url: format!("{person_server_url}/interact"),
                 pending_base_url: person_server_url.clone(),

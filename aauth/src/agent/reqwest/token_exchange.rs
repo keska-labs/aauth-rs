@@ -4,7 +4,7 @@ use std::sync::Arc;
 use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 
-use crate::agent::injector::InteractionCallback;
+use crate::agent::auth::InteractionCallback;
 use crate::agent::reqwest::deferred::{AgentDeferredOptions, poll_deferred_with};
 use crate::agent::reqwest::send::SignedSend;
 use crate::error::{AAuthError, Result};
@@ -35,7 +35,7 @@ pub struct TokenExchangeOptions {
     pub(crate) capabilities: Option<Vec<crate::protocol::Capability>>,
     pub(crate) prompt: Option<String>,
     pub(crate) on_interaction: Option<InteractionCallback>,
-    pub(crate) on_clarification: Option<crate::agent::injector::ClarificationCallback>,
+    pub(crate) on_clarification: Option<crate::agent::auth::ClarificationCallback>,
     pub(crate) max_poll_duration_secs: Option<u64>,
 }
 
@@ -52,7 +52,7 @@ pub struct TokenExchangeOptionsBuilder {
     capabilities: Option<Vec<crate::protocol::Capability>>,
     prompt: Option<String>,
     on_interaction: Option<InteractionCallback>,
-    on_clarification: Option<crate::agent::injector::ClarificationCallback>,
+    on_clarification: Option<crate::agent::auth::ClarificationCallback>,
     max_poll_duration_secs: Option<u64>,
 }
 
@@ -62,6 +62,49 @@ impl TokenExchangeOptions {
         resource_token: impl Into<String>,
     ) -> TokenExchangeOptionsBuilder {
         TokenExchangeOptionsBuilder::new(person_server_url, resource_token)
+    }
+
+    /// Build exchange options from shared [`AgentOptions`] fields.
+    pub(crate) fn from_agent_options(
+        options: &crate::agent::auth::AgentOptions,
+        person_server_url: String,
+        resource_token: String,
+    ) -> Self {
+        let mut builder = Self::builder(person_server_url, resource_token);
+        if let Some(metadata) = options.person_server_metadata.clone() {
+            builder = builder.person_server_metadata(metadata);
+        }
+        if let Some(on_metadata) = options.on_metadata.clone() {
+            builder = builder.on_metadata(on_metadata);
+        }
+        if let Some(justification) = options.justification.clone() {
+            builder = builder.justification(justification);
+        }
+        if let Some(login_hint) = options.login_hint.clone() {
+            builder = builder.login_hint(login_hint);
+        }
+        if let Some(tenant) = options.tenant.clone() {
+            builder = builder.tenant(tenant);
+        }
+        if let Some(domain_hint) = options.domain_hint.clone() {
+            builder = builder.domain_hint(domain_hint);
+        }
+        if let Some(caps) = options.capabilities.clone() {
+            builder = builder.capabilities(caps);
+        }
+        if let Some(prompt) = options.prompt.clone() {
+            builder = builder.prompt(prompt);
+        }
+        if let Some(on_interaction) = options.on_interaction.clone() {
+            builder = builder.on_interaction(on_interaction);
+        }
+        if let Some(on_clarification) = options.on_clarification.clone() {
+            builder = builder.on_clarification(on_clarification);
+        }
+        if let Some(secs) = options.max_poll_duration_secs {
+            builder = builder.max_poll_duration_secs(secs);
+        }
+        builder.build()
     }
 }
 
@@ -132,10 +175,7 @@ impl TokenExchangeOptionsBuilder {
         self
     }
 
-    pub fn on_clarification(
-        mut self,
-        callback: crate::agent::injector::ClarificationCallback,
-    ) -> Self {
+    pub fn on_clarification(mut self, callback: crate::agent::auth::ClarificationCallback) -> Self {
         self.on_clarification = Some(callback);
         self
     }

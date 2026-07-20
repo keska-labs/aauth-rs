@@ -1,27 +1,38 @@
-use crate::deferred::AuthTokenFlowOutcome;
-use crate::deferred::DeferCreated;
+use crate::deferred::{AuthTokenFlowOutcome, DeferCreated};
 use crate::protocol::{AAuthProtocolError, PendingBody, TokenResponseBody};
 
 /// Person Server token exchange / resume result (includes federation-specific outcomes).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PersonTokenFlowOutcome {
-    Flow(AuthTokenFlowOutcome),
+    Granted(TokenResponseBody),
+    Deferred(DeferCreated),
+    Denied(AAuthProtocolError),
+    Gone,
     Unauthorized,
     BadGateway,
-    Gone,
 }
 
 impl PersonTokenFlowOutcome {
     pub fn granted(body: TokenResponseBody) -> Self {
-        Self::Flow(AuthTokenFlowOutcome::Granted(body))
+        Self::Granted(body)
     }
 
     pub fn deferred(defer: DeferCreated) -> Self {
-        Self::Flow(AuthTokenFlowOutcome::Deferred(defer))
+        Self::Deferred(defer)
     }
 
     pub fn denied(err: AAuthProtocolError) -> Self {
-        Self::Flow(AuthTokenFlowOutcome::Denied(err))
+        Self::Denied(err)
+    }
+
+    pub fn into_auth_flow(self) -> Option<AuthTokenFlowOutcome> {
+        match self {
+            Self::Granted(body) => Some(AuthTokenFlowOutcome::Granted(body)),
+            Self::Deferred(defer) => Some(AuthTokenFlowOutcome::Deferred(defer)),
+            Self::Denied(err) => Some(AuthTokenFlowOutcome::Denied(err)),
+            Self::Gone => Some(AuthTokenFlowOutcome::Gone),
+            Self::Unauthorized | Self::BadGateway => None,
+        }
     }
 }
 

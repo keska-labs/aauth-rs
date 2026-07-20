@@ -14,7 +14,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 
 use aauth::{
-    TestKeys, create_key_provider, create_test_keys, mint_agent_jwt, mint_auth_jwt,
+    TestKeys, create_key_provider, create_test_keys, mint_agent_jwt, mint_person_auth_jwt,
     static_agent_metadata_fetcher, static_person_metadata_fetcher,
 };
 
@@ -104,7 +104,7 @@ async fn verify_token_agent_jwt() {
 async fn verify_token_auth_jwt() {
     let _guard = test_lock();
     let keys = create_test_keys();
-    let auth_jwt = mint_auth_jwt(
+    let auth_jwt = mint_person_auth_jwt(
         &keys,
         PERSON_SERVER_URL,
         RESOURCE_URL,
@@ -268,7 +268,7 @@ async fn deferred_interaction_grant() {
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
         if let Some(id) = pending_cb.last_created.lock().unwrap().clone() {
-            let auth_jwt = mint_auth_jwt(
+            let auth_jwt = mint_person_auth_jwt(
                 &keys_cb,
                 PERSON_SERVER_URL,
                 RESOURCE_URL,

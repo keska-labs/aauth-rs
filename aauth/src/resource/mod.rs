@@ -7,18 +7,11 @@ mod outcome;
 mod service;
 mod token;
 
-pub use crate::resource_verify::{
-    VerifyResourceTokenOptions, VerifyTokenOptions, resolve_resource_token_audience,
-    verify_auth_token_binding, verify_client_auth_token, verify_resource_challenge,
-    verify_resource_token, verify_token,
-};
 pub use interaction::{ResourceInteractionContext, ResourceInteractionProvider};
 pub use keys::{Ed25519ResourceTokenSigner, ResourceTokenSigner};
-pub use mode::{ResourceAccessMode, ResourceAccessPolicy, ResourceAccessPolicyService};
+pub use mode::{ResourceAccessMode, ResourceAccessPolicyService};
 pub use opaque::{InMemoryOpaqueAccessStore, OpaqueAccessStore};
-pub use outcome::{
-    ResourceConsentFlowOutcome, ResourcePollOutcome, resource_poll_outcome_from_snapshot,
-};
+pub use outcome::{ResourceConsentFlowOutcome, ResourcePollOutcome};
 pub use service::{
     PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessService,
     ResourceAccessServiceError,

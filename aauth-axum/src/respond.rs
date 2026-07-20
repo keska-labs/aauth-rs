@@ -164,10 +164,18 @@ impl IntoResponse for AauthResponse<AuthTokenPollOutcome> {
 impl IntoResponse for AauthResponse<PersonTokenFlowOutcome> {
     fn into_response(self) -> Response {
         match self.0 {
-            PersonTokenFlowOutcome::Flow(flow) => AauthResponse(flow).into_response(),
+            PersonTokenFlowOutcome::Granted(body) => {
+                AauthResponse(AuthTokenFlowOutcome::Granted(body)).into_response()
+            }
+            PersonTokenFlowOutcome::Deferred(defer) => {
+                AauthResponse(AuthTokenFlowOutcome::Deferred(defer)).into_response()
+            }
+            PersonTokenFlowOutcome::Denied(err) => {
+                AauthResponse(AuthTokenFlowOutcome::Denied(err)).into_response()
+            }
+            PersonTokenFlowOutcome::Gone => StatusCode::GONE.into_response(),
             PersonTokenFlowOutcome::Unauthorized => StatusCode::UNAUTHORIZED.into_response(),
             PersonTokenFlowOutcome::BadGateway => StatusCode::BAD_GATEWAY.into_response(),
-            PersonTokenFlowOutcome::Gone => StatusCode::GONE.into_response(),
         }
     }
 }

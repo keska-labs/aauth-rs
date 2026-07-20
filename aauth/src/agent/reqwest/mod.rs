@@ -5,7 +5,7 @@ pub(crate) mod send;
 pub mod signed;
 mod token_exchange;
 
-pub use super::injector::{
+pub use super::auth::{
     AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions, AgentOptionsBuilder,
     ClarificationCallback, InteractionCallback,
 };
