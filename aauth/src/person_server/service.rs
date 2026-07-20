@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::deferred::AuthTokenPollOutcome;
+use crate::deferred::poll_outcome_from_snapshot;
 use crate::deferred::{
     DeferCreated, DeferRequirement, FederationPendingState, PendingInput, PendingOutcome,
     PendingSnapshot, PendingStore, PersonPendingContext, PersonPendingRecord, ServerPollOptions,
@@ -9,7 +10,7 @@ use crate::deferred::{
 };
 use crate::error::AAuthError;
 use crate::interaction_code::{canonicalize_code, generate_code};
-use crate::person_server::axum::PersonServerConfig;
+use crate::person_server::config::PersonServerConfig;
 use crate::person_server::federation::{
     FederationOutcome, federate_to_access_server, verify_federated_auth_token,
 };
@@ -20,7 +21,6 @@ use crate::policy::{PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, 
 use crate::protocol::{
     AAuthErrorCode, AAuthProtocolError, PendingStatus, ResourceInteractionClaim,
 };
-use crate::server_axum::poll_outcome_from_snapshot;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersonTokenServiceError {

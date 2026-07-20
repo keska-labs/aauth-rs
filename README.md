@@ -11,20 +11,23 @@ This library is currently in pre-alpha and can't in any way be described as sati
 
 ```text
 aauth-rs/
-├── Cargo.toml          # workspace root
-└── aauth/
+├── Cargo.toml              # workspace root
+├── aauth/                  # protocol + role services (no axum)
+│   ├── src/
+│   │   ├── agent/              # agent runtime (feature `agent`)
+│   │   ├── person_server/      # Person Server (feature `person-server`)
+│   │   ├── access_server/      # Access Server (feature `access-server`)
+│   │   ├── resource/           # Resource Server (feature `resource`)
+│   │   ├── resource_verify/    # token verification only (feature `resource-verify`)
+│   │   ├── deferred/           # pending store, defer types (feature `deferred`)
+│   │   ├── policy/             # policy traits (feature `policy`)
+│   │   ├── signature.rs        # shared HTTP Signature build + verify
+│   │   └── …                   # JWT helpers, metadata, protocol types
+│   └── tests/                  # protocol / agent integration tests
+└── aauth-axum/             # axum HTTP adapters (handlers, ResourceAuthLayer)
     ├── src/
-    │   ├── agent/              # agent runtime (feature `agent`)
-    │   ├── person_server/      # Person Server (feature `person-server`)
-    │   ├── access_server/      # Access Server (feature `access-server`)
-    │   ├── resource/           # Resource Server (feature `resource`)
-    │   ├── resource_verify/    # token verification only (feature `resource-verify`)
-    │   ├── deferred/           # pending store, defer types (feature `deferred`)
-    │   ├── policy/             # policy traits (feature `policy`)
-    │   ├── server_axum/        # axum IntoResponse + route re-exports (per `*-axum` features)
-    │   ├── signature.rs        # shared HTTP Signature build + verify
-    │   └── …                   # headers, JWT helpers, metadata, types
-    └── tests/                  # protocol integration tests (TypeScript e2e parity)
+    ├── examples/               # explorer access-mode demos
+    └── tests/                  # axum HTTP integration tests
 ```
 
 ## Protocol roles
@@ -38,7 +41,7 @@ aauth-rs/
 
 ## Resource access modes
 
-`ResourceAccessMode` on `ResourceAuthLayer` selects how the resource evaluates requests:
+`ResourceAccessMode` on `aauth_axum::ResourceAuthLayer` selects how the resource evaluates requests:
 
 | Mode | Variant | Description |
 |------|---------|-------------|
@@ -73,23 +76,35 @@ The agent JWT `ps` claim names the Person Server when not configured explicitly 
 
 ## Features
 
-Protocol modules (`error`, `headers`, `jwt`, `signature`, `types`, …) are always available. Enable role features to compile only what you need:
+### `aauth`
+
+Protocol modules (`error`, `protocol`, `jwt`, `signature`, …) are always available. Enable role features to compile only what you need:
 
 | Feature | Description |
 |---------|-------------|
 | `agent` | `aauth::agent::injector`, `aauth::agent::keys` |
 | `agent-reqwest` | `aauth::agent::reqwest` — `AgentMiddleware`, `ClientBuilder`, token exchange |
 | `agent-reqwest-verify` | Optional 401 challenge binding checks (implies `resource-verify`) |
-| `person-server` / `person-server-axum` | Person Server service and axum routes |
-| `access-server` / `access-server-axum` | Access Server service and axum routes |
-| `resource` / `resource-axum` | Resource Server layer, consent service, axum helpers |
+| `person-server` | Person Server service |
+| `access-server` | Access Server service |
+| `resource` | Resource Server consent service |
 | `resource-verify` | Resource token verification only (no RS service/layer) |
-| `full` | All roles and integrations (matches `default`) |
+| `full` | All roles and agent integrations (matches `default`) |
 
-**Person Server only:**
+### `aauth-axum`
+
+| Feature | Description |
+|---------|-------------|
+| `person-server` | Person Server axum routes (`PersonServerState`, handlers) |
+| `access-server` | Access Server axum routes |
+| `resource` | `ResourceAuthLayer`, pending poll, `VerifiedAAuthToken` |
+| `full` | All three (matches `default`) |
+
+**Person Server with axum:**
 
 ```toml
-aauth = { version = "0.0", default-features = false, features = ["person-server", "person-server-axum"] }
+aauth = { version = "0.0", default-features = false, features = ["person-server"] }
+aauth-axum = { version = "0.0", default-features = false, features = ["person-server"] }
 ```
 
 **Agent client only:**
@@ -145,24 +160,24 @@ Each example mirrors an access mode from the [AAuth explorer](https://explorer.a
 
 ```bash
 # Identity Based — agent JWT alone grants access
-cargo run --example identity_based
+cargo run -p aauth-axum --example identity_based
 
 # Person Server Managed — 401 challenge, token exchange at the Person Server
-cargo run --example person_server_managed
+cargo run -p aauth-axum --example person_server_managed
 
 # Resource Managed — resource-owned interaction and opaque AAuth-Access tokens
-cargo run --example resource_managed
+cargo run -p aauth-axum --example resource_managed
 
 # Federated — Person Server delegates token exchange to an Access Server
-cargo run --example federated
+cargo run -p aauth-axum --example federated
 ```
 
-Each example has a matching E2E test in `tests/example_flows.rs` (run with `cargo test --test example_flows --all-features`).
+Each example has a matching E2E test in `aauth-axum/tests/example_flows.rs` (run with `cargo test -p aauth-axum --test example_flows --all-features`).
 
 Build all examples in CI:
 
 ```bash
-cargo build --examples --all-features
+cargo build -p aauth-axum --examples --all-features
 ```
 
 ## Spec and reference
@@ -179,15 +194,20 @@ cargo build --examples --all-features
 ## Development
 
 ```bash
-cargo test --all-features
+cargo test --workspace --all-features
 cargo fmt --all
-cargo clippy --all-features -- -D warnings
+cargo clippy --workspace --all-features -- -D warnings
 
-# Per-role minimal builds
-cargo check --no-default-features --features person-server,person-server-axum
-cargo check --no-default-features --features access-server,access-server-axum
-cargo check --no-default-features --features resource,resource-axum
-cargo check --no-default-features --features agent,agent-reqwest
+# aauth without axum
+cargo check -p aauth --no-default-features --features person-server
+cargo check -p aauth --no-default-features --features access-server
+cargo check -p aauth --no-default-features --features resource
+cargo check -p aauth --no-default-features --features agent,agent-reqwest
+
+# aauth-axum adapters
+cargo check -p aauth-axum --no-default-features --features person-server
+cargo check -p aauth-axum --no-default-features --features access-server
+cargo check -p aauth-axum --no-default-features --features resource
 ```
 
 Release notes: [CHANGELOG.md](CHANGELOG.md).

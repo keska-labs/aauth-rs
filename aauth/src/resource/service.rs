@@ -7,8 +7,9 @@ use crate::policy::{
     PolicyError, ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy,
 };
 use crate::resource::opaque::OpaqueAccessStore;
-use crate::resource::outcome::{ResourceConsentFlowOutcome, ResourcePollOutcome};
-use crate::server_axum::resource_poll_outcome_from_snapshot;
+use crate::resource::outcome::{
+    ResourceConsentFlowOutcome, ResourcePollOutcome, resource_poll_outcome_from_snapshot,
+};
 
 #[derive(Clone)]
 pub struct ResourceAccessConfig {

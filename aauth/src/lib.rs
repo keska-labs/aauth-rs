@@ -6,11 +6,14 @@
 //! Enable role-specific features to compile only what you need:
 //!
 //! - `agent` / `agent-reqwest` — agent runtime and reqwest middleware
-//! - `person-server` / `person-server-axum` — Person Server service and axum routes
-//! - `access-server` / `access-server-axum` — Access Server service and axum routes
-//! - `resource` / `resource-axum` — Resource Server layer, consent service, and axum helpers
+//! - `person-server` — Person Server service
+//! - `access-server` — Access Server service
+//! - `resource` — Resource Server consent service
 //! - `resource-verify` — resource token verification only (used by `person-server` and `agent-reqwest-verify`)
-//! - `full` — all roles and integrations (matches `default`)
+//! - `full` — all roles and agent integrations (matches `default`)
+//!
+//! For axum HTTP adapters (handlers, `ResourceAuthLayer`), use the companion
+//! crate `aauth-axum`.
 //!
 //! # Protocol roles
 //!
@@ -44,13 +47,6 @@ pub mod access_server;
 pub mod person_server;
 #[cfg(feature = "resource")]
 pub mod resource;
-
-#[cfg(any(
-    feature = "person-server-axum",
-    feature = "access-server-axum",
-    feature = "resource-axum"
-))]
-pub mod server_axum;
 
 #[cfg(feature = "agent")]
 pub use agent::keys::{
@@ -101,7 +97,7 @@ pub use deferred::{
     pending_location,
 };
 #[cfg(feature = "deferred")]
-pub use deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
+pub use deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
 #[cfg(feature = "deferred-http")]
 pub use deferred::{
     OutboundSignatureProvider, ParsedDeferred, ServerPollOptions, ServerPollOutcome,
@@ -141,16 +137,17 @@ pub use resource_verify::{
 pub use person_server::{AuthJwtMinter, TestAuthJwtMinter, mint_auth_jwt};
 #[cfg(feature = "person-server")]
 pub use person_server::{
-    FederationConfig, FederationOutcome, PersonServerOutboundSigner, PersonTokenFlowOutcome,
-    PersonTokenService, PersonTokenServiceError, PolicyPersonTokenService,
+    FederationConfig, FederationOutcome, PersonServerConfig, PersonServerOutboundSigner,
+    PersonTokenFlowOutcome, PersonTokenService, PersonTokenServiceError, PolicyPersonTokenService,
     federate_to_access_server, fulfill_token_exchange, verify_federated_auth_token,
 };
 
-#[cfg(all(feature = "access-server", feature = "access-server-axum"))]
+#[cfg(feature = "access-server")]
 pub use access_server::{AccessAuthJwtMinter, TestAccessAuthJwtMinter, mint_access_auth_jwt};
 #[cfg(feature = "access-server")]
 pub use access_server::{
-    AccessTokenService, AccessTokenServiceError, PolicyAccessTokenService, build_access_context,
+    AccessServerConfig, AccessTokenService, AccessTokenServiceError, PolicyAccessTokenService,
+    build_access_context,
 };
 
 #[cfg(feature = "resource")]
@@ -160,27 +157,5 @@ pub use resource::{
     ResourceAccessPolicyService, ResourceAccessService, ResourceAccessServiceError,
     ResourceConsentFlowOutcome, ResourceInteractionContext, ResourceInteractionProvider,
     ResourcePollOutcome, ResourceTokenOptions, ResourceTokenSigner, create_resource_token,
-};
-
-#[cfg(feature = "access-server-axum")]
-pub use server_axum::{
-    AccessServerConfig, AccessServerState, access_jwks_handler, access_metadata_handler,
-    access_pending_poll_handler, access_pending_post_handler, access_token_exchange_handler,
-};
-#[cfg(any(
-    feature = "person-server-axum",
-    feature = "access-server-axum",
-    feature = "resource-axum"
-))]
-pub use server_axum::{InternalServiceError, PendingResumeInput, polling_status};
-#[cfg(feature = "person-server-axum")]
-pub use server_axum::{
-    PersonServerConfig, PersonServerState, interaction_callback_handler, interaction_start_handler,
-    pending_clarification_post_handler, pending_poll_handler, pending_post_handler,
-    person_jwks_handler, person_metadata_handler, token_exchange_deferred_handler,
-    token_exchange_handler,
-};
-#[cfg(feature = "resource-axum")]
-pub use server_axum::{
-    ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, resource_pending_poll_handler,
+    resource_poll_outcome_from_snapshot,
 };

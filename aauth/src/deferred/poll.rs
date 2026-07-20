@@ -225,9 +225,6 @@ fn parse_retry_after(headers: &HeaderMap) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::response::IntoResponse;
-
-    use crate::deferred::DeferCreated;
 
     #[tokio::test]
     async fn poll_pending_http_returns_auth_token_on_200() {
@@ -305,23 +302,18 @@ mod tests {
             question: "Why?".into(),
             timeout: None,
         };
-        let defer_response = DeferCreated {
-            location: format!("{}/pending/abc", mock.uri()),
-            requirement: requirement.clone(),
-        }
-        .into_response();
+        let location = format!("{}/pending/abc", mock.uri());
+        let body = crate::protocol::PendingBody::for_created(&requirement).expect("pending body");
+        let challenge = requirement.header_challenge().expect("challenge");
+        let aauth_req = crate::protocol::build_aauth_requirement(&challenge).expect("requirement");
 
-        let headers = defer_response.headers().clone();
-        let body = axum::body::to_bytes(defer_response.into_body(), usize::MAX)
-            .await
-            .expect("bytes");
-        let body = String::from_utf8(body.to_vec()).expect("utf8");
-
-        let mut template = wiremock::ResponseTemplate::new(202);
-        for (name, value) in headers.iter() {
-            template = template.insert_header(name.as_str(), value.to_str().unwrap());
-        }
-        template = template.set_body_string(body);
+        let template = wiremock::ResponseTemplate::new(202)
+            .insert_header("Location", location.as_str())
+            .insert_header("Retry-After", "0")
+            .insert_header("Cache-Control", "no-store")
+            .insert_header("AAuth-Requirement", aauth_req.as_str())
+            .insert_header("Content-Type", "application/json")
+            .set_body_json(body);
 
         wiremock::Mock::given(wiremock::matchers::method("GET"))
             .and(wiremock::matchers::path("/pending/abc"))
@@ -333,7 +325,7 @@ mod tests {
         let outcome = poll_pending_http(
             &client,
             ServerPollOptions {
-                location_url: format!("{}/pending/abc", mock.uri()),
+                location_url: location.clone(),
                 max_poll_duration_secs: Some(2),
                 prefer_wait: Some(1),
             },
@@ -346,7 +338,7 @@ mod tests {
             outcome,
             ServerPollOutcome::Deferred {
                 requirement,
-                location_url: format!("{}/pending/abc", mock.uri()),
+                location_url: location,
             }
         );
     }

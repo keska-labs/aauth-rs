@@ -18,7 +18,6 @@ use aauth::{
     create_resource_token, generate_pending_id, pending_location, verify_token,
 };
 use async_trait::async_trait;
-use axum::response::IntoResponse;
 use http::StatusCode;
 use http_body_util::BodyExt;
 use reqwest::{Request, Response, ResponseBuilderExt, Url};
@@ -344,25 +343,24 @@ impl MockServerState {
             );
             let _ = self.pending.create(record).await;
 
-            let defer_response = DeferCreated {
+            let defer = DeferCreated {
                 location: location.clone(),
                 requirement: requirement.clone(),
-            }
-            .into_response();
-            let mut builder = http::Response::builder()
-                .status(defer_response.status())
-                .url(Url::parse(url).expect("valid url"));
-            for (name, value) in defer_response.headers().iter() {
-                builder = builder.header(name, value);
-            }
-            let body = defer_response
-                .into_body()
-                .collect()
-                .await
-                .map(|c| c.to_bytes().to_vec())
-                .unwrap_or_default();
+            };
+            let body = aauth::PendingBody::for_created(&defer.requirement).expect("pending body");
+            let challenge = defer.requirement.header_challenge().expect("challenge");
+            let aauth_req = build_aauth_requirement(&challenge).expect("requirement");
             return Ok(Response::from(
-                builder.body(body).expect("valid http response"),
+                http::Response::builder()
+                    .status(StatusCode::ACCEPTED)
+                    .url(Url::parse(url).expect("valid url"))
+                    .header("Location", defer.location.as_str())
+                    .header("Retry-After", "0")
+                    .header("Cache-Control", "no-store")
+                    .header("AAuth-Requirement", aauth_req.as_str())
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_vec(&body).expect("serialize"))
+                    .expect("valid http response"),
             ));
         }
 

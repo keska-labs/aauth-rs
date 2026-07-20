@@ -124,23 +124,33 @@ fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::response::IntoResponse;
+    use http::HeaderMap;
 
     use crate::deferred::DeferCreated;
+    use crate::protocol::{PendingBody, build_aauth_requirement};
 
-    fn response_parts_sync(response: axum::response::Response) -> (u16, HeaderMap, Vec<u8>) {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("runtime");
-        rt.block_on(async {
-            let status = response.status().as_u16();
-            let headers = response.headers().clone();
-            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-                .await
-                .expect("bytes");
-            (status, headers, body.to_vec())
-        })
+    fn defer_created_parts(defer: &DeferCreated) -> (u16, HeaderMap, Vec<u8>) {
+        let body = PendingBody::for_created(&defer.requirement).expect("pending body");
+        let mut headers = HeaderMap::new();
+        headers.insert("Location", defer.location.parse().expect("valid location"));
+        headers.insert("Retry-After", "0".parse().expect("valid header"));
+        headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
+        if let Ok(challenge) = defer.requirement.header_challenge() {
+            let req = build_aauth_requirement(&challenge).expect("requirement");
+            headers.insert(
+                "AAuth-Requirement",
+                req.parse().expect("valid requirement header"),
+            );
+        }
+        headers.insert(
+            "Content-Type",
+            "application/json".parse().expect("valid content-type"),
+        );
+        (
+            202,
+            headers,
+            serde_json::to_vec(&body).expect("serialize pending body"),
+        )
     }
 
     #[test]
@@ -149,12 +159,11 @@ mod tests {
             question: "Why?".into(),
             timeout: Some(60),
         };
-        let response = DeferCreated {
+        let defer = DeferCreated {
             location: "https://as.example/pending/abc".into(),
             requirement: requirement.clone(),
-        }
-        .into_response();
-        let (status, headers, body) = response_parts_sync(response);
+        };
+        let (status, headers, body) = defer_created_parts(&defer);
         let parsed =
             parse_deferred_response(status, &headers, &body, "https://as.example").unwrap();
         assert_eq!(parsed.location, "https://as.example/pending/abc");
@@ -167,12 +176,11 @@ mod tests {
             url: "https://as.example/interact".into(),
             code: "AB-CD".into(),
         };
-        let response = DeferCreated {
+        let defer = DeferCreated {
             location: "https://as.example/pending/x".into(),
             requirement: requirement.clone(),
-        }
-        .into_response();
-        let (status, headers, body) = response_parts_sync(response);
+        };
+        let (status, headers, body) = defer_created_parts(&defer);
         let parsed =
             parse_deferred_response(status, &headers, &body, "https://as.example").unwrap();
         assert_eq!(parsed.requirement, requirement);

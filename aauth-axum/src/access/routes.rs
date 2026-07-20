@@ -1,35 +1,21 @@
-use std::sync::Arc;
-
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
-use crate::access_server::keys::AccessAuthJwtMinter;
-use crate::access_server::service::{
+use aauth::AccessPendingRecord;
+use aauth::AccessServerConfig;
+use aauth::AuthTokenPollOutcome;
+use aauth::PendingStore;
+use aauth::access_server::keys::AccessAuthJwtMinter;
+use aauth::access_server::service::{
     AccessTokenService, PolicyAccessTokenService, build_access_context,
 };
-use crate::deferred::AuthTokenPollOutcome;
-use crate::deferred::{AccessPendingRecord, PendingStore};
-use crate::keys::TestKeys;
-use crate::metadata::MetadataFetcher;
-use crate::policy::AccessTokenPolicy;
-use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
-use crate::server_axum::{InternalServiceError, PendingResumeInput};
-use crate::signature::verify_request_signature;
+use aauth::policy::AccessTokenPolicy;
+use aauth::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
+use aauth::signature::verify_request_signature;
 
-#[derive(Clone)]
-pub struct AccessServerConfig {
-    pub keys: TestKeys,
-    pub access_server_url: String,
-    pub resource_url: String,
-    pub person_server_url: String,
-    pub access_jwks_uri: String,
-    pub pending_base_url: String,
-    pub pending_path: String,
-    pub pending_ttl_secs: u64,
-    pub fetcher: Arc<dyn MetadataFetcher>,
-}
+use crate::{AauthResponse, InternalServiceError, PendingResumeInput};
 
 #[derive(Clone)]
 pub struct AccessServerState<S>
@@ -106,7 +92,7 @@ where
     };
 
     match state.service.exchange_token(ctx).await {
-        Ok(outcome) => outcome.into_response(),
+        Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
 }
@@ -114,7 +100,7 @@ where
 pub async fn access_pending_poll_handler<S>(
     State(state): State<AccessServerState<S>>,
     Path(id): Path<String>,
-) -> Result<AuthTokenPollOutcome, InternalServiceError>
+) -> Result<AauthResponse<AuthTokenPollOutcome>, InternalServiceError>
 where
     S: AccessTokenService,
 {
@@ -122,6 +108,7 @@ where
         .service
         .poll_pending(&id)
         .await
+        .map(AauthResponse)
         .map_err(InternalServiceError::from)
 }
 
@@ -134,7 +121,7 @@ where
     S: AccessTokenService,
 {
     match state.service.resume_pending(&id, input).await {
-        Ok(outcome) => outcome.into_response(),
+        Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
 }

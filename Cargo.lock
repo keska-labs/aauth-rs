@@ -8,7 +8,6 @@ version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
  "base64",
  "bytes",
  "ed25519-dalek 3.0.0-rc.1",
@@ -26,10 +25,29 @@ dependencies = [
  "sha2 0.11.0",
  "thiserror",
  "tokio",
- "tower",
  "url",
  "uuid",
  "wiremock",
+]
+
+[[package]]
+name = "aauth-axum"
+version = "0.0.3"
+dependencies = [
+ "aauth",
+ "anyhow",
+ "async-trait",
+ "axum",
+ "http",
+ "jsonwebtoken",
+ "reqwest",
+ "reqwest-middleware",
+ "rstest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "url",
 ]
 
 [[package]]

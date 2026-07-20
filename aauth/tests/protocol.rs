@@ -9,7 +9,6 @@ use aauth::protocol::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, Toke
 use aauth::protocol::{build_aauth_requirement, parse_aauth_requirement};
 use aauth::{DeferCreated, DeferRequirement, VerifyTokenOptions, verify_token};
 use aauth::{InMemoryPersonPendingStore, PendingOutcome, PendingStore};
-use axum::response::IntoResponse;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
@@ -321,23 +320,14 @@ async fn deferred_accepted_response_format() {
         url: INTERACTION_URL.into(),
         code: code.clone(),
     };
-    let response = DeferCreated {
+    let defer = DeferCreated {
         location: "https://person.example/pending/abc".into(),
-        requirement,
-    }
-    .into_response();
-    assert_eq!(response.status(), http::StatusCode::ACCEPTED);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "https://person.example/pending/abc"
-    );
-    let aauth_req = response
-        .headers()
-        .get("AAuth-Requirement")
-        .unwrap()
-        .to_str()
-        .unwrap();
-    let parsed = parse_aauth_requirement(aauth_req).unwrap();
+        requirement: requirement.clone(),
+    };
+    assert_eq!(defer.location, "https://person.example/pending/abc");
+    let challenge = defer.requirement.header_challenge().unwrap();
+    let aauth_req = build_aauth_requirement(&challenge).unwrap();
+    let parsed = parse_aauth_requirement(&aauth_req).unwrap();
     assert_eq!(
         parsed,
         AAuthChallenge::Interaction {
@@ -345,6 +335,8 @@ async fn deferred_accepted_response_format() {
             code: code.clone(),
         }
     );
+    let body = aauth::PendingBody::for_created(&requirement).unwrap();
+    let _ = serde_json::to_vec(&body).unwrap();
 }
 
 fn mock_config(

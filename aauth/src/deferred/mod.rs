@@ -12,7 +12,7 @@ pub use memory::{
     InMemoryAccessPendingStore, InMemoryPendingStore, InMemoryPersonPendingStore,
     InMemoryResourcePendingStore,
 };
-pub use outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
+pub use outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
 #[cfg(feature = "deferred-http")]
 pub use parse::{
     ParsedDeferred, parse_auth_token_response, parse_deferred_response, resolve_deferred_location,

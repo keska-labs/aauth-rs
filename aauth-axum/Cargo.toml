@@ -1,0 +1,76 @@
+[package]
+name = "aauth-axum"
+version = "0.0.3"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Axum integration for the AAuth authorization protocol"
+documentation = "https://docs.rs/aauth-axum"
+readme = "../README.md"
+keywords = ["aauth", "oauth", "authentication", "axum"]
+categories = ["authentication", "web-programming", "asynchronous"]
+
+[features]
+default = ["person-server", "access-server", "resource"]
+person-server = ["aauth/person-server"]
+access-server = ["aauth/access-server"]
+resource = ["aauth/resource"]
+full = ["person-server", "access-server", "resource"]
+
+[dependencies]
+aauth = { workspace = true, default-features = false, features = ["deferred"] }
+async-trait.workspace = true
+axum.workspace = true
+http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tower.workspace = true
+
+[dev-dependencies]
+aauth = { workspace = true, default-features = false, features = [
+    "agent",
+    "agent-reqwest",
+    "agent-reqwest-verify",
+    "person-server",
+    "access-server",
+    "resource",
+] }
+anyhow.workspace = true
+async-trait.workspace = true
+jsonwebtoken.workspace = true
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+rstest.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower.workspace = true
+url.workspace = true
+
+[[example]]
+name = "identity_based"
+required-features = ["person-server", "access-server", "resource"]
+
+[[example]]
+name = "person_server_managed"
+required-features = ["person-server", "access-server", "resource"]
+
+[[example]]
+name = "resource_managed"
+required-features = ["person-server", "access-server", "resource"]
+
+[[example]]
+name = "federated"
+required-features = ["person-server", "access-server", "resource"]
+
+[[test]]
+name = "axum_integration"
+required-features = ["full"]
+
+[[test]]
+name = "example_flows"
+required-features = ["full"]
+
+[package.metadata.docs.rs]
+all-features = true

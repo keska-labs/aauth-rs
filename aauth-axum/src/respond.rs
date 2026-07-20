@@ -2,16 +2,25 @@ use axum::Json;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
-use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
-use crate::deferred::{
-    DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingOutcome, PendingSnapshot,
-};
-#[cfg(feature = "person-server-axum")]
-use crate::person_server::outcome::PersonTokenFlowOutcome;
-use crate::protocol::build_aauth_requirement;
-use crate::protocol::{AAuthErrorCode, AAuthProtocolError, PaymentRequiredBody, PendingBody};
-#[cfg(feature = "resource-axum")]
-use crate::resource::{ResourceConsentFlowOutcome, ResourcePollOutcome};
+use aauth::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
+use aauth::deferred::{DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingOutcome};
+#[cfg(feature = "person-server")]
+use aauth::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
+use aauth::protocol::build_aauth_requirement;
+use aauth::protocol::{AAuthErrorCode, AAuthProtocolError, PaymentRequiredBody, PendingBody};
+#[cfg(feature = "resource")]
+use aauth::resource::ResourceConsentFlowOutcome;
+
+/// Owned wrapper so this crate can implement [`IntoResponse`] for `aauth` domain types
+/// (orphan rule).
+#[derive(Debug, Clone)]
+pub struct AauthResponse<T>(pub T);
+
+impl<T> From<T> for AauthResponse<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
 
 /// Infrastructure failure from a role service. Maps to spec `server_error` (500 + JSON).
 #[derive(Debug)]
@@ -59,7 +68,7 @@ pub fn polling_status(err: &AAuthProtocolError) -> StatusCode {
     }
 }
 
-fn insert_poll_headers(headers: &mut HeaderMap, requirement: &crate::deferred::DeferRequirement) {
+fn insert_poll_headers(headers: &mut HeaderMap, requirement: &aauth::deferred::DeferRequirement) {
     headers.insert("Retry-After", "0".parse().expect("valid header"));
     headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
     if let Ok(challenge) = requirement.header_challenge() {
@@ -75,7 +84,7 @@ fn insert_poll_headers(headers: &mut HeaderMap, requirement: &crate::deferred::D
 fn insert_defer_created_headers(
     headers: &mut HeaderMap,
     location: &str,
-    requirement: &crate::deferred::DeferRequirement,
+    requirement: &aauth::deferred::DeferRequirement,
 ) {
     headers.insert("Location", location.parse().expect("valid location"));
     insert_poll_headers(headers, requirement);
@@ -85,26 +94,26 @@ fn insert_defer_created_headers(
     );
 }
 
-impl IntoResponse for DeferCreated {
+impl IntoResponse for AauthResponse<DeferCreated> {
     fn into_response(self) -> Response {
-        let body = match PendingBody::for_created(&self.requirement) {
+        let body = match PendingBody::for_created(&self.0.requirement) {
             Ok(b) => b,
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
         };
         let mut headers = HeaderMap::new();
-        insert_defer_created_headers(&mut headers, &self.location, &self.requirement);
+        insert_defer_created_headers(&mut headers, &self.0.location, &self.0.requirement);
         (StatusCode::ACCEPTED, headers, Json(body)).into_response()
     }
 }
 
-impl IntoResponse for DeferWaiting {
+impl IntoResponse for AauthResponse<DeferWaiting> {
     fn into_response(self) -> Response {
-        let body = match PendingBody::for_waiting(&self.requirement, self.status) {
+        let body = match PendingBody::for_waiting(&self.0.requirement, self.0.status) {
             Ok(b) => b,
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
         };
         let mut headers = HeaderMap::new();
-        insert_poll_headers(&mut headers, &self.requirement);
+        insert_poll_headers(&mut headers, &self.0.requirement);
         headers.insert(
             "Content-Type",
             "application/json".parse().expect("valid content-type"),
@@ -113,10 +122,10 @@ impl IntoResponse for DeferWaiting {
     }
 }
 
-impl IntoResponse for PaymentRequiredDefer {
+impl IntoResponse for AauthResponse<PaymentRequiredDefer> {
     fn into_response(self) -> Response {
         let mut headers = HeaderMap::new();
-        headers.insert("Location", self.location.parse().expect("valid location"));
+        headers.insert("Location", self.0.location.parse().expect("valid location"));
         headers.insert(
             "Content-Type",
             "application/json".parse().expect("valid content-type"),
@@ -130,52 +139,43 @@ impl IntoResponse for PaymentRequiredDefer {
     }
 }
 
-#[cfg(any(feature = "access-server-axum", feature = "person-server-axum"))]
-impl IntoResponse for AuthTokenFlowOutcome {
+impl IntoResponse for AauthResponse<AuthTokenFlowOutcome> {
     fn into_response(self) -> Response {
-        match self {
-            Self::Granted(body) => (StatusCode::OK, Json(body)).into_response(),
-            Self::Deferred(defer) => defer.into_response(),
-            Self::Denied(err) => (StatusCode::FORBIDDEN, Json(err)).into_response(),
-            Self::Gone => StatusCode::GONE.into_response(),
+        match self.0 {
+            AuthTokenFlowOutcome::Granted(body) => (StatusCode::OK, Json(body)).into_response(),
+            AuthTokenFlowOutcome::Deferred(defer) => AauthResponse(defer).into_response(),
+            AuthTokenFlowOutcome::Denied(err) => (StatusCode::FORBIDDEN, Json(err)).into_response(),
+            AuthTokenFlowOutcome::Gone => StatusCode::GONE.into_response(),
         }
     }
 }
 
-#[cfg(any(
-    feature = "access-server-axum",
-    feature = "person-server-axum",
-    feature = "resource-axum"
-))]
-impl IntoResponse for AuthTokenPollOutcome {
+impl IntoResponse for AauthResponse<AuthTokenPollOutcome> {
     fn into_response(self) -> Response {
-        match self {
-            Self::Pending(waiting) => waiting.into_response(),
-            Self::Complete(outcome) => outcome.into_response(),
-            Self::Gone => StatusCode::GONE.into_response(),
+        match self.0 {
+            AuthTokenPollOutcome::Pending(waiting) => AauthResponse(waiting).into_response(),
+            AuthTokenPollOutcome::Complete(outcome) => AauthResponse(outcome).into_response(),
+            AuthTokenPollOutcome::Gone => StatusCode::GONE.into_response(),
         }
     }
 }
 
-#[cfg(feature = "person-server-axum")]
-impl IntoResponse for PersonTokenFlowOutcome {
+#[cfg(feature = "person-server")]
+impl IntoResponse for AauthResponse<PersonTokenFlowOutcome> {
     fn into_response(self) -> Response {
-        match self {
-            Self::Flow(flow) => flow.into_response(),
-            Self::Unauthorized => StatusCode::UNAUTHORIZED.into_response(),
-            Self::BadGateway => StatusCode::BAD_GATEWAY.into_response(),
-            Self::Gone => StatusCode::GONE.into_response(),
+        match self.0 {
+            PersonTokenFlowOutcome::Flow(flow) => AauthResponse(flow).into_response(),
+            PersonTokenFlowOutcome::Unauthorized => StatusCode::UNAUTHORIZED.into_response(),
+            PersonTokenFlowOutcome::BadGateway => StatusCode::BAD_GATEWAY.into_response(),
+            PersonTokenFlowOutcome::Gone => StatusCode::GONE.into_response(),
         }
     }
 }
 
-#[cfg(feature = "person-server-axum")]
-impl IntoResponse for crate::person_server::outcome::PersonInteractionOutcome {
+#[cfg(feature = "person-server")]
+impl IntoResponse for AauthResponse<PersonInteractionOutcome> {
     fn into_response(self) -> Response {
-        use crate::person_server::outcome::PersonInteractionOutcome;
-        use crate::protocol::AAuthProtocolError;
-
-        match self {
+        match self.0 {
             PersonInteractionOutcome::Redirect(location) => {
                 (StatusCode::FOUND, [(http::header::LOCATION, location)]).into_response()
             }
@@ -194,56 +194,33 @@ impl IntoResponse for crate::person_server::outcome::PersonInteractionOutcome {
     }
 }
 
-#[cfg(feature = "resource-axum")]
-impl IntoResponse for ResourceConsentFlowOutcome {
+#[cfg(feature = "resource")]
+impl IntoResponse for AauthResponse<ResourceConsentFlowOutcome> {
     fn into_response(self) -> Response {
-        match self {
-            Self::GrantOpaque(token) => {
+        match self.0 {
+            ResourceConsentFlowOutcome::GrantOpaque(token) => {
                 let mut headers = HeaderMap::new();
                 headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
                 (StatusCode::OK, headers).into_response()
             }
-            Self::Deferred(defer) => defer.into_response(),
-            Self::Denied(err) => (StatusCode::FORBIDDEN, Json(err)).into_response(),
+            ResourceConsentFlowOutcome::Deferred(defer) => AauthResponse(defer).into_response(),
+            ResourceConsentFlowOutcome::Denied(err) => {
+                (StatusCode::FORBIDDEN, Json(err)).into_response()
+            }
         }
     }
 }
 
-impl IntoResponse for PendingOutcome {
+impl IntoResponse for AauthResponse<PendingOutcome> {
     fn into_response(self) -> Response {
-        match self {
-            Self::AuthToken(body) => (StatusCode::OK, Json(body)).into_response(),
-            Self::OpaqueAccess(token) => {
+        match self.0 {
+            PendingOutcome::AuthToken(body) => (StatusCode::OK, Json(body)).into_response(),
+            PendingOutcome::OpaqueAccess(token) => {
                 let mut headers = HeaderMap::new();
                 headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
                 (StatusCode::OK, headers).into_response()
             }
-            Self::Error(err) => (polling_status(&err), Json(err)).into_response(),
+            PendingOutcome::Error(err) => (polling_status(&err), Json(err)).into_response(),
         }
     }
-}
-
-/// Map a pending snapshot to a poll outcome (for service poll methods).
-#[cfg(any(
-    feature = "access-server-axum",
-    feature = "person-server-axum",
-    feature = "resource-axum"
-))]
-pub fn poll_outcome_from_snapshot(snapshot: &PendingSnapshot) -> AuthTokenPollOutcome {
-    match snapshot {
-        PendingSnapshot::Complete(outcome) => AuthTokenPollOutcome::Complete(outcome.clone()),
-        PendingSnapshot::Waiting {
-            status,
-            requirement,
-        } => AuthTokenPollOutcome::Pending(DeferWaiting {
-            status: *status,
-            requirement: requirement.clone(),
-        }),
-    }
-}
-
-/// Resource poll mapping (same wire shape; removes completed record in handler if needed).
-#[cfg(feature = "resource-axum")]
-pub fn resource_poll_outcome_from_snapshot(snapshot: &PendingSnapshot) -> ResourcePollOutcome {
-    poll_outcome_from_snapshot(snapshot)
 }

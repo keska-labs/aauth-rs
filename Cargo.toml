@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["aauth"]
+members = ["aauth", "aauth-axum"]
 
 [workspace.package]
 edition = "2024"
@@ -10,7 +10,8 @@ authors = ["Lukas Friman <lukas.f@keska.io>"]
 repository = "https://github.com/keska-labs/aauth-rs"
 
 [workspace.dependencies]
-aauth = { path = "aauth" }
+aauth = { path = "aauth", default-features = false }
+aauth-axum = { path = "aauth-axum", default-features = false }
 async-trait = "0.1"
 base64 = "0.22"
 bytes = "1"

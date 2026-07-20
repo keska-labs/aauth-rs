@@ -9,33 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `aauth::protocol` module — single source of truth for cross-party wire types (JWT claim payloads, metadata documents, headers, token exchange, authorization, pending/governance bodies, protocol errors). Types remain re-exported at the crate root.
+- Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
+- Cross-language e2e suite in `e2e/` against vendored [packages-js](https://github.com/aauth-dev/packages-js) `main`: JS client → Rust server and Rust client → JS server over real HTTP.
+- Workspace crates `aauth-testkit` (shared axum harness + `ServerManifest`) and `aauth-e2e` binaries (`aauth-e2e-server`, `aauth-e2e-agent`) for Vitest subprocess fixtures.
 - Spec-complete governance wire types: `MissionProposalRequest`, `PermissionRequest`/`PermissionResponse`, `InteractionRequest`, `AuditRequest`, and related payloads.
 - `AuthorizationRequest`, `ResourceTokenResponse`, `AuthorizationGrantedResponse`, and resource authorization response bodies in `protocol::authorization`.
 - `AgentProviderMetadata` (replaces loose `MetadataDocument`) with typed agent-provider metadata fields from the spec.
 - `PaymentRequiredBody` in `protocol::pending` for `402` deferred poll responses.
-- Resource-initiated interaction: `ResourceInteractionProvider` and `interaction` on `ResourceTokenOptions`; PS `begin_interaction` / `resolve_interaction_callback` with `GET /interact` and `GET /interact/callback` axum handlers.
+- Resource-initiated interaction: `ResourceInteractionProvider` and `interaction` on `ResourceTokenOptions`; PS `begin_interaction` / `resolve_interaction_callback` with `GET /interact` and `GET /interact/callback` axum handlers (now in `aauth-axum`).
 - Public `sign_request`, `sign_request_with_auth_token`, and related helpers on `aauth::agent::reqwest` for custom transport adapters.
+- `PersonServerConfig` and `AccessServerConfig` as domain config types (no longer gated on axum).
+- `poll_outcome_from_snapshot` / `resource_poll_outcome_from_snapshot` in `aauth` deferred/resource modules.
 
 ### Changed
 
+- HTTP signature verification rebuilds the signature base in `Signature-Input` component order and includes covered headers such as `content-type` (interop with `@hellocoop/httpsig`). Incoming `Signature` values accept standard base64 in addition to URL-safe. `@method` in the signature base uses uppercase.
+- `sign_request` includes `content-type` in covered components for POST requests when that header is present.
 - JWT claim payload structs (`AgentClaims`, `AuthClaims`, `ResourceClaims`, …) moved from `jwt::claims` to `protocol::jwt`; `jwt` retains decode/verify only.
 - `AAuthChallenge` and header build/parse helpers moved from `headers` to `protocol::headers`.
 - Pending wire bodies (`PendingBody`, `PendingPostBody`, `PendingStatusBody`, clarification/claims challenges) moved from `deferred`/`types` to `protocol::pending`; `deferred` keeps server-state types only.
 - Crate-root re-exports now source protocol types from `protocol` instead of removed `types` and `headers` modules.
-
-### Changed
-
-- JWT claim payload structs (`AgentClaims`, `AuthClaims`, `ResourceClaims`, …) moved from `jwt::claims` to `protocol::jwt`; `jwt` retains decode/verify only.
-- `AAuthChallenge` and header build/parse helpers moved from `headers` to `protocol::headers`.
-- Pending wire bodies (`PendingBody`, `PendingPostBody`, `PendingStatusBody`, clarification/claims challenges) moved from `deferred`/`types` to `protocol::pending`; `deferred` keeps server-state types only.
-- Crate-root re-exports now source protocol types from `protocol` instead of removed `types` and `headers` modules.
-- Restructured `src/` into protocol-party modules: `agent`, `person_server`, `access_server`, `resource`, with shared siblings `deferred`, `policy`, and `server_axum`.
-- Granular Cargo features per role: `person-server`, `access-server`, `resource`, `person-server-axum`, `access-server-axum`, `resource-axum`; meta-features `server` and `full`.
+- Restructured `src/` into protocol-party modules: `agent`, `person_server`, `access_server`, `resource`, with shared siblings `deferred` and `policy`.
+- Granular Cargo features per role: `person-server`, `access-server`, `resource`; agent `agent`, `agent-reqwest`, `agent-reqwest-verify`; meta-features `server` and `full`.
 - Renamed features `client` → `agent`, `client-reqwest` → `agent-reqwest`; optional `agent-reqwest-verify` for 401 challenge binding checks via `resource-verify`.
 - `AuthTokenFlowOutcome` / `AuthTokenPollOutcome` moved to `deferred` (shared by Person and Access servers).
 - `ResourceAccessMode` lives in `resource::mode` (was `resource::policy`).
 - Flat crate-root re-exports are feature-gated to match enabled roles.
+- Axum HTTP adapters moved from `aauth` to `aauth-axum`; import handlers/layer/state from `aauth_axum` (examples and axum integration tests live under `aauth-axum/`).
 
 ### Removed
 
@@ -45,13 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aauth::client` module path (use `aauth::agent`).
 - `aauth::server` umbrella module (use role modules or flat re-exports).
 - `server` as a single module gate; use per-role features instead.
+- `aauth` features `server-axum`, `person-server-axum`, `access-server-axum`, `resource-axum`, and the `server_axum` / `*/axum` modules (use `aauth-axum`).
 
 ### Added
 
 - `resource-verify` feature — resource token verification (`verify_resource_token`, `verify_token`, audience resolution) without the full Resource Server service or axum layer.
 - `resource_verify` module for token verification used by Person Server federation and optional agent middleware.
 - `PersonServerOutboundSigner` and `OutboundSignatureProvider` trait for federation pending POST signing.
-- `full` meta-feature matching previous default feature set.
+- `full` meta-feature matching previous default feature set (roles + agent; axum is a separate crate).
 
 ## [0.0.2] - 2026-06-29
 

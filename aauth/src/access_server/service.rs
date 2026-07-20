@@ -1,6 +1,7 @@
-use crate::access_server::axum::AccessServerConfig;
+use crate::access_server::config::AccessServerConfig;
 use crate::access_server::keys::AccessAuthJwtMinter;
 use crate::access_server::outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
+use crate::deferred::poll_outcome_from_snapshot;
 use crate::deferred::{
     AccessPendingContext, AccessPendingRecord, DeferCreated, DeferRequirement, PendingInput,
     PendingOutcome, PendingSnapshot, PendingStore, generate_pending_id, pending_location,
@@ -11,7 +12,6 @@ use crate::policy::{
     AccessTokenContext, AccessTokenPolicy, AuthGrant, PolicyError, TokenPolicyDecision,
 };
 use crate::protocol::TokenResponseBody;
-use crate::server_axum::poll_outcome_from_snapshot;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AccessTokenServiceError {

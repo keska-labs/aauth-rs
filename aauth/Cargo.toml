@@ -20,9 +20,6 @@ default = [
     "person-server",
     "access-server",
     "resource",
-    "person-server-axum",
-    "access-server-axum",
-    "resource-axum",
 ]
 
 # --- Agent ---
@@ -55,12 +52,6 @@ person-server = [
 access-server = ["deferred", "policy"]
 resource = ["deferred", "policy", "resource-verify"]
 
-# --- Axum integration (per role) ---
-server-axum = ["dep:axum", "dep:tower"]
-person-server-axum = ["person-server", "server-axum"]
-access-server-axum = ["access-server", "server-axum"]
-resource-axum = ["resource", "server-axum"]
-
 # --- Convenience meta-features ---
 server = ["person-server", "access-server", "resource"]
 full = [
@@ -68,15 +59,10 @@ full = [
     "agent-reqwest",
     "agent-reqwest-verify",
     "server",
-    "person-server-axum",
-    "access-server-axum",
-    "resource-axum",
 ]
 
 [dependencies]
 async-trait.workspace = true
-axum = { workspace = true, optional = true }
-tower = { workspace = true, optional = true }
 base64.workspace = true
 bytes.workspace = true
 ed25519-dalek.workspace = true
@@ -104,67 +90,9 @@ reqwest.workspace = true
 reqwest-middleware.workspace = true
 http-body-util.workspace = true
 anyhow.workspace = true
-axum.workspace = true
-tower.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
 rstest.workspace = true
-
-[[example]]
-name = "identity_based"
-required-features = [
-    "agent-reqwest",
-    "person-server",
-    "access-server",
-    "resource",
-    "person-server-axum",
-    "access-server-axum",
-    "resource-axum",
-]
-
-[[example]]
-name = "person_server_managed"
-required-features = [
-    "agent-reqwest",
-    "person-server",
-    "access-server",
-    "resource",
-    "person-server-axum",
-    "access-server-axum",
-    "resource-axum",
-]
-
-[[example]]
-name = "resource_managed"
-required-features = [
-    "agent-reqwest",
-    "person-server",
-    "access-server",
-    "resource",
-    "person-server-axum",
-    "access-server-axum",
-    "resource-axum",
-]
-
-[[example]]
-name = "federated"
-required-features = [
-    "agent-reqwest",
-    "person-server",
-    "access-server",
-    "resource",
-    "person-server-axum",
-    "access-server-axum",
-    "resource-axum",
-]
-
-[[test]]
-name = "axum_integration"
-required-features = ["full"]
-
-[[test]]
-name = "example_flows"
-required-features = ["full"]
 
 [package.metadata.docs.rs]
 all-features = true

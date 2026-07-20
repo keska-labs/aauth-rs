@@ -1,8 +1,5 @@
 pub mod keys;
 
-#[cfg(feature = "resource-axum")]
-pub mod axum;
-
 mod interaction;
 mod mode;
 mod opaque;
@@ -19,7 +16,9 @@ pub use interaction::{ResourceInteractionContext, ResourceInteractionProvider};
 pub use keys::{Ed25519ResourceTokenSigner, ResourceTokenSigner};
 pub use mode::{ResourceAccessMode, ResourceAccessPolicy, ResourceAccessPolicyService};
 pub use opaque::{InMemoryOpaqueAccessStore, OpaqueAccessStore};
-pub use outcome::{ResourceConsentFlowOutcome, ResourcePollOutcome};
+pub use outcome::{
+    ResourceConsentFlowOutcome, ResourcePollOutcome, resource_poll_outcome_from_snapshot,
+};
 pub use service::{
     PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessService,
     ResourceAccessServiceError,

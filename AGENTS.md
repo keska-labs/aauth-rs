@@ -41,24 +41,34 @@ The agent JWT's `ps` claim names the Person Server. When `person_server_url` is 
 ```text
 aauth-rs/
 ├── Cargo.toml              # workspace root
-└── aauth/
+├── aauth/                  # protocol + role services (no axum)
+│   ├── src/
+│   │   ├── agent/              # agent runtime (feature `agent`)
+│   │   ├── person_server/      # Person Server (feature `person-server`)
+│   │   ├── access_server/      # Access Server (feature `access-server`)
+│   │   ├── resource/           # Resource Server (feature `resource`)
+│   │   ├── resource_verify/    # token verification only (feature `resource-verify`)
+│   │   ├── deferred/           # PendingStore, DeferCreated/DeferWaiting (feature `deferred`)
+│   │   ├── policy/             # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
+│   │   ├── signature.rs        # shared HTTP Signature build + verify
+│   │   └── …                   # JWT helpers, metadata cache, protocol types
+│   └── tests/                  # protocol / agent integration tests
+└── aauth-axum/             # axum HTTP adapters
     ├── src/
-    │   ├── agent/              # agent runtime (feature `agent`)
-    │   ├── person_server/      # Person Server (feature `person-server`)
-    │   ├── access_server/      # Access Server (feature `access-server`)
-    │   ├── resource/           # Resource Server (feature `resource`)
-    │   ├── resource_verify/    # token verification only (feature `resource-verify`)
-    │   ├── deferred/           # PendingStore, DeferCreated/DeferWaiting (feature `deferred`)
-    │   ├── policy/             # PersonTokenPolicy, AccessTokenPolicy, ResourceConsentPolicy
-    │   ├── server_axum/        # IntoResponse, PendingResumeInput, route re-exports (per `*-axum`)
-    │   ├── signature.rs        # shared HTTP Signature build + verify
-    │   └── …                   # headers, JWT helpers, metadata cache, types
-    └── tests/                  # protocol integration tests (TypeScript e2e parity)
+    │   ├── person/             # Person Server handlers + PersonServerState
+    │   ├── access/             # Access Server handlers + AccessServerState
+    │   ├── resource/           # ResourceAuthLayer, VerifiedAAuthToken, pending poll
+    │   ├── extract.rs          # PendingResumeInput
+    │   └── respond.rs          # AauthResponse, InternalServiceError, polling_status
+    ├── examples/               # explorer access-mode demos
+    └── tests/                  # axum HTTP integration tests
 ```
 
-**Shared protocol primitives** (no role prefix, always on): `headers`, `signature`, `jwt`, `metadata`, `types`, `interaction_code`. These implement wire format and are used by all roles.
+**Shared protocol primitives** (no role prefix, always on): `protocol`, `signature`, `jwt`, `metadata`, `interaction_code`. These implement wire format and are used by all roles.
 
-**Cargo features:** per-role `person-server`, `access-server`, `resource`, `person-server-axum`, `access-server-axum`, `resource-axum`; agent `agent`, `agent-reqwest`, `agent-reqwest-verify`; meta `server`, `full`. Protocol modules need no feature flag. Disable defaults to compile only the roles you need.
+**Cargo features (`aauth`):** per-role `person-server`, `access-server`, `resource`; agent `agent`, `agent-reqwest`, `agent-reqwest-verify`; meta `server`, `full`. Protocol modules need no feature flag.
+
+**Cargo features (`aauth-axum`):** `person-server`, `access-server`, `resource` (each enables the matching `aauth` role feature).
 
 ### Agent request flow
 
@@ -83,7 +93,7 @@ Deferred responses (`202 Accepted` + `Location` + optional `AAuth-Requirement`) 
 
 ### Resource access modes
 
-`ResourceAuthLayer` selects how the resource server evaluates requests (`ResourceAccessMode`):
+`aauth_axum::ResourceAuthLayer` selects how the resource server evaluates requests (`ResourceAccessMode`):
 
 | Mode | Variant | Parties | Description |
 |------|---------|---------|-------------|
@@ -96,7 +106,7 @@ When the Access Server returns `202` during federation, the Person Server pass-t
 
 ### Server policy, services, and deferred store
 
-Authorization decisions are pluggable via generic policy traits. Flow orchestration (policy evaluation, pending store, token minting) lives in **role service traits**; axum handlers verify signatures/JWTs then call the service and map outcomes via `IntoResponse`:
+Authorization decisions are pluggable via generic policy traits. Flow orchestration (policy evaluation, pending store, token minting) lives in **role service traits**; axum handlers in `aauth-axum` verify signatures/JWTs then call the service and map outcomes via `AauthResponse` / `IntoResponse`:
 
 | Trait | Role | Methods |
 |-------|------|---------|
@@ -104,7 +114,7 @@ Authorization decisions are pluggable via generic policy traits. Flow orchestrat
 | `AccessTokenService` | AS token exchange / pending | `exchange_token`, `poll_pending`, `resume_pending` |
 | `ResourceAccessService` | RS resource-managed consent | `consent_for_agent`, `poll_pending`, `validate_opaque` |
 
-Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`, `PolicyResourceAccessService`) wrap the policy traits below plus `PendingStore` and JWT minters. Service `Err` maps to spec `500` + `{ "error": "server_error" }` via `InternalServiceError`; protocol outcomes (`AuthTokenFlowOutcome`, etc.) map to 200/202/403/410/502 in `server_axum/respond.rs`.
+Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`, `PolicyResourceAccessService`) wrap the policy traits below plus `PendingStore` and JWT minters. Service `Err` maps to spec `500` + `{ "error": "server_error" }` via `InternalServiceError`; protocol outcomes (`AuthTokenFlowOutcome`, etc.) map to 200/202/403/410/502 in `aauth-axum` via `AauthResponse`.
 
 | Policy trait | Role | Decisions |
 |--------------|------|-----------|
@@ -114,17 +124,17 @@ Default implementations (`PolicyPersonTokenService`, `PolicyAccessTokenService`,
 
 Policies are **stateless**. In-flight deferred requests are persisted in a `PendingStore` (`InMemoryPendingStore` for tests).
 
-**Defer semantics (HTTP-free):** `DeferCreated` (initial 202 + `Location`), `DeferWaiting` (poll 202), `PendingBody` (serialize-side JSON). Flow outcomes carry these types; axum converts them via `IntoResponse` in `server_axum/respond.rs` only.
+**Defer semantics (HTTP-free):** `DeferCreated` (initial 202 + `Location`), `DeferWaiting` (poll 202), `PendingBody` (serialize-side JSON). Flow outcomes carry these types; axum converts them via `AauthResponse` / `IntoResponse` in `aauth-axum` only.
 
 **Pending POST ingress:** `PendingPostBody` (`#[serde(untagged)]` until the spec adds a wire discriminator) → `parse_pending_post_body` / `PendingResumeInput` `FromRequest` on person/access pending handlers.
 
-See [`.cursor/rules/prefer-rust-traits.mdc`](.cursor/rules/prefer-rust-traits.mdc): domain types stay HTTP-free; use `IntoResponse` / `FromRequest`, not `*_to_response` mappers.
+See [`.cursor/rules/prefer-rust-traits.mdc`](.cursor/rules/prefer-rust-traits.mdc): domain types stay HTTP-free; use `AauthResponse` / `IntoResponse` / `FromRequest` in `aauth-axum`, not `*_to_response` mappers.
 
-Axum state types hold a single service field: `PersonServerState<S>`, `AccessServerState<S>`, `ResourceServerState<S>`. Use `PersonServerState::from_policy(...)` for the default policy-backed setup.
+Axum state types hold a single service field: `PersonServerState<S>`, `AccessServerState<S>`, `ResourceServerState<S>` (in `aauth-axum`). Use `PersonServerState::from_policy(...)` for the default policy-backed setup.
 
 Reference test policies: `AlwaysGrantPersonPolicy`, `AlwaysGrantAccessPolicy`, `DeferInteractionPersonPolicy`, `ClarificationThenGrantPersonPolicy`, `DeferInteractionResourcePolicy`, `ClarificationThenGrantAccessPolicy`.
 
-Examples in `aauth/examples/` mirror the [AAuth explorer](https://explorer.aauth.dev/) access modes; matching E2E tests live in `tests/example_flows.rs`.
+Examples in `aauth-axum/examples/` mirror the [AAuth explorer](https://explorer.aauth.dev/) access modes; matching E2E tests live in `aauth-axum/tests/example_flows.rs`.
 
 ## Naming conventions
 
@@ -133,8 +143,8 @@ Public types follow a **role prefix** that matches AAuth protocol parties:
 | Prefix | Role | Examples |
 |--------|------|----------|
 | `Agent*` | Agent runtime (signed requests, token exchange, deferred polling) | `AgentOptions`, `AgentMiddleware`, `AgentAuth`, `AgentDeferredOptions` |
-| `Person*` / `Access*` | Person Server and Access Server | `PersonServerState`, `PersonTokenService`, `AccessTokenPolicy` |
-| `Resource*` | Resource Server | `ResourceAuthLayer`, `ResourceAccessMode`, `ResourceConsentPolicy` |
+| `Person*` / `Access*` | Person Server and Access Server | `PersonServerConfig`, `PersonTokenService`, `AccessTokenPolicy` (`PersonServerState` in `aauth-axum`) |
+| `Resource*` | Resource Server | `ResourceAccessMode`, `ResourceConsentPolicy` (`ResourceAuthLayer` in `aauth-axum`) |
 | `AAuth*` | Protocol-wide wire format, headers, and errors | `AAuthError`, `AAuthRequirementParams` |
 
 **Do not** use `Client*` for first-party agent types — `agent` is the module path.
@@ -154,12 +164,13 @@ User-visible API changes belong in [CHANGELOG.md](CHANGELOG.md) under the unrele
 ## Development
 
 ```bash
-cargo test --all-features
+cargo test --workspace --all-features
 cargo fmt --all
-cargo clippy --all-features -- -D warnings
+cargo clippy --workspace --all-features -- -D warnings
 
-cargo check --no-default-features --features person-server,person-server-axum
-cargo check --no-default-features --features access-server,access-server-axum
-cargo check --no-default-features --features resource,resource-axum
-cargo check --no-default-features --features agent,agent-reqwest
+cargo check -p aauth --no-default-features --features person-server
+cargo check -p aauth --no-default-features --features access-server
+cargo check -p aauth --no-default-features --features resource
+cargo check -p aauth --no-default-features --features agent,agent-reqwest
+cargo check -p aauth-axum --all-features
 ```

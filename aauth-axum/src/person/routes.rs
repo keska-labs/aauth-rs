@@ -1,60 +1,21 @@
-use std::sync::Arc;
-
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
-use crate::deferred::AuthTokenPollOutcome;
-use crate::deferred::{PendingStore, PersonPendingRecord};
-use crate::keys::TestKeys;
-use crate::metadata::MetadataFetcher;
-use crate::person_server::keys::AuthJwtMinter;
-use crate::person_server::orchestrate::{PersonOrchestrateConfig, verify_person_token_request};
-use crate::person_server::service::{PersonTokenService, PolicyPersonTokenService};
-use crate::policy::PersonTokenPolicy;
-use crate::protocol::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
-use crate::server_axum::{InternalServiceError, PendingResumeInput};
-use crate::signature::verify_request_signature;
+use aauth::AuthTokenPollOutcome;
+use aauth::PendingStore;
+use aauth::PersonPendingRecord;
+use aauth::PersonServerConfig;
+use aauth::person_server::keys::AuthJwtMinter;
+use aauth::person_server::orchestrate::verify_person_token_request;
+use aauth::person_server::service::{PersonTokenService, PolicyPersonTokenService};
+use aauth::policy::PersonTokenPolicy;
+use aauth::protocol::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
+use aauth::signature::verify_request_signature;
 
-#[derive(Clone)]
-pub struct PersonServerConfig {
-    pub keys: TestKeys,
-    pub person_server_url: String,
-    pub resource_url: String,
-    pub agent_url: String,
-    pub person_jwks_uri: String,
-    pub interaction_url: String,
-    pub pending_base_url: String,
-    pub pending_path: String,
-    pub pending_ttl_secs: u64,
-    pub fetcher: Arc<dyn MetadataFetcher>,
-    pub http_client: reqwest::Client,
-    /// Max seconds for federation pending polls (default 300).
-    pub federation_poll_max_secs: Option<u64>,
-}
-
-impl PersonServerConfig {
-    pub fn orchestrate(&self) -> PersonOrchestrateConfig {
-        PersonOrchestrateConfig {
-            person_server_url: self.person_server_url.clone(),
-            resource_url: self.resource_url.clone(),
-            interaction_url: self.interaction_url.clone(),
-            pending_base_url: self.pending_base_url.clone(),
-            pending_path: self.pending_path.clone(),
-            pending_ttl_secs: self.pending_ttl_secs,
-            fetcher: Arc::clone(&self.fetcher),
-            http_client: self.http_client.clone(),
-            federation: crate::person_server::federation::FederationConfig {
-                fetcher: Arc::clone(&self.fetcher),
-            },
-            federation_poll_max_secs: self.federation_poll_max_secs,
-            keys: self.keys.clone(),
-            person_server_signing_jwk: self.keys.person_server.signing_jwk(),
-        }
-    }
-}
+use crate::{AauthResponse, InternalServiceError, PendingResumeInput};
 
 #[derive(Clone)]
 pub struct PersonServerState<S>
@@ -144,7 +105,7 @@ where
     };
 
     match state.service.exchange_token(ctx, &verified_sig.jwt).await {
-        Ok(outcome) => outcome.into_response(),
+        Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
 }
@@ -152,7 +113,7 @@ where
 pub async fn pending_poll_handler<S>(
     State(state): State<PersonServerState<S>>,
     Path(id): Path<String>,
-) -> Result<AuthTokenPollOutcome, InternalServiceError>
+) -> Result<AauthResponse<AuthTokenPollOutcome>, InternalServiceError>
 where
     S: PersonTokenService,
 {
@@ -160,6 +121,7 @@ where
         .service
         .poll_pending(&id)
         .await
+        .map(AauthResponse)
         .map_err(InternalServiceError::from)
 }
 
@@ -172,7 +134,7 @@ where
     S: PersonTokenService,
 {
     match state.service.resume_pending(&id, input).await {
-        Ok(outcome) => outcome.into_response(),
+        Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
 }
@@ -199,7 +161,7 @@ where
     S: PersonTokenService,
 {
     match state.service.begin_interaction(&query.code).await {
-        Ok(outcome) => outcome.into_response(),
+        Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
 }
@@ -216,7 +178,7 @@ where
         .resolve_interaction_callback(&query.id, query.error.as_deref())
         .await
     {
-        Ok(outcome) => outcome.into_response(),
+        Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
 }

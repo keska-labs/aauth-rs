@@ -2,7 +2,7 @@ use axum::extract::FromRequestParts;
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 
-use crate::jwt::VerifiedToken;
+use aauth::jwt::VerifiedToken;
 
 pub struct VerifiedAAuthToken(pub VerifiedToken);
 

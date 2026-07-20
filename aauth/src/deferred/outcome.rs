@@ -1,5 +1,6 @@
 use crate::protocol::{AAuthProtocolError, TokenResponseBody};
 
+use super::types::PendingSnapshot;
 use super::{DeferCreated, DeferWaiting, PendingOutcome};
 
 /// Token exchange flow result for Person and Access servers.
@@ -31,4 +32,18 @@ pub enum AuthTokenPollOutcome {
     Pending(DeferWaiting),
     Complete(PendingOutcome),
     Gone,
+}
+
+/// Map a pending snapshot to a poll outcome (for service poll methods).
+pub fn poll_outcome_from_snapshot(snapshot: &PendingSnapshot) -> AuthTokenPollOutcome {
+    match snapshot {
+        PendingSnapshot::Complete(outcome) => AuthTokenPollOutcome::Complete(outcome.clone()),
+        PendingSnapshot::Waiting {
+            status,
+            requirement,
+        } => AuthTokenPollOutcome::Pending(DeferWaiting {
+            status: *status,
+            requirement: requirement.clone(),
+        }),
+    }
 }

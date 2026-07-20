@@ -8,20 +8,22 @@ use axum::http::{Request, Response, StatusCode};
 use axum::response::IntoResponse;
 use tower::{Layer, Service};
 
-use crate::jwt::VerifiedToken;
-use crate::metadata::MetadataFetcher;
-use crate::policy::ResourceAccessContext;
-use crate::protocol::AAuthChallenge;
-use crate::protocol::build_aauth_requirement;
-use crate::resource::keys::ResourceTokenSigner;
-use crate::resource::mode::ResourceAccessMode;
-use crate::resource::service::ResourceAccessService;
-use crate::resource::{
+use aauth::ResourceAccessMode;
+use aauth::ResourceAccessService;
+use aauth::jwt::VerifiedToken;
+use aauth::metadata::MetadataFetcher;
+use aauth::policy::ResourceAccessContext;
+use aauth::protocol::AAuthChallenge;
+use aauth::protocol::build_aauth_requirement;
+use aauth::resource::keys::ResourceTokenSigner;
+use aauth::resource::{
     ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenOptions,
     VerifyTokenOptions, create_resource_token, verify_auth_token_binding, verify_token,
 };
-use crate::resource_verify::resolve_resource_token_audience;
-use crate::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
+use aauth::resource_verify::resolve_resource_token_audience;
+use aauth::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
+
+use crate::AauthResponse;
 
 #[derive(Clone)]
 pub struct ResourceAuthLayer<RAS>
@@ -250,7 +252,7 @@ where
                     };
 
                     match service.consent_for_agent(ctx).await {
-                        Ok(outcome) => Ok(outcome.into_response()),
+                        Ok(outcome) => Ok(AauthResponse(outcome).into_response()),
                         Err(e) => Ok(unauthorized(e.to_string())),
                     }
                 }

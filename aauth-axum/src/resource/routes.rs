@@ -1,8 +1,9 @@
 use axum::extract::{Path, State};
 
-use crate::resource::ResourcePollOutcome;
-use crate::resource::service::ResourceAccessService;
-use crate::server_axum::InternalServiceError;
+use aauth::ResourceAccessService;
+use aauth::ResourcePollOutcome;
+
+use crate::{AauthResponse, InternalServiceError};
 
 #[derive(Clone)]
 pub struct ResourceServerState<S>
@@ -15,7 +16,7 @@ where
 pub async fn resource_pending_poll_handler<S>(
     State(state): State<ResourceServerState<S>>,
     Path(id): Path<String>,
-) -> Result<ResourcePollOutcome, InternalServiceError>
+) -> Result<AauthResponse<ResourcePollOutcome>, InternalServiceError>
 where
     S: ResourceAccessService,
 {
@@ -23,5 +24,6 @@ where
         .service
         .poll_pending(&id)
         .await
+        .map(AauthResponse)
         .map_err(InternalServiceError::from)
 }
