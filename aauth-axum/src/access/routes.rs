@@ -1,7 +1,9 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::Router;
+use axum::extract::{FromRef, OriginalUri, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
 
 use aauth::AccessPendingRecord;
 use aauth::AccessServerConfig;
@@ -65,6 +67,7 @@ where
 
 pub async fn access_token_exchange_handler<S>(
     State(state): State<AccessServerState<S>>,
+    OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
     body: Option<Json<AccessTokenExchangeRequest>>,
 ) -> Response
@@ -82,7 +85,7 @@ where
         None => return StatusCode::BAD_REQUEST.into_response(),
     };
 
-    if verify_request_signature("POST", &authority, "/as/access/aauth/token", &headers).is_err() {
+    if verify_request_signature("POST", &authority, uri.path(), &headers).is_err() {
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
@@ -124,4 +127,37 @@ where
         Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
+}
+
+/// Canonical Access Server routes (relative to the Access Server base URL).
+///
+/// Mounts:
+/// - `GET /.well-known/aauth-access.json`
+/// - `GET /access/jwks`
+/// - `POST /access/aauth/token`
+/// - `GET|POST /access/pending/{id}`
+///
+/// Nest under the Access Server URL path (for example `.nest("/as", access_router())`)
+/// when the AS shares an origin with other roles. App state must implement [`FromRef`]
+/// to [`AccessServerState`].
+pub fn access_router<AppState, Svc>() -> Router<AppState>
+where
+    AppState: Clone + Send + Sync + 'static,
+    Svc: AccessTokenService + 'static,
+    AccessServerState<Svc>: FromRef<AppState>,
+{
+    Router::new()
+        .route(
+            "/.well-known/aauth-access.json",
+            get(access_metadata_handler::<Svc>),
+        )
+        .route("/access/jwks", get(access_jwks_handler::<Svc>))
+        .route(
+            "/access/aauth/token",
+            post(access_token_exchange_handler::<Svc>),
+        )
+        .route(
+            "/access/pending/{id}",
+            get(access_pending_poll_handler::<Svc>).post(access_pending_post_handler::<Svc>),
+        )
 }

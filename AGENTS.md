@@ -55,9 +55,9 @@ aauth-rs/
 │   └── tests/                  # protocol / agent integration tests
 └── aauth-axum/             # axum HTTP adapters
     ├── src/
-    │   ├── person/             # Person Server handlers + PersonServerState
-    │   ├── access/             # Access Server handlers + AccessServerState
-    │   ├── resource/           # ResourceAuthLayer, VerifiedAAuthToken, pending poll
+    │   ├── person/             # Person Server handlers, person_router, PersonServerState
+    │   ├── access/             # Access Server handlers, access_router, AccessServerState
+    │   ├── resource/           # ResourceAuthLayer, resource_router, VerifiedAAuthToken
     │   ├── extract.rs          # PendingResumeInput
     │   └── respond.rs          # AauthResponse, InternalServiceError, polling_status
     ├── examples/               # explorer access-mode demos
@@ -68,7 +68,7 @@ aauth-rs/
 
 **Cargo features (`aauth`):** per-role `person-server`, `access-server`, `resource`; agent `agent`, `agent-reqwest`, `agent-reqwest-verify`; meta `server`, `full`. Protocol modules need no feature flag.
 
-**Cargo features (`aauth-axum`):** `person-server`, `access-server`, `resource` (each enables the matching `aauth` role feature).
+**Cargo features (`aauth-axum`):** `person-server`, `access-server`, `resource` (each enables the matching `aauth` role feature). Prefer `person_router` / `access_router` / `resource_router` (`merge` or `nest`) over hand-wiring individual handlers; apply `ResourceAuthLayer` to protected app routes separately.
 
 ### Agent request flow
 

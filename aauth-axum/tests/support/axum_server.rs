@@ -30,16 +30,13 @@ use aauth::{
 };
 use aauth_axum::{
     AccessServerState, PersonServerState, ResourceAuthLayer, ResourceServerState,
-    VerifiedAAuthToken, access_jwks_handler, access_metadata_handler, access_pending_poll_handler,
-    access_pending_post_handler, access_token_exchange_handler, interaction_callback_handler,
-    interaction_start_handler, pending_poll_handler, pending_post_handler, person_jwks_handler,
-    person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
+    VerifiedAAuthToken, access_router, person_router, resource_router,
 };
 use async_trait::async_trait;
 use axum::Json;
 use axum::Router;
 use axum::extract::{FromRef, State};
-use axum::routing::{get, post};
+use axum::routing::get;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
@@ -358,40 +355,15 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         .route("/agent/jwks", get(agent_jwks_handler));
 
     if config.with_auth_routes || config.federated {
-        app = app
-            .route(
-                "/.well-known/aauth-person.json",
-                get(person_metadata_handler),
-            )
-            .route("/auth/jwks", get(person_jwks_handler))
-            .route("/aauth/token", post(token_exchange_handler))
-            .route(
-                "/pending/{id}",
-                get(pending_poll_handler).post(pending_post_handler),
-            )
-            .route("/interact", get(interaction_start_handler))
-            .route("/interact/callback", get(interaction_callback_handler));
+        app = app.merge(person_router::<TestServerState, _>());
     }
 
     if config.federated {
-        app = app
-            .route(
-                "/as/.well-known/aauth-access.json",
-                get(access_metadata_handler),
-            )
-            .route("/as/access/jwks", get(access_jwks_handler))
-            .route(
-                "/as/access/aauth/token",
-                post(access_token_exchange_handler),
-            )
-            .route(
-                "/as/access/pending/{id}",
-                get(access_pending_poll_handler).post(access_pending_post_handler),
-            );
+        app = app.nest("/as", access_router::<TestServerState, _>());
     }
 
     if config.resource_managed {
-        app = app.route("/resource/pending/{id}", get(resource_pending_poll_handler));
+        app = app.merge(resource_router::<TestServerState, _>());
     }
 
     let app = app.with_state(test_state);

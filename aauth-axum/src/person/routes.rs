@@ -1,7 +1,9 @@
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::Router;
+use axum::extract::{FromRef, OriginalUri, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
 use serde::Deserialize;
 
 use aauth::AuthTokenPollOutcome;
@@ -66,6 +68,7 @@ where
 
 pub async fn token_exchange_handler<S>(
     State(state): State<PersonServerState<S>>,
+    OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
     body: Option<Json<TokenExchangeRequest>>,
 ) -> Response
@@ -79,8 +82,7 @@ where
         .unwrap_or("localhost")
         .to_string();
 
-    let verified_sig = match verify_request_signature("POST", &authority, "/aauth/token", &headers)
-    {
+    let verified_sig = match verify_request_signature("POST", &authority, uri.path(), &headers) {
         Ok(v) => v,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
@@ -181,4 +183,39 @@ where
         Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
+}
+
+/// Canonical Person Server routes.
+///
+/// Mounts:
+/// - `GET /.well-known/aauth-person.json`
+/// - `GET /auth/jwks`
+/// - `POST /aauth/token`
+/// - `GET|POST /pending/{id}`
+/// - `GET /interact`
+/// - `GET /interact/callback`
+///
+/// Merge into an app whose state implements [`FromRef`] to [`PersonServerState`].
+pub fn person_router<AppState, Svc>() -> Router<AppState>
+where
+    AppState: Clone + Send + Sync + 'static,
+    Svc: PersonTokenService + 'static,
+    PersonServerState<Svc>: FromRef<AppState>,
+{
+    Router::new()
+        .route(
+            "/.well-known/aauth-person.json",
+            get(person_metadata_handler::<Svc>),
+        )
+        .route("/auth/jwks", get(person_jwks_handler::<Svc>))
+        .route("/aauth/token", post(token_exchange_handler::<Svc>))
+        .route(
+            "/pending/{id}",
+            get(pending_poll_handler::<Svc>).post(pending_post_handler::<Svc>),
+        )
+        .route("/interact", get(interaction_start_handler::<Svc>))
+        .route(
+            "/interact/callback",
+            get(interaction_callback_handler::<Svc>),
+        )
 }

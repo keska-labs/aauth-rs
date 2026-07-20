@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `person_router`, `access_router`, and `resource_router` in `aauth-axum` to mount canonical role routes (`merge` / `nest` into an app whose state implements `FromRef` to the matching `*ServerState`).
 - Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
 - Cross-language e2e suite in `e2e/` against vendored [packages-js](https://github.com/aauth-dev/packages-js) `main`: JS client → Rust server and Rust client → JS server over real HTTP.
 - Workspace crates `aauth-testkit` (shared axum harness + `ServerManifest`) and `aauth-e2e` binaries (`aauth-e2e-server`, `aauth-e2e-agent`) for Vitest subprocess fixtures.
@@ -20,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public `sign_request`, `sign_request_with_auth_token`, and related helpers on `aauth::agent::reqwest` for custom transport adapters.
 - `PersonServerConfig` and `AccessServerConfig` as domain config types (no longer gated on axum).
 - `poll_outcome_from_snapshot` / `resource_poll_outcome_from_snapshot` in `aauth` deferred/resource modules.
+
+### Fixed
+
+- Person and Access token-exchange handlers verify HTTP signatures against the request path (`OriginalUri`) instead of hardcoded paths, so Access Server routes remain nestable.
 
 ### Changed
 
