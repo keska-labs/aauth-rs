@@ -11,5 +11,6 @@ pub struct ResourceInteractionContext {
 
 /// Optional hook for PS-asserted resources to embed a resource-initiated interaction claim.
 pub trait ResourceInteractionProvider: Send + Sync {
-    fn interaction_for(&self, ctx: &ResourceInteractionContext) -> Option<ResourceInteractionClaim>;
+    fn interaction_for(&self, ctx: &ResourceInteractionContext)
+    -> Option<ResourceInteractionClaim>;
 }

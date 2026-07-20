@@ -176,11 +176,9 @@ impl IntoResponse for crate::person_server::outcome::PersonInteractionOutcome {
         use crate::protocol::AAuthProtocolError;
 
         match self {
-            PersonInteractionOutcome::Redirect(location) => (
-                StatusCode::FOUND,
-                [(http::header::LOCATION, location)],
-            )
-                .into_response(),
+            PersonInteractionOutcome::Redirect(location) => {
+                (StatusCode::FOUND, [(http::header::LOCATION, location)]).into_response()
+            }
             PersonInteractionOutcome::InvalidCode => (
                 StatusCode::GONE,
                 Json(AAuthProtocolError::new(AAuthErrorCode::InvalidCode)),

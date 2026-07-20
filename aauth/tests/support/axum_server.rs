@@ -14,15 +14,20 @@ use aauth::VerifiedToken;
 use aauth::access_server::keys::TestAccessAuthJwtMinter;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::person_server::keys::TestAuthJwtMinter;
-use aauth::protocol::{AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument, ResourceInteractionClaim};
-use aauth::resource::{PolicyResourceAccessService, ResourceAccessConfig, ResourceInteractionContext, ResourceInteractionProvider};
+use aauth::protocol::{
+    AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument, ResourceInteractionClaim,
+};
+use aauth::resource::{
+    PolicyResourceAccessService, ResourceAccessConfig, ResourceInteractionContext,
+    ResourceInteractionProvider,
+};
 use aauth::server_axum::{
     AccessServerConfig, AccessServerState, PersonServerConfig, PersonServerState,
     ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, access_jwks_handler,
     access_metadata_handler, access_pending_poll_handler, access_pending_post_handler,
     access_token_exchange_handler, interaction_callback_handler, interaction_start_handler,
-    pending_poll_handler, pending_post_handler, person_jwks_handler,
-    person_metadata_handler, resource_pending_poll_handler, token_exchange_handler,
+    pending_poll_handler, pending_post_handler, person_jwks_handler, person_metadata_handler,
+    resource_pending_poll_handler, token_exchange_handler,
 };
 use aauth::{
     AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
@@ -53,7 +58,10 @@ struct StaticResourceInteractionProvider {
 }
 
 impl ResourceInteractionProvider for StaticResourceInteractionProvider {
-    fn interaction_for(&self, _ctx: &ResourceInteractionContext) -> Option<ResourceInteractionClaim> {
+    fn interaction_for(
+        &self,
+        _ctx: &ResourceInteractionContext,
+    ) -> Option<ResourceInteractionClaim> {
         Some(self.claim.clone())
     }
 }

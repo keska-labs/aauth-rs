@@ -3,21 +3,23 @@ use std::sync::Arc;
 use crate::deferred::AuthTokenPollOutcome;
 use crate::deferred::{
     DeferCreated, DeferRequirement, FederationPendingState, PendingInput, PendingOutcome,
-    PendingSnapshot, PendingStore, PersonPendingContext, PersonPendingRecord,
-    ServerPollOptions, ServerPollOutcome, generate_pending_id, pending_location, poll_pending_http,
+    PendingSnapshot, PendingStore, PersonPendingContext, PersonPendingRecord, ServerPollOptions,
+    ServerPollOutcome, generate_pending_id, pending_location, poll_pending_http,
     post_pending_input,
 };
 use crate::error::AAuthError;
+use crate::interaction_code::{canonicalize_code, generate_code};
 use crate::person_server::axum::PersonServerConfig;
 use crate::person_server::federation::{
     FederationOutcome, federate_to_access_server, verify_federated_auth_token,
 };
 use crate::person_server::keys::AuthJwtMinter;
-use crate::interaction_code::{canonicalize_code, generate_code};
 use crate::person_server::orchestrate::{PersonOrchestrateConfig, mint_person_auth};
 use crate::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
 use crate::policy::{PersonTokenContext, PersonTokenDecision, PersonTokenPolicy, PolicyError};
-use crate::protocol::{AAuthErrorCode, AAuthProtocolError, PendingStatus, ResourceInteractionClaim};
+use crate::protocol::{
+    AAuthErrorCode, AAuthProtocolError, PendingStatus, ResourceInteractionClaim,
+};
 use crate::server_axum::poll_outcome_from_snapshot;
 
 #[derive(Debug, thiserror::Error)]
@@ -217,8 +219,9 @@ where
                 return Ok(PersonInteractionOutcome::InvalidCode);
             }
         };
-        let body = crate::protocol::PendingBody::for_waiting(&requirement, PendingStatus::Interacting)
-            .map_err(PersonTokenServiceError::Orchestration)?;
+        let body =
+            crate::protocol::PendingBody::for_waiting(&requirement, PendingStatus::Interacting)
+                .map_err(PersonTokenServiceError::Orchestration)?;
         Ok(PersonInteractionOutcome::Pending(body))
     }
 
@@ -699,13 +702,11 @@ where
     M: AuthJwtMinter + Clone,
 {
     let orch = service.orch();
-    let resource_ix = ctx
-        .resource_claims
-        .interaction
-        .clone()
-        .ok_or_else(|| PersonTokenServiceError::Orchestration(AAuthError::Message(
+    let resource_ix = ctx.resource_claims.interaction.clone().ok_or_else(|| {
+        PersonTokenServiceError::Orchestration(AAuthError::Message(
             "resource token missing interaction claim".into(),
-        )))?;
+        ))
+    })?;
 
     let ps_code = generate_code();
     let requirement = DeferRequirement::Interaction {
