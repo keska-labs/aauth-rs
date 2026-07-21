@@ -107,7 +107,7 @@ pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Resul
     jsonwebtoken::decode::<ResourceClaims>(
         &options.jwt,
         &decoding_key,
-        &crate::jwt::verified_validation(),
+        &crate::jwt::verified_validation_for_jwt(&options.jwt)?,
     )
     .map(|data| data.claims)
     .map_err(|e| {

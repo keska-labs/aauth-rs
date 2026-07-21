@@ -7,7 +7,9 @@ pub use claims::{
     ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
     ResourceInteractionClaim, VerifiedToken, decode_resource_token_unverified,
 };
-pub use decode::{decode_unverified, decode_verified, verified_validation};
+pub use decode::{
+    decode_unverified, decode_verified, verified_validation, verified_validation_for_jwt,
+};
 #[cfg(any(feature = "person-server", feature = "access-server"))]
 pub(crate) use mint::{AuthJwtMintParams, encode_auth_jwt};
 

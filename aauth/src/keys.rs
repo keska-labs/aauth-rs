@@ -131,12 +131,13 @@ pub struct TestKeys {
 
 impl TestKeys {
     pub fn generate() -> Self {
+        let id = uuid::Uuid::new_v4().simple().to_string();
         Self {
-            agent_root: Ed25519KeyPair::generate_with_kid("agent-root-1"),
+            agent_root: Ed25519KeyPair::generate_with_kid(&format!("agent-root-{id}")),
             agent_ephemeral: Ed25519KeyPair::generate(),
-            person_server: Ed25519KeyPair::generate_with_kid("auth-1"),
-            access_server: Ed25519KeyPair::generate_with_kid("access-1"),
-            resource: Ed25519KeyPair::generate_with_kid("resource-1"),
+            person_server: Ed25519KeyPair::generate_with_kid(&format!("auth-{id}")),
+            access_server: Ed25519KeyPair::generate_with_kid(&format!("access-{id}")),
+            resource: Ed25519KeyPair::generate_with_kid(&format!("resource-{id}")),
         }
     }
 

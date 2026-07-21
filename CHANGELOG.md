@@ -25,8 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public getters on `AgentOptions` for transport adapters (`provider`, callbacks, hints, `metadata_fetcher` when `resource-verify` is on).
 - `person_router`, `access_router`, and `resource_router` in `aauth-axum` to mount canonical role routes (`merge` / `nest` into an app whose state implements `FromRef` to the matching `*ServerState`).
 - Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
-- Named `TestScenario` harness in `aauth-axum` tests/examples (identity / person-managed / resource-managed / federated) replacing boolean `ServerConfig` flags; `SpawnedServer::agent()` client builder.
 - `@aauth/fetch` CLI interop tests (`fetch_person_server`, `fetch_federated_hosted_ps`) for hybrid local axum + hosted whoami / Person Server (ignored; need bootstrap + `AAUTH_E2E_PUBLIC_BASE`).
+- JWT verification picks `Validation` algorithms from the token header (`EdDSA` or `ES256`); jsonwebtoken 10 rejects mixed algorithm families. Enables Secure Enclave / `@aauth/bootstrap` agent tokens.
 - Spec-complete governance wire types: `MissionProposalRequest`, `PermissionRequest`/`PermissionResponse`, `InteractionRequest`, `AuditRequest`, and related payloads.
 - `AuthorizationRequest`, `ResourceTokenResponse`, `AuthorizationGrantedResponse`, and resource authorization response bodies in `protocol::authorization`.
 - `AgentProviderMetadata` (replaces loose `MetadataDocument`) with typed agent-provider metadata fields from the spec.
@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `aauth-axum` examples build real axum apps in-file (`identity_resource_app`, `person_server_app`, … returning a `Router` served from `main`) with separate listeners per party; identity-based uses `ResourceAccessMode::IdentityBased`. Tests use one-hop app definers under `tests/support/apps/` instead of `TestScenario` / `spawn_test_server`.
 - `aauth` HTTP Message Signature sign/verify uses workspace crate `httpsig-key` (RFC 9421 via `httpsig`).
 - `aauth-reqwest` signing: `RequestSigningExt` on `reqwest::Request` (`.sign` / `.sign_with_auth_token`), `SigningOptions::apply_to`; removed free `sign_request` / `SignRequest` on `KeyMaterial` / free `sign_and_run` shim.
 - Demoted signature parse helpers (`parse_signature_*`) and removed thin `build_signature_base`; shared `http_util` for URL normalize + reqwest→http header copy; folded `person_server_from_agent_jwt` into `resolve_person_server_url`; demoted `resolve_deferred_location`.

@@ -6,7 +6,7 @@ pub use crate::protocol::{
     ResourceInteractionClaim,
 };
 
-use super::decode::{decode_unverified, decode_verified, verified_validation};
+use super::decode::{decode_unverified, decode_verified, verified_validation_for_jwt};
 
 impl AuthClaims {
     pub fn validate(&self) -> Result<()> {
@@ -55,7 +55,7 @@ impl VerifiedToken {
     pub fn decode_verified(jwt: &str, key: &jsonwebtoken::DecodingKey) -> Result<Self> {
         let typ = JwtTyp::from_jwt(jwt)?;
         let error_code = typ.verify_error_code();
-        let validation = verified_validation();
+        let validation = verified_validation_for_jwt(jwt)?;
 
         match typ {
             JwtTyp::Agent => decode_verified::<AgentClaims>(jwt, key, &validation)

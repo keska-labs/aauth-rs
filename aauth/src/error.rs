@@ -40,7 +40,7 @@ pub trait IntoAauthProtocol {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum JwtError {
-    #[error("JWT decode failed")]
+    #[error("JWT decode failed: {0}")]
     Decode(#[source] jsonwebtoken::errors::Error),
 
     #[error("missing typ header")]
