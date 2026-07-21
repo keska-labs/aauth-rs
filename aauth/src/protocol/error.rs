@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Direction: PS/Resource/AS -> Agent|PS error response bodies (4xx/5xx JSON).
 ///
-/// Spec: `draft-hardt-oauth-aauth-protocol.md#error-response-format`
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#error-response-format`,
+/// `#token-endpoint-error-codes`, `#polling-error-codes`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AAuthErrorCode {
     InvalidRequest,

@@ -25,7 +25,7 @@ pub struct PermissionRequest {
 ///
 /// Direction: PS -> Agent 200 POST `{permission_endpoint}` or 200 GET `{Location}`.
 ///
-/// Spec: `draft-hardt-oauth-aauth-protocol.md#permission-response`
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#permission-endpoint`
 #[serde_with::apply(
     Option => #[serde(default, skip_serializing_if = "Option::is_none")],
 )]

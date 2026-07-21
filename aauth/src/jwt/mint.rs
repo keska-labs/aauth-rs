@@ -1,4 +1,8 @@
 //! Shared auth JWT minting used by Person and Access servers.
+//!
+//! Spec: `draft-hardt-oauth-aauth-protocol.md#auth-tokens`.
+//! Re-authorization MUST clamp auth `exp` to agent token `exp`
+//! (`#re-authorization`) — not yet enforced here.
 
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use uuid::Uuid;

@@ -57,6 +57,9 @@ impl MetadataCache {
 }
 
 /// HTTP metadata discovery with per-instance caching and rate limiting.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#jwks-discovery` (MUST cache;
+/// MUST ≤1/min refetch), `#metadata-documents` (issuer match not yet enforced).
 #[derive(Clone)]
 pub struct CachedMetadataFetcher {
     client: Client,

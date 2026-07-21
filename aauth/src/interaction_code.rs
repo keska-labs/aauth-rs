@@ -1,10 +1,14 @@
 use rand::Rng;
 
 /// Crockford base32 alphabet — omits I, L, O, U to avoid visual ambiguity.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#interaction-code-format`
 pub const CROCKFORD32: &str = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 /// Generate an 8-symbol Crockford base32 interaction code (40 bits of entropy)
 /// in canonical form: `XXXX-XXXX`.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#interaction-code-format`
 pub fn generate_code() -> String {
     let mut buf = [0u8; 5];
     rand::rng().fill_bytes(&mut buf);
@@ -22,6 +26,9 @@ pub fn generate_code() -> String {
 }
 
 /// Canonicalize a user-presented interaction code to `XXXX-XXXX` form for lookup.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#interaction-code-format`
+/// (hyphen-stripped, case-insensitive; I/L→1, O→0)
 pub fn canonicalize_code(code: &str) -> String {
     let bare = code
         .replace('-', "")

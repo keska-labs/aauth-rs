@@ -26,6 +26,9 @@ impl<T> From<T> for AauthResponse<T> {
 }
 
 /// Infrastructure failure from a role service. Maps to spec `server_error` (500 + JSON).
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#error-response-format`,
+/// `#token-endpoint-error-codes` (`server_error`)
 #[derive(Debug)]
 pub struct InternalServiceError;
 
@@ -74,6 +77,7 @@ pub fn polling_status(err: &AAuthProtocolError) -> StatusCode {
 }
 
 fn insert_poll_headers(headers: &mut HeaderMap, requirement: &aauth::deferred::DeferRequirement) {
+    // Spec: `#deferred-responses` — Retry-After and Cache-Control: no-store REQUIRED on pending.
     headers.insert(RETRY_AFTER, "0".parse().expect("valid header"));
     headers.insert(CACHE_CONTROL, "no-store".parse().expect("valid header"));
     if let Ok(challenge) = requirement.header_challenge() {

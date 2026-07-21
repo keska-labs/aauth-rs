@@ -1,6 +1,8 @@
 //! Verify HTTP Message Signatures that use Signature-Key.
 //!
 //! Spec: `draft-hardt-httpbis-signature-key-05.txt` §3 (esp. §3.6 verification steps 8–9).
+//! AAuth profile: `draft-hardt-oauth-aauth-protocol.md#http-message-signatures-profile`,
+//! `#verification`, `#freshness-and-replay` (`created` window; `expires` not yet honored).
 //! JWT issuer JWKS verification is left to the application.
 
 use std::time::{SystemTime, UNIX_EPOCH};

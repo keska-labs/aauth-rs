@@ -91,7 +91,8 @@ pub struct CnfClaim {
 ///
 /// Direction: embedded in auth JWT payload (PS -> Agent or AS -> PS -> Agent).
 ///
-/// Spec: `draft-hardt-oauth-aauth-protocol.md#delegation-chain`
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#delegation-chain`,
+/// `#call-chaining`, `#upstream-token-verification`, `#sub-agents`
 #[serde_with::apply(
     Option => #[serde(default, skip_serializing_if = "Option::is_none")],
 )]
@@ -131,6 +132,8 @@ pub struct AgentClaims {
     /// HTTPS URL of the agent's person server. Distinct from `iss`.
     pub ps: Option<String>,
     /// Parent agent identifier when this token belongs to a sub-agent.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#sub-agents`
     pub parent_agent: Option<String>,
 }
 

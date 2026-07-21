@@ -14,6 +14,8 @@ pub const AAUTH_REQUIREMENT: HeaderName = HeaderName::from_static(AAUTH_REQUIREM
 /// Lowercase name for [`AAUTH_ACCESS`].
 pub const AAUTH_ACCESS_NAME: &str = "aauth-access";
 /// `AAuth-Access` response header (opaque resource-managed token).
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#aauth-access`
 pub const AAUTH_ACCESS: HeaderName = HeaderName::from_static(AAUTH_ACCESS_NAME);
 
 /// Lowercase name for [`AAUTH_CAPABILITIES`].
@@ -51,20 +53,33 @@ pub const PREFER: HeaderName = HeaderName::from_static(PREFER_NAME);
 /// Direction: Resource -> Agent 401/402 `{AAuth-Requirement}`; PS -> Agent 202 `{AAuth-Requirement}`;
 /// AS -> PS 202 `{AAuth-Requirement}` (federation pass-through).
 ///
-/// Spec: `draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure`
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#aauth-requirement-header-structure`,
+/// `#requirement-responses`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AAuthChallenge {
     /// `401` — AAuth agent token required.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-agent-token`
     AgentToken,
     /// `401`/`402` — auth token required with embedded resource token.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-auth-token`
     AuthToken { resource_token: String },
     /// `202` — approval pending; poll `Location`.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#approval-pending`
     Approval,
     /// `202` — user action required at interaction endpoint.
+    ///
+    /// Spec: Interaction Required under `#requirement-responses`
     Interaction { url: String, code: String },
     /// `202` — question posed (details in response body).
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-clarification`
     Clarification,
     /// `202` — identity claims required (AS only; details in body).
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-claims`
     Claims,
 }
 

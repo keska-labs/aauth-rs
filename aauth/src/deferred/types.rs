@@ -7,6 +7,8 @@ use crate::protocol::{
 };
 
 /// Initial `202` from token exchange, resource consent, or pending POST resume.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#deferred-responses`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeferCreated {
     pub location: String,
@@ -14,6 +16,8 @@ pub struct DeferCreated {
 }
 
 /// `202` while polling a pending URL (no new `Location`).
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#deferred-responses`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeferWaiting {
     pub status: PendingStatus,
@@ -21,6 +25,8 @@ pub struct DeferWaiting {
 }
 
 /// `402 Payment Required` defer stub — poll `Location` after payment settlement.
+///
+/// Spec: Payment required under `draft-hardt-oauth-aauth-protocol.md#as-token-endpoint`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaymentRequiredDefer {
     pub location: String,
@@ -84,18 +90,23 @@ pub fn parse_pending_post_body(body: &[u8]) -> Result<PendingInput, AAuthError> 
 /// Deferred `AAuth-Requirement` encoded for server-side pending state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeferRequirement {
+    /// Spec: Interaction Required under `#requirement-responses`
     Interaction {
         url: String,
         code: String,
     },
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-clarification`
     Clarification {
         question: String,
         timeout: Option<u64>,
     },
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-claims`
     Claims {
         required_claims: Vec<String>,
     },
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#approval-pending`
     Approval,
+    /// Spec: Payment required under `#as-token-endpoint` (stub; not a 202 body)
     Payment {
         location: String,
     },

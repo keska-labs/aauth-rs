@@ -453,6 +453,7 @@ impl AgentAuth {
         status: StatusCode,
         headers: &HeaderMap,
     ) -> Result<AgentAuthStep> {
+        // Spec: `#deferred-responses` — agents MUST handle `202` by polling Location.
         if status != StatusCode::UNAUTHORIZED {
             self.cache_opaque_from_headers(origin, headers);
             if status == StatusCode::ACCEPTED {
@@ -462,6 +463,9 @@ impl AgentAuth {
         }
 
         match attempt {
+            // Spec: `#re-authorization`, `#requirement-auth-token` (step-up) —
+            // drop cached auth and retry; step-up currently does not consume a
+            // new resource-token from this 401 (invalidate → agent-signed → challenge).
             AgentAuthAttempt::AuthToken(_) => {
                 if let Some(cached) = self.find_cached_token_key(origin) {
                     self.token_cache.remove(&cached);
@@ -473,12 +477,14 @@ impl AgentAuth {
                 Ok(AgentAuthStep::Invalidate(attempt.clone()))
             }
             AgentAuthAttempt::AgentSigned => {
+                // Spec: `#requirement-auth-token`, `#resource-challenge-verification`
                 if let Some(header) = header_value(headers, &AAUTH_REQUIREMENT) {
                     let challenge = AAuthChallenge::from_header(header)?;
                     if let crate::protocol::AAuthChallenge::AuthToken { resource_token } = challenge
                     {
                         return Ok(AgentAuthStep::ExchangeToken { resource_token });
                     }
+                    // Spec: `#requirement-agent-token` — AgentToken challenge not handled yet.
                 }
                 Ok(AgentAuthStep::Finish)
             }

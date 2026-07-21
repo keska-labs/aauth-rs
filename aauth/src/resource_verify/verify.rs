@@ -21,6 +21,11 @@ pub struct VerifyResourceTokenOptions<F> {
     pub fetcher: F,
 }
 
+/// Verify an agent or auth JWT presented with an HTTP Message Signature (`cnf` ↔ thumbprint).
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#agent-tokens` (Agent Token Verification),
+/// `#auth-token-verification` (JWT trust + request-context `cnf` binding),
+/// `#jwks-discovery`
 pub async fn verify_token<F: MetadataFetcher>(
     options: VerifyTokenOptions<F>,
 ) -> Result<ParsedToken> {
@@ -65,6 +70,10 @@ pub async fn verify_token<F: MetadataFetcher>(
     })
 }
 
+/// Verify a resource JWT (`typ=aa-resource+jwt`).
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#resource-token-structure`,
+/// Resource Token Verification under `#resource-tokens`
 pub async fn verify_resource_token<F: MetadataFetcher>(
     options: VerifyResourceTokenOptions<F>,
 ) -> Result<ResourceClaims> {
@@ -132,6 +141,9 @@ pub async fn verify_resource_token<F: MetadataFetcher>(
 }
 
 /// Verify auth token `aud` binding for resource access.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#auth-token-verification`
+/// (request-context binding)
 pub fn verify_auth_token_binding(auth: &AuthClaims, resource_url: &str) -> Result<()> {
     if normalize_server_url(&auth.aud) != normalize_server_url(resource_url) {
         return Err(VerifyError::AudMismatch.into());
@@ -139,8 +151,11 @@ pub fn verify_auth_token_binding(auth: &AuthClaims, resource_url: &str) -> Resul
     Ok(())
 }
 
-/// MUST claim checks for an auth token returned from token exchange
-/// (`#auth-token-response-verification` steps 2–6), without JWT signature verification.
+/// MUST claim checks for an auth token returned from token exchange,
+/// without JWT signature verification.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#auth-token-response-verification`
+/// (steps 2–6)
 fn verify_client_auth_token_claims(
     auth: &AuthClaims,
     resource_url: &str,
@@ -193,6 +208,8 @@ fn verify_client_auth_token_claims(
 ///
 /// Always applies MUST claim checks. When `verify_signature` is `true` (spec SHOULD),
 /// also verifies the JWT signature via the issuer JWKS.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#auth-token-response-verification`
 pub async fn verify_client_auth_token<F: MetadataFetcher>(
     jwt: &str,
     resource_url: &str,
@@ -238,6 +255,9 @@ pub async fn verify_client_auth_token<F: MetadataFetcher>(
 }
 
 /// Verify a resource token from a `401` challenge before token exchange.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#resource-challenge-verification`,
+/// `#requirement-auth-token`
 pub async fn verify_resource_challenge<F: MetadataFetcher>(
     jwt: &str,
     resource_url: &str,
@@ -260,6 +280,9 @@ pub async fn verify_resource_challenge<F: MetadataFetcher>(
     })
 }
 
+/// Resolve issuer JWKS and select the key by JWT `kid`.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#jwks-discovery`
 async fn fetch_decoding_key<F: MetadataFetcher>(
     iss: &str,
     dwk: &str,

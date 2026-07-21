@@ -4,6 +4,8 @@
 //! keeps AAuth-facing types (`VerifiedSignature`, JWT required) and error mapping.
 //!
 //! Spec: `draft-hardt-httpbis-signature-key-05.txt` §3; AAuth uses `scheme=jwt`.
+//! AAuth profile: `draft-hardt-oauth-aauth-protocol.md#http-message-signatures-profile`,
+//! `#verification`, `#keying-material`.
 
 use http::HeaderMap;
 use http::header::AUTHORIZATION;

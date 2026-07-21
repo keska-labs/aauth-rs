@@ -17,7 +17,10 @@ impl std::fmt::Display for AudienceError {
 
 impl std::error::Error for AudienceError {}
 
-/// Resolve resource token `aud` per spec `#requirement-auth-token`.
+/// Resolve resource token `aud`: Access Server URL when federated, else agent `ps`, else fallback.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#resource-tokens`,
+/// `#requirement-auth-token`, `#fig-federated`, `#fig-ps-asserted`
 pub fn resolve_resource_token_audience(
     agent: &AgentClaims,
     access_server_url: Option<&str>,

@@ -15,7 +15,9 @@ use super::common::Capability;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenExchangeRequest {
     pub resource_token: String,
+    /// Spec: `#call-chaining`, `#upstream-token-verification` (runtime not yet wired).
     pub upstream_token: Option<String>,
+    /// Spec: `#sub-agents` (parent-mediated; runtime not yet wired).
     pub subagent_token: Option<String>,
     pub justification: Option<String>,
     pub login_hint: Option<String>,
@@ -39,7 +41,9 @@ pub struct TokenExchangeRequest {
 pub struct AccessTokenExchangeRequest {
     pub resource_token: String,
     pub agent_token: String,
+    /// Spec: `#call-chaining`, `#upstream-token-verification` (runtime not yet wired).
     pub upstream_token: Option<String>,
+    /// Spec: `#sub-agents` (runtime not yet wired).
     pub subagent_token: Option<String>,
 }
 

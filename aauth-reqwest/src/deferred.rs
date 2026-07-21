@@ -16,6 +16,11 @@ use tokio::time::sleep;
 use crate::error::Result;
 use crate::signed::SignedSend;
 
+/// Poll a deferred `Location` until a terminal response.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#deferred-responses`
+/// (Polling with GET; respect `Retry-After`; `429`/post-terminal `410` incomplete).
+
 const DEFAULT_MAX_POLL_DURATION: u64 = 300;
 const DEFAULT_PREFER_WAIT: u64 = 45;
 

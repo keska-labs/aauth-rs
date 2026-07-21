@@ -1,4 +1,8 @@
 //! Resource `authorization_endpoint` request and response bodies.
+//!
+//! Wire types only — no axum route or agent client yet.
+//! Spec: `draft-hardt-oauth-aauth-protocol.md#authorization-endpoint-request`,
+//! `#authorization-endpoint-responses`, `#resource-tokens`.
 
 use serde::{Deserialize, Serialize};
 

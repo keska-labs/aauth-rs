@@ -181,6 +181,7 @@ pub struct JwksDocument {
 /// authorized party -> PS/AS POST `{revocation_endpoint}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#token-revocation`
+/// (wire type only — no `/revoke` route or jti deny-list yet).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RevocationRequest {
     pub jti: String,

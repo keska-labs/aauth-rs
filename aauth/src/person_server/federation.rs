@@ -24,6 +24,10 @@ pub enum FederationOutcome {
 }
 
 impl<F: MetadataFetcher> PersonServerConfig<F> {
+    /// Federate a resource-token exchange to the Access Server named in `aud`.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#access-server-federation`,
+    /// `#as-token-endpoint`, `#ps-as-federation`, `#access-server-metadata`
     pub async fn federate_to_access_server(
         &self,
         resource_token: &str,
@@ -107,6 +111,8 @@ impl<F: MetadataFetcher> PersonServerConfig<F> {
         let status = response.status().as_u16();
 
         if status == 402 {
+            // Spec: `#as-token-endpoint` Payment required — settle then poll Location.
+            // Stub: payment settlement is not implemented; treat as hard error.
             return Err(DeferredError::PaymentNotRequirement.into());
         }
 
@@ -154,6 +160,10 @@ impl<F: MetadataFetcher> PersonServerConfig<F> {
     }
 }
 
+/// Verify an auth token minted by an AS before returning it to the agent.
+///
+/// Spec: Auth Token Delivery under `draft-hardt-oauth-aauth-protocol.md#as-token-endpoint`,
+/// `#auth-token-verification`
 pub async fn verify_federated_auth_token<F: MetadataFetcher>(
     auth_token: &str,
     expected_iss: &str,

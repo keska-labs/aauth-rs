@@ -26,6 +26,11 @@ use aauth::signature::{SignatureVerifyOptions, verify_request_signature_with_opt
 
 use crate::AauthResponse;
 
+/// Tower layer that enforces AAuth resource access modes on protected routes.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#overview-identity-access`,
+/// `#overview-resource-managed`, `#requirement-auth-token`, `#aauth-access`,
+/// `#http-message-signatures-profile`
 #[derive(Clone)]
 pub struct ResourceAuthLayer<RAS, F, T, I = NoResourceInteraction>
 where
@@ -206,6 +211,7 @@ where
             }
 
             match (&mode, &verified) {
+                // Spec: `#overview-identity-access`
                 (ResourceAccessMode::IdentityBased, _) => {
                     req.extensions_mut().insert(verified);
                     inner.call(req).await
@@ -218,6 +224,8 @@ where
                     },
                     ParsedToken::Agent(agent),
                 ) => {
+                    // Spec: `#requirement-auth-token`, `#resource-tokens`,
+                    // `#resource-initiated-interaction` (optional interaction claim)
                     let audience = match resolve_resource_token_audience(
                         agent,
                         access_server_url.as_deref(),
@@ -264,10 +272,12 @@ where
                         .body(Body::from("Auth token required"))
                         .expect("valid response"))
                 }
+                // Spec: `#fig-ps-asserted` / `#fig-federated` — auth JWT accepted
                 (ResourceAccessMode::PsAsserted { .. }, _) => {
                     req.extensions_mut().insert(verified);
                     inner.call(req).await
                 }
+                // Spec: `#resource-managed-auth`, `#aauth-access`
                 (ResourceAccessMode::ResourceManaged { service }, ParsedToken::Agent(agent)) => {
                     let ctx = ResourceAccessContext {
                         resource_url: resource_url.clone(),
@@ -329,6 +339,9 @@ fn request_signature_parts<B>(req: &Request<B>) -> (String, String, String) {
 }
 
 fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
+    // Spec: `#verification` — failures SHOULD carry Signature-Error (not yet emitted).
+    // Spec: `#requirement-agent-token` — IdentityBased missing-credential path SHOULD
+    // emit `AAuth-Requirement: requirement=agent-token` (not yet emitted).
     let err = err.into();
     if let Some((status, protocol)) = aauth::IntoAauthProtocol::into_aauth_protocol(err) {
         let status = StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED);

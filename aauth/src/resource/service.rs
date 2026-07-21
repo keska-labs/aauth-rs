@@ -14,6 +14,8 @@ pub struct ResourceAccessContext {
 }
 
 /// Resource-managed consent evaluation result.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#resource-managed-auth`
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResourceConsentFlowOutcome {
     GrantOpaque(String),
@@ -44,6 +46,9 @@ pub trait LocalResourceAccessService: Sync {
 
     async fn poll_pending(&self, pending_id: &str) -> Result<ResourcePollOutcome, Self::Error>;
 
+    /// Validate an opaque token from `Authorization: AAuth …` / `AAuth-Access`.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#aauth-access`
     fn validate_opaque(&self, token: &str, agent_id: &str) -> bool;
 }
 
@@ -72,20 +77,31 @@ impl ResourceAccessService for NoResourceAccessService {
 }
 
 /// How a resource server evaluates access for incoming agent requests.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md` resource access modes
+/// (`#overview-identity-access`, `#overview-resource-managed`, PS-asserted / federated).
 #[derive(Clone)]
 pub enum ResourceAccessMode<S = NoResourceAccessService>
 where
     S: ResourceAccessService,
 {
     /// Grant based on verified agent or auth token identity alone.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#overview-identity-access`
     IdentityBased,
     /// Delegate authorization to the agent's Person Server (or Access Server when federated).
+    ///
+    /// With `access_server_url: None`, three-party PS-asserted access
+    /// (`#fig-ps-asserted`). With `Some(as_url)`, four-party federated access
+    /// (`#fig-federated`); resource token `aud` is the AS.
     PsAsserted {
         require_auth_token: bool,
         access_server_url: Option<String>,
         person_server_fallback: Option<String>,
     },
     /// Resource manages authorization via interaction and opaque access tokens.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#overview-resource-managed`
     ResourceManaged { service: S },
 }
 
@@ -98,6 +114,8 @@ pub struct ResourceInteractionContext {
 }
 
 /// Optional hook for PS-asserted resources to embed a resource-initiated interaction claim.
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#resource-initiated-interaction`
 pub trait ResourceInteractionProvider: Send + Sync {
     fn interaction_for(&self, ctx: &ResourceInteractionContext)
     -> Option<ResourceInteractionClaim>;

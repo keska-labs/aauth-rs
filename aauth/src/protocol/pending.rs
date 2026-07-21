@@ -22,7 +22,7 @@ pub struct PendingStatusBody {
 ///
 /// Direction: PS -> Agent 202 GET/POST `{Location}`; Resource -> Agent 202 `{Location}`; AS -> PS 202 `{Location}`.
 ///
-/// Spec: `draft-hardt-oauth-aauth-protocol.md#clarification-required-requirement-clarification`
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-clarification`
 #[serde_with::apply(
     Option => #[serde(default, skip_serializing_if = "Option::is_none")],
 )]
@@ -39,7 +39,7 @@ pub struct ClarificationChallenge {
 ///
 /// Direction: AS -> PS 202 GET `{Location}` (federation).
 ///
-/// Spec: `draft-hardt-oauth-aauth-protocol.md#claims-required-requirement-claims`
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-claims`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimsChallenge {
     pub status: PendingStatus,
@@ -73,7 +73,7 @@ pub struct ClarificationResponse {
 ///
 /// Direction: PS -> AS POST `{Location}`; Agent -> PS POST `{Location}` (pass-through).
 ///
-/// Spec: `draft-hardt-oauth-aauth-protocol.md#claims-required-requirement-claims`
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-claims`
 #[serde_with::apply(
     Option => #[serde(default, skip_serializing_if = "Option::is_none")],
 )]
