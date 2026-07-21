@@ -1,10 +1,12 @@
+use std::convert::TryFrom;
+
 use aauth::SignatureError;
 use aauth::protocol::{
     AAUTH_CAPABILITIES, AAUTH_MISSION, Capability, KeyMaterial, Mission, SignatureKey,
     SignatureKeyJwt,
 };
-use aauth::signature::sign_request_headers;
 use http::header::{AUTHORIZATION, HeaderValue};
+use httpsig_key::{SignOptions, SigningMaterial, sign};
 use reqwest::{Request, Response};
 
 use crate::error::Result;
@@ -89,13 +91,21 @@ impl RequestSigningExt for Request {
         let method = self.method().as_str().to_string();
         let authority = self.url().authority().to_string();
         let path = self.url().path().to_string();
-        sign_request_headers(
+
+        let signing = SigningMaterial::try_from(key_material)?;
+        let mut options = SignOptions::default();
+        if let Some(auth) = authorization {
+            options
+                .extras
+                .push((AUTHORIZATION.as_str().to_string(), auth));
+        }
+        sign(
             self.headers_mut(),
             &method,
             &authority,
             &path,
-            key_material,
-            authorization.as_deref(),
+            &signing,
+            &options,
         )?;
 
         Ok(())

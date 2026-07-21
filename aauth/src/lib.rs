@@ -7,7 +7,6 @@ pub mod jwt;
 pub mod keys;
 pub mod metadata;
 pub mod protocol;
-pub mod signature;
 
 #[cfg(feature = "agent")]
 pub mod agent;
@@ -36,6 +35,7 @@ pub use error::{
     AAuthError, AgentAuthError, DeferredError, HeaderError, IntoAauthProtocol, JwtError,
     MetadataError, ResourceTokenError, Result, SignatureError, VerifyError, VerifyReason,
 };
+pub use httpsig_key::SignatureErrorHeader;
 pub use interaction_code::{canonicalize_code, generate_code};
 pub use jwt::{
     ActClaim, AgentClaims, AuthClaims, CnfClaim, ParsedToken, PublicJwk, ResourceClaims,

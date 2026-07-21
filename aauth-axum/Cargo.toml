@@ -32,6 +32,7 @@ aauth-policy = { workspace = true, optional = true, default-features = false }
 aauth-reqwest = { workspace = true, optional = true }
 axum.workspace = true
 http.workspace = true
+httpsig-key.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

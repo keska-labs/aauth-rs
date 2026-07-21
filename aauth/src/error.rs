@@ -181,6 +181,45 @@ impl SignatureError {
     }
 }
 
+impl From<httpsig_key::Error> for SignatureError {
+    fn from(err: httpsig_key::Error) -> Self {
+        match err {
+            httpsig_key::Error::MissingSignatureKey => Self::MissingSignatureKey,
+            httpsig_key::Error::MissingJwtParam => Self::MissingJwtParam,
+            httpsig_key::Error::MissingSignatureInput => Self::MissingSignatureInput,
+            httpsig_key::Error::MissingSignature => Self::MissingSignature,
+            httpsig_key::Error::MissingComponent("authorization") => {
+                Self::MissingAuthorizationComponent
+            }
+            httpsig_key::Error::MissingComponent(c) => Self::MissingComponent(c),
+            httpsig_key::Error::AuthorizationHeaderMissing => Self::AuthorizationHeaderMissing,
+            httpsig_key::Error::CreatedInFuture => Self::CreatedInFuture,
+            httpsig_key::Error::Expired => Self::Expired,
+            httpsig_key::Error::MissingCreated => Self::MissingCreated,
+            httpsig_key::Error::InvalidCreated(e) => Self::InvalidCreated(e),
+            httpsig_key::Error::InvalidSignatureFormat => Self::InvalidSignatureFormat,
+            httpsig_key::Error::InvalidEncoding(e) => Self::InvalidEncoding(e),
+            httpsig_key::Error::InvalidKeyLength => Self::InvalidKeyLength,
+            httpsig_key::Error::UnsupportedSigningJwk { kty, crv } => {
+                Self::UnsupportedSigningJwk { kty, crv }
+            }
+            httpsig_key::Error::MissingEcY => Self::MissingEcY,
+            httpsig_key::Error::VerificationFailed => Self::VerificationFailed,
+            httpsig_key::Error::UnsupportedScheme(s) if s == "hwk" => Self::HwkUnsupported,
+            httpsig_key::Error::HwkSignUnsupported => Self::HwkUnsupported,
+            httpsig_key::Error::InvalidHeaderValue(e) => Self::InvalidHeaderValue(e),
+            httpsig_key::Error::MissingCoveredComponents => Self::MissingCoveredComponents,
+            other => Self::HttpsigKey(other.to_string()),
+        }
+    }
+}
+
+impl From<httpsig_key::Error> for AAuthError {
+    fn from(err: httpsig_key::Error) -> Self {
+        Self::Signature(err.into())
+    }
+}
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum MetadataError {

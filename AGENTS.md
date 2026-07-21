@@ -65,7 +65,7 @@ aauth-rs/
     └── tests/                  # axum HTTP integration tests
 ```
 
-**Shared protocol primitives** (no role prefix, always on): `protocol`, `signature`, `jwt`, `metadata`, `interaction_code`. These implement wire format and are used by all roles.
+**Shared protocol primitives** (no role prefix, always on): `protocol`, `jwt`, `metadata`, `interaction_code`. HTTP Signature Keys live in workspace crate `httpsig-key`. These implement wire format and are used by all roles.
 
 **Cargo features (`aauth`):** per-role `person-server`, `access-server`, `resource`; agent `agent`; meta `server`, `full`. Protocol modules need no feature flag.
 

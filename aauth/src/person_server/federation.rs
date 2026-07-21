@@ -1,4 +1,6 @@
 use http::HeaderMap;
+use httpsig_key::{SignOptions, SigningMaterial, sign};
+use std::convert::TryFrom;
 use url::Url;
 
 use crate::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response};
@@ -8,10 +10,10 @@ use crate::metadata::MetadataFetcher;
 use crate::person_server::keys::mint_person_server_signature_jwt;
 use crate::person_server::service::PersonServerConfig;
 use crate::protocol::{
-    AccessServerMetadata, AccessTokenExchangeRequest, JwtTyp, TokenResponseBody,
+    AccessServerMetadata, AccessTokenExchangeRequest, JwtTyp, KeyMaterial, SignatureKey,
+    SignatureKeyJwt, TokenResponseBody,
 };
 use crate::resource_verify::{VerifyTokenOptions, verify_token};
-use crate::signature::apply_outbound_signature;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FederationOutcome {
@@ -88,14 +90,20 @@ impl<F: MetadataFetcher> PersonServerConfig<F> {
             http::header::CONTENT_TYPE,
             http::HeaderValue::from_static("application/json"),
         );
-        apply_outbound_signature(
+        let material = KeyMaterial {
+            signing_jwk: self.person_server_signing_jwk(),
+            signature_key: SignatureKey::Jwt(SignatureKeyJwt {
+                jwt: mint_person_server_signature_jwt(&self.keys, &self.person_server_url),
+            }),
+        };
+        let signing = SigningMaterial::try_from(&material)?;
+        sign(
             &mut headers,
             "POST",
             &authority,
             &path,
-            &mint_person_server_signature_jwt(&self.keys, &self.person_server_url),
-            &self.person_server_signing_jwk(),
-            None,
+            &signing,
+            &SignOptions::default(),
         )?;
 
         let mut request = client.post(&metadata.token_endpoint).body(body_json);

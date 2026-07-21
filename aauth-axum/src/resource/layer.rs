@@ -11,6 +11,7 @@ use tower::{Layer, Service};
 use aauth::ResourceAccessContext;
 use aauth::ResourceAccessMode;
 use aauth::ResourceAccessService;
+use aauth::SignatureError;
 use aauth::jwt::ParsedToken;
 use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge, SIGNATURE_ERROR};
@@ -22,7 +23,7 @@ use aauth::resource::{
 use aauth::resource_verify::{
     VerifyTokenOptions, resolve_resource_token_audience, verify_auth_token_binding, verify_token,
 };
-use aauth::signature::{SignatureVerifyOptions, verify_request_signature_with_options};
+use httpsig_key::{VerifyOptions, verify};
 
 use crate::AauthResponse;
 
@@ -166,30 +167,32 @@ where
             let opaque_retry = opaque_auth.as_ref().map(|t| t.is_some()).unwrap_or(true);
 
             let sig_options = if opaque_retry {
-                SignatureVerifyOptions {
+                VerifyOptions {
                     require_authorization: true,
-                    ..SignatureVerifyOptions::default()
+                    ..VerifyOptions::default()
                 }
             } else {
-                SignatureVerifyOptions::default()
+                VerifyOptions::default()
             };
 
-            let verified_sig = match verify_request_signature_with_options(
-                &method,
-                &authority,
-                &path,
-                req.headers(),
-                &sig_options,
-            ) {
+            let verified = match verify(&method, &authority, &path, req.headers(), &sig_options) {
                 Ok(v) => v,
                 Err(e) => {
-                    let err: aauth::AAuthError = e.into();
+                    let err: aauth::AAuthError = SignatureError::from(e).into();
                     if identity_based && err.is_missing_agent_credential() {
                         return Ok(agent_token_required());
                     }
                     return Ok(unauthorized_err(err));
                 }
             };
+            let Some(jwt) = verified.jwt else {
+                let err: aauth::AAuthError = SignatureError::MissingJwtParam.into();
+                if identity_based && err.is_missing_agent_credential() {
+                    return Ok(agent_token_required());
+                }
+                return Ok(unauthorized_err(err));
+            };
+            let thumbprint = verified.thumbprint;
 
             if let ResourceAccessMode::ResourceManaged { service } = &mode {
                 match &opaque_auth {
@@ -197,11 +200,9 @@ where
                         return Ok(unauthorized_message("invalid opaque access token"));
                     }
                     Ok(Some(opaque_token)) => {
-                        let agent_id = agent_sub_from_jwt(&verified_sig.jwt);
+                        let agent_id = agent_sub_from_jwt(&jwt);
                         if service.validate_opaque(opaque_token, &agent_id) {
-                            if let Ok(ParsedToken::Agent(agent)) =
-                                ParsedToken::parse(&verified_sig.jwt)
-                            {
+                            if let Ok(ParsedToken::Agent(agent)) = ParsedToken::parse(&jwt) {
                                 req.extensions_mut().insert(ParsedToken::Agent(agent));
                                 return inner.call(req).await;
                             }
@@ -213,8 +214,8 @@ where
             }
 
             let verified = match verify_token(VerifyTokenOptions {
-                jwt: verified_sig.jwt.clone(),
-                http_signature_thumbprint: verified_sig.thumbprint.clone(),
+                jwt: jwt.clone(),
+                http_signature_thumbprint: thumbprint.clone(),
                 fetcher: &fetcher,
             })
             .await
@@ -275,14 +276,14 @@ where
                         interaction_provider.interaction_for(&ResourceInteractionContext {
                             resource_url: resource_url.clone(),
                             agent: agent.clone(),
-                            agent_jkt: verified_sig.thumbprint.clone(),
+                            agent_jkt: thumbprint.clone(),
                         });
 
                     let resource_token = match (ResourceTokenOptions {
                         resource: resource_url,
                         audience,
                         agent: agent.identifier().to_string(),
-                        agent_jkt: verified_sig.thumbprint,
+                        agent_jkt: thumbprint,
                         scope: None,
                         mission: None,
                         lifetime: None,

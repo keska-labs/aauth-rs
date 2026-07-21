@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use aauth::TestKeys;
 use aauth::protocol::{AAUTH_REQUIREMENT, AgentOkResponse, SIGNATURE_ERROR};
-use aauth::signature::SignatureErrorHeader;
+use aauth::SignatureErrorHeader;
 use rstest::rstest;
 
 use support::AGENT_ID;

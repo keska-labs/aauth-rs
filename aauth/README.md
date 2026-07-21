@@ -27,7 +27,7 @@ aauth = { version = "0.0", default-features = false, features = ["person-server"
 
 ## Features
 
-Protocol modules (`protocol`, `jwt`, `signature`, `metadata`, `error`, …) are **always** compiled. Role features gate the rest:
+Protocol modules (`protocol`, `jwt`, `metadata`, `error`, …) are **always** compiled. Role features gate the rest:
 
 | Feature | What you get |
 |---------|----------------|
@@ -57,10 +57,9 @@ Primary integration surface for servers: implement the `*Service` traits with yo
 
 - [`protocol`] — headers, challenges, token exchange bodies, metadata documents, governance wire types
 - [`jwt`] — agent / auth / resource claim types and parsing
-- [`signature`] — HTTP Message Signature build/verify (AAuth profile)
 - [`metadata`] — `MetadataFetcher` and simple static/local fetchers
 - [`keys`] — Ed25519 helpers and [`TestKeys`] for examples and tests
-- [`error`] — `AAuthError` and typed domain errors
+- [`error`] — `AAuthError` and typed domain errors (includes `SignatureError`; `SignatureErrorHeader` re-exported from `httpsig_key`)
 
 ## Agent overview
 

@@ -24,6 +24,7 @@ dynosaur.workspace = true
 ed25519-dalek.workspace = true
 http.workspace = true
 jsonwebtoken.workspace = true
+httpsig-key.workspace = true
 reqwest.workspace = true
 reqwest-middleware.workspace = true
 serde.workspace = true

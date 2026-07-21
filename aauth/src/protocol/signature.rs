@@ -3,7 +3,14 @@
 //! Wire schemes: `draft-hardt-httpbis-signature-key-05.txt` §3.
 //! AAuth agent presentation typically uses `scheme=jwt` (`#keying-material`).
 
+use std::convert::TryFrom;
+
+use httpsig_key::protocol::{
+    SignatureKey as HttpsigSignatureKey, SignatureKeyJwt as HttpsigSignatureKeyJwt, SigningMaterial,
+};
+
 use super::jwt::SigningJwk;
+use crate::error::SignatureError;
 
 /// `Signature-Key` header value using `scheme=jwt`.
 ///
@@ -55,4 +62,20 @@ pub enum SignatureKey {
 pub struct KeyMaterial {
     pub signing_jwk: SigningJwk,
     pub signature_key: SignatureKey,
+}
+
+impl TryFrom<&KeyMaterial> for SigningMaterial {
+    type Error = SignatureError;
+
+    fn try_from(material: &KeyMaterial) -> Result<Self, Self::Error> {
+        let jwt = match &material.signature_key {
+            SignatureKey::Jwt(j) => j.jwt.clone(),
+            SignatureKey::JktJwt(j) => j.jwt.clone(),
+            SignatureKey::Hwk(_) => return Err(SignatureError::HwkUnsupported),
+        };
+        Ok(SigningMaterial {
+            signing_jwk: material.signing_jwk.clone(),
+            signature_key: HttpsigSignatureKey::Jwt(HttpsigSignatureKeyJwt { jwt }),
+        })
+    }
 }

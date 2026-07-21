@@ -1,7 +1,8 @@
 use aauth::KeyMaterialProvider;
+use aauth::SignatureError;
 use aauth::TestKeys;
-use aauth::signature::verify_request_signature;
 use aauth_reqwest::RequestSigningExt;
+use httpsig_key::{VerifyOptions, verify};
 
 #[tokio::test]
 async fn sign_request_verify_roundtrip() {
@@ -16,13 +17,15 @@ async fn sign_request_verify_roundtrip() {
     req.sign(&material).unwrap();
 
     let headers = req.headers().clone();
-    let verified = verify_request_signature(
+    let verified = verify(
         req.method().as_str(),
         req.url().authority(),
         req.url().path(),
         &headers,
+        &VerifyOptions::default(),
     )
     .unwrap();
+    let _jwt = verified.jwt.ok_or(SignatureError::MissingJwtParam).unwrap();
 
     assert_eq!(verified.thumbprint, keys.agent_ephemeral.thumbprint());
 }

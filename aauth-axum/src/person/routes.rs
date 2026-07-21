@@ -12,7 +12,7 @@ use aauth::PersonServerConfig;
 use aauth::metadata::MetadataFetcher;
 use aauth::person_server::service::PersonTokenService;
 use aauth::protocol::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
-use aauth::signature::verify_request_signature;
+use httpsig_key::{VerifyOptions, verify};
 
 use crate::{AauthResponse, InternalServiceError, PendingResumeInput};
 
@@ -80,10 +80,20 @@ pub async fn token_exchange_handler<S: PersonTokenService, F: MetadataFetcher>(
         .unwrap_or("localhost")
         .to_string();
 
-    let verified_sig = match verify_request_signature("POST", &authority, uri.path(), &headers) {
+    let verified = match verify(
+        "POST",
+        &authority,
+        uri.path(),
+        &headers,
+        &VerifyOptions::default(),
+    ) {
         Ok(v) => v,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
+    let Some(jwt) = verified.jwt else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let thumbprint = verified.thumbprint;
 
     let request = match body {
         Some(Json(b)) => b,
@@ -93,19 +103,14 @@ pub async fn token_exchange_handler<S: PersonTokenService, F: MetadataFetcher>(
     let resource_token = request.resource_token.clone();
     let ctx = match state
         .config
-        .verify_token_request(
-            &verified_sig.jwt,
-            &verified_sig.thumbprint,
-            &resource_token,
-            request,
-        )
+        .verify_token_request(&jwt, &thumbprint, &resource_token, request)
         .await
     {
         Ok(c) => c,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
-    match state.service.exchange_token(ctx, &verified_sig.jwt).await {
+    match state.service.exchange_token(ctx, &jwt).await {
         Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }

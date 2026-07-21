@@ -12,7 +12,7 @@ use aauth::ResourceConsentFlowOutcome;
 use aauth::ResourcePollOutcome;
 use aauth::jwt::ParsedToken;
 use aauth::protocol::{AAUTH_ACCESS, AuthorizationGrantedResponse, AuthorizationRequest};
-use aauth::signature::verify_request_signature;
+use httpsig_key::{VerifyOptions, verify};
 
 use crate::{AauthResponse, InternalServiceError};
 
@@ -59,9 +59,18 @@ where
         .unwrap_or("localhost")
         .to_string();
 
-    let verified_sig = match verify_request_signature("POST", &authority, uri.path(), &headers) {
+    let verified = match verify(
+        "POST",
+        &authority,
+        uri.path(),
+        &headers,
+        &VerifyOptions::default(),
+    ) {
         Ok(v) => v,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+    let Some(jwt) = verified.jwt else {
+        return StatusCode::UNAUTHORIZED.into_response();
     };
 
     let request = match body {
@@ -69,7 +78,7 @@ where
         None => return StatusCode::BAD_REQUEST.into_response(),
     };
 
-    let agent = match ParsedToken::parse(&verified_sig.jwt) {
+    let agent = match ParsedToken::parse(&jwt) {
         Ok(ParsedToken::Agent(agent)) => agent,
         _ => return StatusCode::UNAUTHORIZED.into_response(),
     };

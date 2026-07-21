@@ -1,15 +1,17 @@
+use std::convert::TryFrom;
 use std::time::{Duration, Instant};
 
 use http::HeaderMap;
 use http::header::{CONTENT_TYPE, RETRY_AFTER};
+use httpsig_key::{SignOptions, SigningMaterial, sign};
 use tokio::time::sleep;
 
 use crate::error::{DeferredError, Result};
 use crate::jwt::SigningJwk;
 use crate::protocol::{
-    AAuthErrorCode, AAuthProtocolError, ClarificationResponse, PREFER, TokenResponseBody,
+    AAuthErrorCode, AAuthProtocolError, ClarificationResponse, KeyMaterial, PREFER, SignatureKey,
+    SignatureKeyJwt, TokenResponseBody,
 };
-use crate::signature::apply_outbound_signature;
 
 use super::parse::{parse_auth_token_response, parse_deferred_response};
 use super::types::{DeferRequirement, PendingInput};
@@ -88,14 +90,20 @@ pub async fn post_pending_input<S: OutboundSignatureProvider + ?Sized>(
         };
         let path = parsed.path().to_string();
         let mut headers = HeaderMap::new();
-        apply_outbound_signature(
+        let material = KeyMaterial {
+            signing_jwk: signer.signing_jwk().clone(),
+            signature_key: SignatureKey::Jwt(SignatureKeyJwt {
+                jwt: signer.signature_jwt(),
+            }),
+        };
+        let signing = SigningMaterial::try_from(&material)?;
+        sign(
             &mut headers,
             "POST",
             &authority,
             &path,
-            &signer.signature_jwt(),
-            signer.signing_jwk(),
-            None,
+            &signing,
+            &SignOptions::default(),
         )?;
         for (name, value) in headers.iter() {
             request = request.header(name, value);

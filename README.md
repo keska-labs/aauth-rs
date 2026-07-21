@@ -99,12 +99,13 @@ aauth-axum = { version = "0.0", default-features = false, features = ["resource"
 use std::sync::Arc;
 
 use aauth::protocol::{KeyMaterial, SignatureKey, SignatureKeyJwt};
-use aauth::signature::sign_request_headers;
 use aauth::{NoResourceAccessService, ResourceAccessMode, TestKeys};
 use aauth_axum::{ResourceAuthLayer, VerifiedAAuthToken};
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header::HOST};
 use axum::{Json, Router, routing::get};
+use httpsig_key::{SignOptions, SigningMaterial, sign};
+use std::convert::TryFrom;
 use tower::ServiceExt;
 
 #[tokio::main]
@@ -136,7 +137,16 @@ let authority = "resource.example";
 let path = "/api/data";
 let mut headers = axum::http::HeaderMap::new();
 headers.insert(HOST, authority.parse().unwrap());
-sign_request_headers(&mut headers, "GET", authority, path, &material, None).unwrap();
+let signing = SigningMaterial::try_from(&material).unwrap();
+sign(
+    &mut headers,
+    "GET",
+    authority,
+    path,
+    &signing,
+    &SignOptions::default(),
+)
+.unwrap();
 
 let mut req = Request::builder()
     .method("GET")

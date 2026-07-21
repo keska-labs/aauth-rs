@@ -30,6 +30,12 @@ pub enum AgentError {
     BodyNotCloneable,
 }
 
+impl From<httpsig_key::Error> for AgentError {
+    fn from(err: httpsig_key::Error) -> Self {
+        Self::Signature(err.into())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, AgentError>;
 
 /// Map a `reqwest_middleware` failure back to [`AgentError`], preferring a downcast when the

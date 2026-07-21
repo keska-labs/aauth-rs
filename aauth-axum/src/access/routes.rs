@@ -12,7 +12,7 @@ use aauth::AuthTokenPollOutcome;
 use aauth::access_server::service::AccessTokenService;
 use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
-use aauth::signature::verify_request_signature;
+use httpsig_key::{VerifyOptions, verify};
 
 use crate::{AauthResponse, InternalServiceError, PendingResumeInput};
 
@@ -82,7 +82,15 @@ pub async fn access_token_exchange_handler<S: AccessTokenService, F: MetadataFet
         None => return StatusCode::BAD_REQUEST.into_response(),
     };
 
-    if verify_request_signature("POST", &authority, uri.path(), &headers).is_err() {
+    if verify(
+        "POST",
+        &authority,
+        uri.path(),
+        &headers,
+        &VerifyOptions::default(),
+    )
+    .is_err()
+    {
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
