@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::HeaderMap;
 use tokio::time::sleep;
 
 use crate::error::{DeferredError, Result};
@@ -80,9 +80,7 @@ pub async fn post_pending_input(
     let mut request = client.post(url).header("content-type", content_type);
     if let Some(signer) = signer {
         let parsed = url::Url::parse(url).map_err(DeferredError::InvalidUrl)?;
-        let authority = parsed
-            .host_str()
-            .ok_or(DeferredError::MissingHost)?;
+        let authority = parsed.host_str().ok_or(DeferredError::MissingHost)?;
         let authority = match parsed.port() {
             Some(port) => format!("{authority}:{port}"),
             None => authority.to_string(),
@@ -107,7 +105,10 @@ pub async fn post_pending_input(
     let response = request.send().await.map_err(DeferredError::Transport)?;
 
     let status = response.status().as_u16();
-    let body = response.bytes().await.map_err(DeferredError::ResponseBody)?;
+    let body = response
+        .bytes()
+        .await
+        .map_err(DeferredError::ResponseBody)?;
 
     if status == 200 {
         return parse_auth_token_response(status, &body).map(Some);
@@ -142,9 +143,12 @@ pub async fn poll_pending_http(
             .map_err(DeferredError::Transport)?;
 
         let status = response.status().as_u16();
-        let headers = response_headers_to_http(response.headers());
+        let headers = crate::http_util::response_headers_to_http(response.headers());
         let retry_after = parse_retry_after(&headers);
-        let body = response.bytes().await.map_err(DeferredError::ResponseBody)?;
+        let body = response
+            .bytes()
+            .await
+            .map_err(DeferredError::ResponseBody)?;
 
         if status == 200 {
             if let Ok(token) = parse_auth_token_response(status, &body) {
@@ -187,19 +191,6 @@ pub async fn poll_pending_http(
     }
 
     Err(DeferredError::TimedOut(max_duration).into())
-}
-
-fn response_headers_to_http(headers: &reqwest::header::HeaderMap) -> HeaderMap {
-    let mut map = HeaderMap::new();
-    for (name, value) in headers.iter() {
-        if let (Ok(n), Ok(v)) = (
-            HeaderName::from_bytes(name.as_str().as_bytes()),
-            HeaderValue::from_bytes(value.as_bytes()),
-        ) {
-            map.insert(n, v);
-        }
-    }
-    map
 }
 
 fn parse_retry_after(headers: &HeaderMap) -> Option<u64> {
@@ -292,7 +283,7 @@ mod tests {
         let location = format!("{}/pending/abc", mock.uri());
         let body = crate::protocol::PendingBody::for_created(&requirement).expect("pending body");
         let challenge = requirement.header_challenge().expect("challenge");
-        let aauth_req = crate::protocol::build_aauth_requirement(&challenge).expect("requirement");
+        let aauth_req = challenge.to_header();
 
         let template = wiremock::ResponseTemplate::new(202)
             .insert_header("Location", location.as_str())

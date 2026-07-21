@@ -50,18 +50,24 @@ impl TestKeys {
     pub fn person_auth_jwt_minter(&self) -> TestPersonAuthJwtMinter {
         TestPersonAuthJwtMinter::new(self.clone())
     }
-}
 
-pub fn mint_person_auth_jwt(
-    keys: &TestKeys,
-    iss: &str,
-    aud: &str,
-    agent: &str,
-    sub: Option<&str>,
-    scope: Option<&str>,
-) -> String {
-    keys.person_auth_jwt_minter()
-        .mint_person_auth_jwt(iss, aud, agent, sub, scope)
+    pub fn mint_person_auth_jwt(
+        &self,
+        iss: &str,
+        aud: &str,
+        agent: &str,
+        sub: Option<&str>,
+        scope: Option<&str>,
+    ) -> String {
+        PersonAuthJwtMinter::mint_person_auth_jwt(
+            &self.person_auth_jwt_minter(),
+            iss,
+            aud,
+            agent,
+            sub,
+            scope,
+        )
+    }
 }
 
 /// Mint a short-lived agent JWT for the Person Server to use in outbound HTTP signatures.

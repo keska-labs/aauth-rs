@@ -62,6 +62,14 @@ impl TestKeys {
     pub fn agent_jwt_minter(&self) -> TestAgentJwtMinter {
         TestAgentJwtMinter::new(self.clone())
     }
+
+    pub fn mint_agent_jwt(&self, agent_url: &str, sub: &str, ps: Option<&str>) -> String {
+        AgentJwtMinter::mint_agent_jwt(&self.agent_jwt_minter(), agent_url, sub, ps)
+    }
+
+    pub fn key_provider(&self, agent_jwt: impl Into<String>) -> Arc<dyn KeyMaterialProvider> {
+        StaticKeyMaterialProvider::from_test_keys(self, agent_jwt).into_arc()
+    }
 }
 
 pub struct StaticKeyMaterialProvider {
@@ -90,12 +98,4 @@ impl KeyMaterialProvider for StaticKeyMaterialProvider {
     async fn key_material(&self) -> Result<KeyMaterial> {
         Ok(self.material.clone())
     }
-}
-
-pub fn mint_agent_jwt(keys: &TestKeys, agent_url: &str, sub: &str, ps: Option<&str>) -> String {
-    keys.agent_jwt_minter().mint_agent_jwt(agent_url, sub, ps)
-}
-
-pub fn create_key_provider(keys: &TestKeys, agent_jwt: String) -> Arc<dyn KeyMaterialProvider> {
-    StaticKeyMaterialProvider::from_test_keys(keys, agent_jwt).into_arc()
 }

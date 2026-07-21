@@ -3,6 +3,7 @@ use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, decode_header};
 
 use crate::error::{JwtError, Result, VerifyError, VerifyReason};
+use crate::http_util::normalize_server_url;
 use crate::jwt::{
     AuthClaims, ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint,
 };
@@ -116,10 +117,6 @@ pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Resul
         )
         .into()
     })
-}
-
-fn normalize_server_url(url: &str) -> String {
-    url.trim_end_matches('/').to_lowercase()
 }
 
 /// Verify auth token `aud` binding for resource access.

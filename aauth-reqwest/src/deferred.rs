@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use aauth::DeferredError;
 use aauth::MetadataError;
 use aauth::agent::auth::{AgentOptions, ClarificationCallback, InteractionCallback};
-use aauth::protocol::parse_aauth_requirement;
 use aauth::protocol::{
     AAuthChallenge, AAuthProtocolError, ClarificationChallenge, ClarificationResponse,
 };
@@ -212,7 +211,7 @@ pub(crate) async fn poll_deferred_with<S: SignedSend>(
 
             if let Some(header) = requirement_header {
                 if let Ok(AAuthChallenge::Interaction { url, code }) =
-                    parse_aauth_requirement(&header)
+                    AAuthChallenge::from_header(&header)
                 {
                     if let Some(on_interaction) = &options.on_interaction {
                         on_interaction(url, code);
@@ -249,11 +248,7 @@ fn retry_delay_from_secs(retry_after: Option<u64>, fallback_ms: u64) -> u64 {
 }
 
 fn header_contains_json(response: &Response) -> bool {
-    response
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| v.contains("application/json"))
+    headers_contain_json(response.headers())
 }
 
 async fn split_error(response: Response) -> Result<(Response, Option<AAuthProtocolError>)> {
@@ -273,10 +268,12 @@ async fn split_error(response: Response) -> Result<(Response, Option<AAuthProtoc
     for (name, value) in headers.iter() {
         builder = builder.header(name, value);
     }
-    let http_response = builder.body(bytes.to_vec()).map_err(|e| MetadataError::Request {
-        url,
-        source: Box::new(e),
-    })?;
+    let http_response = builder
+        .body(bytes.to_vec())
+        .map_err(|e| MetadataError::Request {
+            url,
+            source: Box::new(e),
+        })?;
     Ok((Response::from(http_response), error))
 }
 

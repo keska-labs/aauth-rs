@@ -1,7 +1,7 @@
 use http::HeaderMap;
 
 use crate::error::{DeferredError, HeaderError, Result};
-use crate::protocol::parse_aauth_requirement;
+use crate::protocol::AAuthChallenge;
 use crate::protocol::{ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody};
 use crate::signature::header_value;
 
@@ -13,7 +13,7 @@ pub struct ParsedDeferred {
     pub requirement: DeferRequirement,
 }
 
-pub fn resolve_deferred_location(base_url: &str, location: &str) -> String {
+fn resolve_deferred_location(base_url: &str, location: &str) -> String {
     if location.starts_with("http://") || location.starts_with("https://") {
         location.to_string()
     } else {
@@ -43,7 +43,7 @@ pub fn parse_deferred_response(
 
     let requirement_header =
         header_value(headers, "aauth-requirement").ok_or(DeferredError::MissingRequirement)?;
-    let challenge = parse_aauth_requirement(requirement_header)?;
+    let challenge = AAuthChallenge::from_header(requirement_header)?;
 
     let requirement = defer_requirement_from(&challenge, body)?;
 
@@ -61,7 +61,9 @@ pub fn parse_auth_token_response(status: u16, body: &[u8]) -> Result<TokenRespon
         }
         .into());
     }
-    serde_json::from_slice(body).map_err(DeferredError::Body).map_err(Into::into)
+    serde_json::from_slice(body)
+        .map_err(DeferredError::Body)
+        .map_err(Into::into)
 }
 
 fn defer_requirement_from(
@@ -119,7 +121,7 @@ mod tests {
     use http::HeaderMap;
 
     use crate::deferred::DeferCreated;
-    use crate::protocol::{PendingBody, build_aauth_requirement};
+    use crate::protocol::{AAuthChallenge, PendingBody};
 
     fn defer_created_parts(defer: &DeferCreated) -> (u16, HeaderMap, Vec<u8>) {
         let body = PendingBody::for_created(&defer.requirement).expect("pending body");
@@ -128,7 +130,7 @@ mod tests {
         headers.insert("Retry-After", "0".parse().expect("valid header"));
         headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
         if let Ok(challenge) = defer.requirement.header_challenge() {
-            let req = build_aauth_requirement(&challenge).expect("requirement");
+            let req = challenge.to_header();
             headers.insert(
                 "AAuth-Requirement",
                 req.parse().expect("valid requirement header"),

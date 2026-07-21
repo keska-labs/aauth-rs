@@ -26,9 +26,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     println!("status: {}", response.status());
-    let body: AgentOkResponse = response
-        .json()
-        .await?;
+    let body: AgentOkResponse = response.json().await?;
     println!("agent: {}", body.agent);
 
     Ok(())

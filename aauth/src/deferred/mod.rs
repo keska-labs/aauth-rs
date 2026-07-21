@@ -8,9 +8,7 @@ mod util;
 
 pub use outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
 #[cfg(feature = "deferred-http")]
-pub use parse::{
-    ParsedDeferred, parse_auth_token_response, parse_deferred_response, resolve_deferred_location,
-};
+pub use parse::{ParsedDeferred, parse_auth_token_response, parse_deferred_response};
 #[cfg(feature = "deferred-http")]
 pub use poll::{
     OutboundSignatureProvider, ServerPollOptions, ServerPollOutcome, poll_pending_http,

@@ -4,7 +4,6 @@ use std::sync::Arc;
 use aauth::DeferredError;
 use aauth::MetadataError;
 use aauth::agent::auth::{AgentOptions, ClarificationCallback, InteractionCallback};
-use aauth::protocol::parse_aauth_requirement;
 use aauth::protocol::{
     AAuthChallenge, AAuthProtocolError, Capability, PersonServerMetadata, TokenExchangeRequest,
     TokenResponseBody,
@@ -310,7 +309,9 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             .get("aauth-requirement")
             .and_then(|v| v.to_str().ok())
         {
-            if let Ok(AAuthChallenge::Interaction { url, code }) = parse_aauth_requirement(header) {
+            if let Ok(AAuthChallenge::Interaction { url, code }) =
+                AAuthChallenge::from_header(header)
+            {
                 deferred = deferred.interaction(url, code);
             }
         }
@@ -336,11 +337,8 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
                     url: url.clone(),
                     source: Box::new(e),
                 })?;
-            let parsed: TokenResponseBody =
-                serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode {
-                    url,
-                    source: e,
-                })?;
+            let parsed: TokenResponseBody = serde_json::from_slice(&bytes)
+                .map_err(|e| MetadataError::Decode { url, source: e })?;
             return Ok(TokenExchangeResult {
                 auth_token: parsed.auth_token,
                 expires_in: parsed.expires_in,
@@ -361,10 +359,7 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             source: Box::new(e),
         })?;
         let parsed: TokenResponseBody =
-            serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode {
-                url,
-                source: e,
-            })?;
+            serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode { url, source: e })?;
         return Ok(TokenExchangeResult {
             auth_token: parsed.auth_token,
             expires_in: parsed.expires_in,

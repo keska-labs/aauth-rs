@@ -19,32 +19,34 @@ pub struct ResourceTokenOptions {
     pub interaction: Option<ResourceInteractionClaim>,
 }
 
-pub async fn create_resource_token(
-    options: ResourceTokenOptions,
-    signer: &dyn ResourceTokenSigner,
-) -> Result<String, ResourceTokenError> {
-    let lifetime = options.lifetime.unwrap_or(300);
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(ResourceTokenError::SystemTime)?
-        .as_secs();
+impl ResourceTokenOptions {
+    pub async fn sign(
+        self,
+        signer: &dyn ResourceTokenSigner,
+    ) -> Result<String, ResourceTokenError> {
+        let lifetime = self.lifetime.unwrap_or(300);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(ResourceTokenError::SystemTime)?
+            .as_secs();
 
-    let claims = ResourceClaims {
-        iss: options.resource,
-        dwk: "aauth-resource.json".into(),
-        aud: options.audience,
-        jti: uuid::Uuid::new_v4().to_string(),
-        agent: options.agent,
-        agent_jkt: options.agent_jkt,
-        iat: now,
-        exp: now + lifetime,
-        scope: options.scope,
-        mission: options.mission,
-        interaction: options.interaction,
-    };
+        let claims = ResourceClaims {
+            iss: self.resource,
+            dwk: "aauth-resource.json".into(),
+            aud: self.audience,
+            jti: uuid::Uuid::new_v4().to_string(),
+            agent: self.agent,
+            agent_jkt: self.agent_jkt,
+            iat: now,
+            exp: now + lifetime,
+            scope: self.scope,
+            mission: self.mission,
+            interaction: self.interaction,
+        };
 
-    let mut header = Header::new(Algorithm::EdDSA);
-    header.typ = Some(JwtTyp::Resource.as_str().into());
+        let mut header = Header::new(Algorithm::EdDSA);
+        header.typ = Some(JwtTyp::Resource.as_str().into());
 
-    signer.sign_resource_token(header, claims).await
+        signer.sign_resource_token(header, claims).await
+    }
 }

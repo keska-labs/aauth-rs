@@ -14,11 +14,9 @@ use aauth::ResourceAccessService;
 use aauth::jwt::VerifiedToken;
 use aauth::metadata::MetadataFetcher;
 use aauth::protocol::AAuthChallenge;
-use aauth::protocol::build_aauth_requirement;
 use aauth::resource::keys::ResourceTokenSigner;
 use aauth::resource::{
     ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenOptions,
-    create_resource_token,
 };
 use aauth::resource_verify::{
     VerifyTokenOptions, resolve_resource_token_audience, verify_auth_token_binding, verify_token,
@@ -212,31 +210,27 @@ where
                         })
                     });
 
-                    let resource_token = match create_resource_token(
-                        ResourceTokenOptions {
-                            resource: resource_url,
-                            audience,
-                            agent: agent.identifier().to_string(),
-                            agent_jkt: verified_sig.thumbprint,
-                            scope: None,
-                            mission: None,
-                            lifetime: None,
-                            interaction,
-                        },
-                        resource_token_signer.as_ref(),
-                    )
+                    let resource_token = match (ResourceTokenOptions {
+                        resource: resource_url,
+                        audience,
+                        agent: agent.identifier().to_string(),
+                        agent_jkt: verified_sig.thumbprint,
+                        scope: None,
+                        mission: None,
+                        lifetime: None,
+                        interaction,
+                    })
+                    .sign(resource_token_signer.as_ref())
                     .await
                     {
                         Ok(token) => token,
                         Err(e) => return Ok(unauthorized_err(e)),
                     };
 
-                    let header = match build_aauth_requirement(&AAuthChallenge::AuthToken {
+                    let header = AAuthChallenge::AuthToken {
                         resource_token: resource_token.clone(),
-                    }) {
-                        Ok(h) => h,
-                        Err(e) => return Ok(unauthorized_err(e)),
-                    };
+                    }
+                    .to_header();
 
                     Ok(Response::builder()
                         .status(StatusCode::UNAUTHORIZED)

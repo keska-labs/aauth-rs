@@ -160,18 +160,3 @@ impl TestKeys {
         StaticMetadataFetcher::new(format!("{resource_url}/jwks"), self.resource.jwk_set())
     }
 }
-
-pub fn create_test_keys() -> TestKeys {
-    TestKeys::generate()
-}
-
-pub fn static_agent_metadata_fetcher(keys: &TestKeys, agent_url: &str) -> StaticMetadataFetcher {
-    keys.agent_metadata_fetcher(agent_url)
-}
-
-pub fn static_person_metadata_fetcher(
-    keys: &TestKeys,
-    person_server_url: &str,
-) -> StaticMetadataFetcher {
-    keys.person_metadata_fetcher(person_server_url)
-}

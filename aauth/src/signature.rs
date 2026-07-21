@@ -49,16 +49,6 @@ impl Default for SignatureVerifyOptions {
     }
 }
 
-pub fn build_signature_base(
-    method: &str,
-    authority: &str,
-    path: &str,
-    signature_key: &str,
-    created: u64,
-) -> String {
-    build_signature_base_with_extras(method, authority, path, signature_key, created, &[]).0
-}
-
 pub fn build_signature_base_with_extras(
     method: &str,
     authority: &str,
@@ -98,7 +88,7 @@ pub fn build_signature_base_with_extras(
     (lines.join("\n"), signature_params)
 }
 
-pub fn parse_signature_key_jwt(headers: &HeaderMap) -> Result<String> {
+fn parse_signature_key_jwt(headers: &HeaderMap) -> Result<String> {
     let header =
         header_value(headers, "signature-key").ok_or(SignatureError::MissingSignatureKey)?;
     let start = header
@@ -110,7 +100,7 @@ pub fn parse_signature_key_jwt(headers: &HeaderMap) -> Result<String> {
     Ok(rest[..end].to_string())
 }
 
-pub fn parse_signature_created(signature_input: &str) -> Result<u64> {
+fn parse_signature_created(signature_input: &str) -> Result<u64> {
     let created = signature_input
         .split("created=")
         .nth(1)
@@ -122,7 +112,7 @@ pub fn parse_signature_created(signature_input: &str) -> Result<u64> {
     created.parse().map_err(SignatureError::InvalidCreated)
 }
 
-pub fn parse_covered_components(signature_input: &str) -> Result<Vec<String>> {
+fn parse_covered_components(signature_input: &str) -> Result<Vec<String>> {
     let start = signature_input
         .find('(')
         .ok_or(SignatureError::MissingCoveredComponents)?;
@@ -137,7 +127,7 @@ pub fn parse_covered_components(signature_input: &str) -> Result<Vec<String>> {
         .collect())
 }
 
-pub fn parse_signature_value(signature: &str) -> Result<Vec<u8>> {
+fn parse_signature_value(signature: &str) -> Result<Vec<u8>> {
     let value = signature
         .strip_prefix("sig=:")
         .and_then(|rest| rest.strip_suffix(':'))
@@ -217,8 +207,8 @@ pub fn verify_request_signature_with_options(
         build_signature_base_with_extras(method, authority, path, &signature_key, created, &extras);
     let signature_bytes = parse_signature_value(&signature_header)?;
     let verifying_key = verifying_key_from_jwk(cnf_jwk)?;
-    let signature = Signature::from_slice(&signature_bytes)
-        .map_err(SignatureError::InvalidSignatureBytes)?;
+    let signature =
+        Signature::from_slice(&signature_bytes).map_err(SignatureError::InvalidSignatureBytes)?;
 
     verifying_key
         .verify(signature_base.as_bytes(), &signature)
@@ -269,8 +259,7 @@ pub fn apply_outbound_signature(
 
     headers.insert(
         http::HeaderName::from_static("signature-key"),
-        http::HeaderValue::from_str(&signature_key)
-            .map_err(SignatureError::InvalidHeaderValue)?,
+        http::HeaderValue::from_str(&signature_key).map_err(SignatureError::InvalidHeaderValue)?,
     );
     headers.insert(
         http::HeaderName::from_static("signature-input"),
@@ -325,13 +314,15 @@ mod tests {
 
     #[test]
     fn signature_base_includes_components() {
-        let base = build_signature_base(
+        let base = build_signature_base_with_extras(
             "GET",
             "resource.example",
             "/api/data",
             "sig=jwt;jwt=\"abc\"",
             1,
-        );
+            &[],
+        )
+        .0;
         assert!(base.contains("@method"));
         assert!(base.contains("@authority"));
         assert!(base.contains("@path"));
@@ -351,15 +342,22 @@ mod tests {
 
     #[test]
     fn stale_signature_rejected() {
-        use crate::{create_test_keys, mint_agent_jwt};
+        use crate::TestKeys;
 
-        let keys = create_test_keys();
+        let keys = TestKeys::generate();
         let agent_url = "http://127.0.0.1";
-        let agent_jwt = mint_agent_jwt(&keys, agent_url, "aauth:test@example.com", None);
+        let agent_jwt = keys.mint_agent_jwt(agent_url, "aauth:test@example.com", None);
         let signature_key = format!("sig=jwt;jwt=\"{agent_jwt}\"");
         let created = 1u64;
-        let signature_base =
-            build_signature_base("GET", "127.0.0.1", "/api/data", &signature_key, created);
+        let signature_base = build_signature_base_with_extras(
+            "GET",
+            "127.0.0.1",
+            "/api/data",
+            &signature_key,
+            created,
+            &[],
+        )
+        .0;
         let signing_key = signing_key_from_jwk(&keys.agent_ephemeral.signing_jwk()).unwrap();
         let sig = URL_SAFE_NO_PAD.encode(signing_key.sign(signature_base.as_bytes()).to_bytes());
 

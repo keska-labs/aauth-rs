@@ -23,10 +23,7 @@ pub use authorization::{
 };
 pub use common::{Capability, Mission, ParseStrError, PendingStatus, RequirementLevel};
 pub use error::{AAuthErrorCode, AAuthProtocolError};
-pub use headers::{
-    AAuthChallenge, build_aauth_requirement, build_capabilities_header, build_mission_header,
-    parse_aauth_requirement, parse_capabilities_header, parse_mission_header,
-};
+pub use headers::AAuthChallenge;
 pub use interaction::{
     InteractionQuestionResponse, InteractionRequest, InteractionType, MissionStatusError,
 };

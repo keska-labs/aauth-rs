@@ -6,11 +6,8 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::error::{AgentError, Result, from_middleware_error};
-use crate::signed::{
-    SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,
-    sign_request_with_auth_token,
-};
+use crate::error::AgentError;
+use crate::signed::{SignRequest, SigningOptions, apply_opaque_token};
 
 #[derive(Clone)]
 pub(crate) struct AgentAuthAttemptKey(pub AgentAuthAttempt);
@@ -32,28 +29,27 @@ impl SigningMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
-        let material = self
-            .provider
-            .key_material()
-            .await
-            .map_err(|e| {
-                reqwest_middleware::Error::Middleware(anyhow::Error::from(AgentError::from(e)))
-            })?;
+        let material = self.provider.key_material().await.map_err(|e| {
+            reqwest_middleware::Error::Middleware(anyhow::Error::from(AgentError::from(e)))
+        })?;
 
-        apply_capability_mission(&mut req, &self.options);
+        self.options.apply_to(&mut req);
 
         match &attempt {
             AgentAuthAttempt::AuthToken(token) => {
-                sign_request_with_auth_token(&mut req, &material, token)
+                material
+                    .sign_request_with_auth_token(&mut req, token)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
             AgentAuthAttempt::OpaqueToken(token) => {
                 apply_opaque_token(&mut req, token);
-                sign_request(&mut req, &material)
+                material
+                    .sign_request(&mut req)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
             AgentAuthAttempt::AgentSigned => {
-                sign_request(&mut req, &material)
+                material
+                    .sign_request(&mut req)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
         }
@@ -78,17 +74,4 @@ impl Middleware for SigningMiddleware {
             .0;
         self.sign_and_run(req, attempt, extensions, next).await
     }
-}
-
-pub(crate) async fn sign_and_run(
-    signing: &SigningMiddleware,
-    req: Request,
-    attempt: AgentAuthAttempt,
-    extensions: &mut Extensions,
-    next: Next<'_>,
-) -> Result<Response> {
-    signing
-        .sign_and_run(req, attempt, extensions, next)
-        .await
-        .map_err(from_middleware_error)
 }

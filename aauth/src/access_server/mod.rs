@@ -7,6 +7,6 @@ pub mod token_context;
 pub use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 pub use crate::protocol::AccessServerMetadata;
 pub use config::AccessServerConfig;
-pub use keys::{AccessAuthJwtMinter, TestAccessAuthJwtMinter, mint_access_auth_jwt};
-pub use service::{AccessTokenService, build_access_context};
+pub use keys::{AccessAuthJwtMinter, TestAccessAuthJwtMinter};
+pub use service::AccessTokenService;
 pub use token_context::AccessTokenContext;

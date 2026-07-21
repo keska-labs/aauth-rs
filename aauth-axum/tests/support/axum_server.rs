@@ -182,7 +182,7 @@ impl FromRef<TestServerState> for TestResourceState {
 }
 
 pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
-    let keys = aauth::create_test_keys();
+    let keys = aauth::TestKeys::generate();
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind ephemeral port");

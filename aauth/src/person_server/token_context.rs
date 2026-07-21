@@ -10,12 +10,11 @@ pub struct PersonTokenContext {
     pub exchange_request: TokenExchangeRequest,
 }
 
+use crate::http_util::normalize_server_url;
+
 impl PersonTokenContext {
     pub fn audience_is_person_server(&self) -> bool {
-        normalize_url(&self.resource_claims.aud) == normalize_url(&self.person_server_url)
+        normalize_server_url(&self.resource_claims.aud)
+            == normalize_server_url(&self.person_server_url)
     }
-}
-
-fn normalize_url(url: &str) -> String {
-    url.trim_end_matches('/').to_lowercase()
 }

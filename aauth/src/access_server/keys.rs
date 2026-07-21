@@ -50,16 +50,22 @@ impl TestKeys {
     pub fn access_auth_jwt_minter(&self) -> TestAccessAuthJwtMinter {
         TestAccessAuthJwtMinter::new(self.clone())
     }
-}
 
-pub fn mint_access_auth_jwt(
-    keys: &TestKeys,
-    iss: &str,
-    aud: &str,
-    agent: &str,
-    sub: Option<&str>,
-    scope: Option<&str>,
-) -> String {
-    keys.access_auth_jwt_minter()
-        .mint_access_auth_jwt(iss, aud, agent, sub, scope)
+    pub fn mint_access_auth_jwt(
+        &self,
+        iss: &str,
+        aud: &str,
+        agent: &str,
+        sub: Option<&str>,
+        scope: Option<&str>,
+    ) -> String {
+        AccessAuthJwtMinter::mint_access_auth_jwt(
+            &self.access_auth_jwt_minter(),
+            iss,
+            aud,
+            agent,
+            sub,
+            scope,
+        )
+    }
 }

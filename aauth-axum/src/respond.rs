@@ -6,7 +6,6 @@ use aauth::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 use aauth::deferred::{DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingOutcome};
 #[cfg(feature = "person-server")]
 use aauth::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
-use aauth::protocol::build_aauth_requirement;
 use aauth::protocol::{AAuthErrorCode, AAuthProtocolError, PaymentRequiredBody, PendingBody};
 #[cfg(feature = "resource")]
 use aauth::resource::ResourceConsentFlowOutcome;
@@ -74,12 +73,13 @@ fn insert_poll_headers(headers: &mut HeaderMap, requirement: &aauth::deferred::D
     headers.insert("Retry-After", "0".parse().expect("valid header"));
     headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
     if let Ok(challenge) = requirement.header_challenge() {
-        if let Ok(req) = build_aauth_requirement(&challenge) {
-            headers.insert(
-                "AAuth-Requirement",
-                req.parse().expect("valid requirement header"),
-            );
-        }
+        headers.insert(
+            "AAuth-Requirement",
+            challenge
+                .to_header()
+                .parse()
+                .expect("valid requirement header"),
+        );
     }
 }
 

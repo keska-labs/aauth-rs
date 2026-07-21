@@ -9,7 +9,6 @@ use serde::Deserialize;
 use aauth::AuthTokenPollOutcome;
 use aauth::PersonServerConfig;
 use aauth::person_server::service::PersonTokenService;
-use aauth::person_server::verify_person_token_request;
 use aauth::protocol::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
 use aauth::signature::verify_request_signature;
 
@@ -94,14 +93,15 @@ where
     };
 
     let resource_token = request.resource_token.clone();
-    let ctx = match verify_person_token_request(
-        &state.config,
-        &verified_sig.jwt,
-        &verified_sig.thumbprint,
-        &resource_token,
-        request,
-    )
-    .await
+    let ctx = match state
+        .config
+        .verify_token_request(
+            &verified_sig.jwt,
+            &verified_sig.thumbprint,
+            &resource_token,
+            request,
+        )
+        .await
     {
         Ok(c) => c,
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use aauth::{KeyMaterialProvider, create_key_provider, mint_agent_jwt};
+use aauth::KeyMaterialProvider;
 use aauth_reqwest::{
     AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
@@ -19,8 +19,10 @@ pub fn build_client(
     on_clarification: Option<ClarificationCallback>,
     provider: Option<std::sync::Arc<dyn KeyMaterialProvider>>,
 ) -> aauth_reqwest::ClientWithMiddleware {
-    let agent_jwt = mint_agent_jwt(&spawned.keys, &spawned.agent_url, AGENT_ID, ps);
-    let provider = provider.unwrap_or_else(|| create_key_provider(&spawned.keys, agent_jwt));
+    let agent_jwt = spawned
+        .keys
+        .mint_agent_jwt(&spawned.agent_url, AGENT_ID, ps);
+    let provider = provider.unwrap_or_else(|| spawned.keys.key_provider(agent_jwt));
 
     let mut builder = AgentOptions::builder(provider)
         .max_poll_duration_secs(TEST_POLL_MAX_SECS)

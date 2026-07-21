@@ -33,9 +33,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     println!("status: {}", response.status());
-    let body: AuthOkResponse = response
-        .json()
-        .await?;
+    let body: AuthOkResponse = response.json().await?;
     println!("user: {:?}", body.user);
 
     Ok(())

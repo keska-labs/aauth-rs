@@ -9,10 +9,6 @@ pub fn resolve_person_server_url(configured: Option<&str>, agent_jwt: &str) -> R
     if let Some(url) = configured {
         return Ok(url.to_string());
     }
-    person_server_from_agent_jwt(agent_jwt)
-}
-
-pub fn person_server_from_agent_jwt(agent_jwt: &str) -> Result<String> {
     let claims = decode_agent_claims_unverified(agent_jwt)?;
     claims
         .ps

@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `aauth-reqwest` signing: `SignRequest` trait on `KeyMaterial`, `SigningOptions::apply_to`; removed free `sign_request` / `apply_*` / free `sign_and_run` shim.
+- Demoted signature parse helpers (`parse_signature_*`) and removed thin `build_signature_base`; shared `http_util` for URL normalize + reqwest→http header copy; folded `person_server_from_agent_jwt` into `resolve_person_server_url`; demoted `resolve_deferred_location`.
+- `aauth-policy` defer/decision/federation helpers are private methods on `Policy*Service`; `AccessPendingContext` converts via `From` into `AccessTokenContext`.
+- Role constructors are methods: `AccessTokenContext::from_exchange`, `PersonServerConfig::verify_token_request` / `mint_person_auth` / `federate_to_access_server`, `ResourceTokenOptions::sign` (free `build_access_context`, `verify_person_token_request`, `create_resource_token`, and free `federate_to_access_server` / `mint_person_auth` removed).
+- Header codecs are methods: `AAuthChallenge::to_header` / `from_header`, `Mission::to_header` / `from_header`, `Capability::join_header` / `parse_header` (free `build_*` / `parse_*` header helpers removed).
 - Remodeled `AAuthError` as a transparent umbrella over domain errors (`JwtError`, `SignatureError`, `MetadataError`, `VerifyError`, `DeferredError`, `HeaderError`, `AgentAuthError`, `ResourceTokenError`); removed catch-all `Message` / stringly `HttpError` / `TokenError`.
 - `ResourceTokenSigner` / `create_resource_token` return `ResourceTokenError` instead of `String`; metadata `validate()` returns `MetadataError`.
 - `aauth-reqwest` public APIs (`exchange_token`, `poll_deferred`, `sign_request`, …) return `Result<T, AgentError>` instead of `aauth::Result`; token exchange failures propagate `TokenExchangeError` without stringifying.
@@ -72,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Thin free `TestKeys` wrappers: `create_test_keys`, `static_agent_metadata_fetcher`, `static_person_metadata_fetcher`, free `mint_agent_jwt` / `mint_person_auth_jwt` / `mint_access_auth_jwt`, and `create_key_provider` (use `TestKeys::generate()`, `TestKeys::*_metadata_fetcher`, `TestKeys::mint_*` / `key_provider` instead).
 - `aauth` module `policy` and feature `policy` (use crate `aauth-policy`).
 - `PendingStore`, `*PendingRecord`, `InMemory*PendingStore`, `Policy*Service`, `OpaqueAccessStore`, and `poll_auth_pending` from `aauth` (use `aauth-policy`).
 - `aauth` features `agent-reqwest` and `agent-reqwest-verify` (use crate `aauth-reqwest`).

@@ -4,7 +4,6 @@ use aauth::PendingOutcome;
 use aauth::VerifiedToken;
 use aauth::error::Result;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
-use aauth::protocol::build_aauth_requirement;
 use aauth::protocol::{
     AAuthChallenge, AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument,
     PersonServerMetadata, TokenExchangeRequest, TokenResponseBody,
@@ -12,8 +11,7 @@ use aauth::protocol::{
 use aauth::resolve_resource_token_audience;
 use aauth::{
     DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, PendingSnapshot,
-    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, generate_pending_id,
-    pending_location, verify_token,
+    ResourceTokenOptions, VerifyTokenOptions, generate_pending_id, pending_location, verify_token,
 };
 use aauth_policy::{
     InMemoryPersonPendingStore, PendingStore, PersonPendingContext, PersonPendingRecord,
@@ -26,7 +24,7 @@ use reqwest_middleware::{Error, Middleware, Next};
 
 use super::AGENT_ID;
 
-use aauth::{TestKeys, mint_person_auth_jwt};
+use aauth::TestKeys;
 
 pub struct MockTransport {
     inner: Arc<MockServerState>,
@@ -153,8 +151,7 @@ impl MockServerState {
     }
 
     async fn handle_resource(&self, url: &str, req: Request) -> Result<Response> {
-        let jwt = extract_signature_jwt(&req)
-            .ok_or(aauth::SignatureError::MissingJwtParam)?;
+        let jwt = extract_signature_jwt(&req).ok_or(aauth::SignatureError::MissingJwtParam)?;
 
         let fetcher = Arc::new(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
@@ -206,24 +203,23 @@ impl MockServerState {
                     resolve_resource_token_audience(&agent, None, Some(&self.person_server_url))
                         .map_err(|_| aauth::VerifyError::NoAudience)?;
 
-                let resource_token = create_resource_token(
-                    ResourceTokenOptions {
-                        resource: self.resource_url.clone(),
-                        audience,
-                        agent: agent.identifier().to_string(),
-                        agent_jkt: self.keys.agent_ephemeral.thumbprint().to_string(),
-                        scope: None,
-                        mission: None,
-                        lifetime: None,
-                        interaction: None,
-                    },
-                    &signer,
-                )
+                let resource_token = ResourceTokenOptions {
+                    resource: self.resource_url.clone(),
+                    audience,
+                    agent: agent.identifier().to_string(),
+                    agent_jkt: self.keys.agent_ephemeral.thumbprint().to_string(),
+                    scope: None,
+                    mission: None,
+                    lifetime: None,
+                    interaction: None,
+                }
+                .sign(&signer)
                 .await?;
 
-                let header = build_aauth_requirement(&AAuthChallenge::AuthToken {
+                let header = AAuthChallenge::AuthToken {
                     resource_token: resource_token.clone(),
-                })?;
+                }
+                .to_header();
 
                 Ok(Response::from(
                     http::Response::builder()
@@ -265,10 +261,7 @@ impl MockServerState {
                 if bytes.is_empty() {
                     None
                 } else {
-                    Some(
-                        serde_json::from_slice(&bytes)
-                            .map_err(aauth::DeferredError::Body)?,
-                    )
+                    Some(serde_json::from_slice(&bytes).map_err(aauth::DeferredError::Body)?)
                 }
             }
             None => None,
@@ -352,7 +345,7 @@ impl MockServerState {
             };
             let body = aauth::PendingBody::for_created(&defer.requirement).expect("pending body");
             let challenge = defer.requirement.header_challenge().expect("challenge");
-            let aauth_req = build_aauth_requirement(&challenge).expect("requirement");
+            let aauth_req = challenge.to_header();
             return Ok(Response::from(
                 http::Response::builder()
                     .status(StatusCode::ACCEPTED)
@@ -367,8 +360,7 @@ impl MockServerState {
             ));
         }
 
-        let auth_jwt = mint_person_auth_jwt(
-            &self.keys,
+        let auth_jwt = self.keys.mint_person_auth_jwt(
             &self.person_server_url,
             &self.resource_url,
             &AGENT_ID,
@@ -414,7 +406,11 @@ impl MockServerState {
         };
 
         if let PendingSnapshot::Complete(outcome) = &record.snapshot {
-            let _ = self.pending.remove(&id).await.unwrap_or_else(|e| match e {});
+            let _ = self
+                .pending
+                .remove(&id)
+                .await
+                .unwrap_or_else(|e| match e {});
             return match outcome {
                 PendingOutcome::AuthToken(value) => Ok(Response::from(
                     http::Response::builder()

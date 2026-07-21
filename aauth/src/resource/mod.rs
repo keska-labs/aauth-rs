@@ -15,4 +15,4 @@ pub use mode::ResourceAccessMode;
 pub use no_service::NoResourceAccessService;
 pub use outcome::{ResourceConsentFlowOutcome, ResourcePollOutcome};
 pub use service::{ResourceAccessConfig, ResourceAccessService};
-pub use token::{ResourceTokenOptions, create_resource_token};
+pub use token::ResourceTokenOptions;

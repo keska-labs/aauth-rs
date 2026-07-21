@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use aauth::TestKeys;
 use aauth::protocol::AuthOkResponse;
-use aauth::{create_key_provider, create_test_keys, mint_agent_jwt, mint_person_auth_jwt};
 use aauth_policy::PendingStore;
 use aauth_reqwest::{ClarificationCallback, InteractionCallback};
 use rstest::rstest;
@@ -21,16 +21,14 @@ async fn signed_request(
     url: &str,
     body: Option<String>,
 ) -> reqwest::Response {
-    use aauth::{create_key_provider, mint_agent_jwt};
-    use aauth_reqwest::signed::sign_request;
+    use aauth_reqwest::SignRequest;
 
-    let agent_jwt = mint_agent_jwt(
-        &spawned.keys,
+    let agent_jwt = spawned.keys.mint_agent_jwt(
         &spawned.agent_url,
         AGENT_ID,
         Some(&spawned.person_server_url),
     );
-    let provider = create_key_provider(&spawned.keys, agent_jwt);
+    let provider = spawned.keys.key_provider(agent_jwt);
     let material = provider.key_material().await.expect("key material");
     let client = reqwest::Client::new();
     let mut builder = client.request(method, url);
@@ -40,7 +38,7 @@ async fn signed_request(
             .body(body);
     }
     let mut req = builder.build().expect("request");
-    sign_request(&mut req, &material).expect("sign");
+    material.sign_request(&mut req).expect("sign");
     client.execute(req).await.expect("send")
 }
 
@@ -117,8 +115,7 @@ async fn deferred_interaction_over_http() {
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
-        let auth_jwt = mint_person_auth_jwt(
-            &keys_cb,
+        let auth_jwt = keys_cb.mint_person_auth_jwt(
             &person_server_url,
             &resource_url,
             AGENT_ID,
@@ -354,14 +351,13 @@ async fn invalid_signature_rejected_over_http() {
     })
     .await;
 
-    let wrong_keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(
-        &spawned.keys,
+    let wrong_keys = TestKeys::generate();
+    let agent_jwt = wrong_keys.mint_agent_jwt(
         &spawned.agent_url,
         AGENT_ID,
         Some(&spawned.person_server_url),
     );
-    let provider = create_key_provider(&wrong_keys, agent_jwt);
+    let provider = wrong_keys.key_provider(agent_jwt);
 
     let client = build_client(&spawned, None, None, None, None, Some(provider));
     let response = client
@@ -406,7 +402,7 @@ async fn resource_initiated_interaction_over_http() {
         .and_then(|v| v.to_str().ok())
         .expect("requirement");
     let aauth::protocol::AAuthChallenge::AuthToken { resource_token } =
-        aauth::protocol::parse_aauth_requirement(requirement).expect("auth-token challenge")
+        aauth::protocol::AAuthChallenge::from_header(requirement).expect("auth-token challenge")
     else {
         panic!("expected auth-token challenge");
     };
@@ -438,7 +434,7 @@ async fn resource_initiated_interaction_over_http() {
         .and_then(|v| v.to_str().ok())
         .expect("defer requirement");
     let aauth::protocol::AAuthChallenge::Interaction { url, code } =
-        aauth::protocol::parse_aauth_requirement(defer_requirement).expect("interaction defer")
+        aauth::protocol::AAuthChallenge::from_header(defer_requirement).expect("interaction defer")
     else {
         panic!("expected interaction defer");
     };
@@ -508,7 +504,7 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
         .and_then(|v| v.to_str().ok())
         .expect("requirement");
     let aauth::protocol::AAuthChallenge::AuthToken { resource_token } =
-        aauth::protocol::parse_aauth_requirement(requirement).expect("auth-token challenge")
+        aauth::protocol::AAuthChallenge::from_header(requirement).expect("auth-token challenge")
     else {
         panic!("expected auth-token challenge");
     };
@@ -539,7 +535,7 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
         .and_then(|v| v.to_str().ok())
         .expect("defer requirement");
     let aauth::protocol::AAuthChallenge::Interaction { url, code } =
-        aauth::protocol::parse_aauth_requirement(defer_requirement).expect("interaction defer")
+        aauth::protocol::AAuthChallenge::from_header(defer_requirement).expect("interaction defer")
     else {
         panic!("expected interaction defer");
     };

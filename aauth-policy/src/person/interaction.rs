@@ -3,8 +3,7 @@ use aauth::protocol::{AAuthErrorCode, AAuthProtocolError, ResourceInteractionCla
 use crate::PersonOrchestrationError;
 
 pub(super) fn validate_interaction_url(url: &str) -> Result<(), PersonOrchestrationError> {
-    let parsed =
-        url::Url::parse(url).map_err(PersonOrchestrationError::InvalidInteractionUrl)?;
+    let parsed = url::Url::parse(url).map_err(PersonOrchestrationError::InvalidInteractionUrl)?;
     if parsed.scheme() != "https" {
         return Err(PersonOrchestrationError::InteractionUrlNotHttps);
     }

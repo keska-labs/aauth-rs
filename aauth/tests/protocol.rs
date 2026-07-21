@@ -6,7 +6,6 @@ use aauth::KeyMaterialProvider;
 use aauth::PendingOutcome;
 use aauth::VerifiedToken;
 use aauth::protocol::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
-use aauth::protocol::{build_aauth_requirement, parse_aauth_requirement};
 use aauth::{DeferCreated, DeferRequirement, VerifyTokenOptions, verify_token};
 use aauth_policy::{InMemoryPersonPendingStore, PendingStore};
 use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
@@ -14,10 +13,7 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 
-use aauth::{
-    TestKeys, create_key_provider, create_test_keys, mint_agent_jwt, mint_person_auth_jwt,
-    static_agent_metadata_fetcher, static_person_metadata_fetcher,
-};
+use aauth::TestKeys;
 
 use support::AGENT_ID;
 use support::mock_server::{MockServer, MockServerConfig};
@@ -47,8 +43,8 @@ async fn aauth_requirement_header_round_trip_auth_token() {
     let challenge = AAuthChallenge::AuthToken {
         resource_token: "rt_abc123".into(),
     };
-    let header = build_aauth_requirement(&challenge).unwrap();
-    let parsed = parse_aauth_requirement(&header).unwrap();
+    let header = challenge.to_header();
+    let parsed = AAuthChallenge::from_header(&header).unwrap();
     assert_eq!(parsed, challenge);
 }
 
@@ -59,8 +55,8 @@ async fn aauth_requirement_header_round_trip_interaction() {
         url: "https://auth.example/interact".into(),
         code: "CODE1234".into(),
     };
-    let header = build_aauth_requirement(&challenge).unwrap();
-    let parsed = parse_aauth_requirement(&header).unwrap();
+    let header = challenge.to_header();
+    let parsed = AAuthChallenge::from_header(&header).unwrap();
     assert_eq!(parsed, challenge);
 }
 
@@ -68,18 +64,18 @@ async fn aauth_requirement_header_round_trip_interaction() {
 async fn aauth_requirement_header_round_trip_approval() {
     let _guard = test_lock();
     let challenge = AAuthChallenge::Approval;
-    let header = build_aauth_requirement(&challenge).unwrap();
-    let parsed = parse_aauth_requirement(&header).unwrap();
+    let header = challenge.to_header();
+    let parsed = AAuthChallenge::from_header(&header).unwrap();
     assert_eq!(parsed, challenge);
 }
 
 #[tokio::test]
 async fn verify_token_agent_jwt() {
     let _guard = test_lock();
-    let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
+    let keys = TestKeys::generate();
+    let agent_jwt = keys.mint_agent_jwt(AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
 
-    let fetcher = static_agent_metadata_fetcher(&keys, AGENT_URL);
+    let fetcher = keys.agent_metadata_fetcher(AGENT_URL);
     let result = verify_token(VerifyTokenOptions {
         jwt: agent_jwt,
         http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
@@ -101,9 +97,8 @@ async fn verify_token_agent_jwt() {
 #[tokio::test]
 async fn verify_token_auth_jwt() {
     let _guard = test_lock();
-    let keys = create_test_keys();
-    let auth_jwt = mint_person_auth_jwt(
-        &keys,
+    let keys = TestKeys::generate();
+    let auth_jwt = keys.mint_person_auth_jwt(
         PERSON_SERVER_URL,
         RESOURCE_URL,
         AGENT_ID,
@@ -111,7 +106,7 @@ async fn verify_token_auth_jwt() {
         Some("files.read"),
     );
 
-    let fetcher = static_person_metadata_fetcher(&keys, PERSON_SERVER_URL);
+    let fetcher = keys.person_metadata_fetcher(PERSON_SERVER_URL);
     let result = verify_token(VerifyTokenOptions {
         jwt: auth_jwt,
         http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
@@ -135,11 +130,11 @@ async fn verify_token_auth_jwt() {
 #[tokio::test]
 async fn verify_token_key_binding_failed() {
     let _guard = test_lock();
-    let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
-    let wrong = create_test_keys();
+    let keys = TestKeys::generate();
+    let agent_jwt = keys.mint_agent_jwt(AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
+    let wrong = TestKeys::generate();
 
-    let fetcher = static_agent_metadata_fetcher(&keys, AGENT_URL);
+    let fetcher = keys.agent_metadata_fetcher(AGENT_URL);
     let err = verify_token(VerifyTokenOptions {
         jwt: agent_jwt,
         http_signature_thumbprint: wrong.agent_ephemeral.thumbprint().to_string(),
@@ -157,9 +152,9 @@ async fn verify_token_key_binding_failed() {
 #[tokio::test]
 async fn full_401_challenge_response_direct_grant() {
     let _guard = test_lock();
-    let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
-    let provider = create_key_provider(&keys, agent_jwt);
+    let keys = TestKeys::generate();
+    let agent_jwt = keys.mint_agent_jwt(AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
+    let provider = keys.key_provider(agent_jwt);
 
     let server = MockServer::new(mock_config(&keys, false, None, None));
     let client = aauth_client(provider, &server, None, None);
@@ -179,9 +174,9 @@ async fn full_401_challenge_response_direct_grant() {
 #[tokio::test]
 async fn second_request_reuses_cached_token() {
     let _guard = test_lock();
-    let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
-    let provider = create_key_provider(&keys, agent_jwt);
+    let keys = TestKeys::generate();
+    let agent_jwt = keys.mint_agent_jwt(AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
+    let provider = keys.key_provider(agent_jwt);
 
     let call_count = Arc::new(Mutex::new(0usize));
     let server = MockServer::new(mock_config(&keys, false, None, None));
@@ -215,9 +210,9 @@ async fn second_request_reuses_cached_token() {
 #[tokio::test]
 async fn justification_and_hints_pass_through() {
     let _guard = test_lock();
-    let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
-    let provider = create_key_provider(&keys, agent_jwt);
+    let keys = TestKeys::generate();
+    let agent_jwt = keys.mint_agent_jwt(AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
+    let provider = keys.key_provider(agent_jwt);
     let captured = Arc::new(Mutex::new(None));
 
     let server = MockServer::new(mock_config(&keys, false, None, Some(Arc::clone(&captured))));
@@ -250,9 +245,9 @@ async fn justification_and_hints_pass_through() {
 #[tokio::test]
 async fn deferred_interaction_grant() {
     let _guard = test_lock();
-    let keys = create_test_keys();
-    let agent_jwt = mint_agent_jwt(&keys, AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
-    let provider = create_key_provider(&keys, agent_jwt);
+    let keys = TestKeys::generate();
+    let agent_jwt = keys.mint_agent_jwt(AGENT_URL, AGENT_ID, Some(PERSON_SERVER_URL));
+    let provider = keys.key_provider(agent_jwt);
 
     let pending = InMemoryPersonPendingStore::new();
 
@@ -266,8 +261,7 @@ async fn deferred_interaction_grant() {
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
         if let Some(id) = pending_cb.last_created.lock().unwrap().clone() {
-            let auth_jwt = mint_person_auth_jwt(
-                &keys_cb,
+            let auth_jwt = keys_cb.mint_person_auth_jwt(
                 PERSON_SERVER_URL,
                 RESOURCE_URL,
                 AGENT_ID,
@@ -324,8 +318,8 @@ async fn deferred_accepted_response_format() {
     };
     assert_eq!(defer.location, "https://person.example/pending/abc");
     let challenge = defer.requirement.header_challenge().unwrap();
-    let aauth_req = build_aauth_requirement(&challenge).unwrap();
-    let parsed = parse_aauth_requirement(&aauth_req).unwrap();
+    let aauth_req = challenge.to_header();
+    let parsed = AAuthChallenge::from_header(&aauth_req).unwrap();
     assert_eq!(
         parsed,
         AAuthChallenge::Interaction {

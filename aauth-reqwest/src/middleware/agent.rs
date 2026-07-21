@@ -7,7 +7,6 @@ use aauth::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOption
 use aauth::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use aauth::jwt::{VerifiedToken, jwk_thumbprint};
 use aauth::protocol::AAuthChallenge;
-use aauth::protocol::parse_aauth_requirement;
 #[cfg(feature = "verify")]
 use aauth::resource_verify::{verify_client_auth_token, verify_resource_challenge};
 use http::Extensions;
@@ -15,8 +14,8 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
 use crate::deferred::{AgentDeferredOptions, poll_deferred_with};
-use crate::error::{AgentError, Result};
-use crate::middleware::signing::{SigningMiddleware, sign_and_run};
+use crate::error::{AgentError, Result, from_middleware_error};
+use crate::middleware::signing::SigningMiddleware;
 use crate::send::SignedSend;
 use crate::signed::SigningOptions;
 use crate::token_exchange::{TokenExchangeOptions, exchange_token_with};
@@ -50,7 +49,10 @@ impl AgentMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> Result<Response> {
-        sign_and_run(&self.signing, req, attempt, extensions, next).await
+        self.signing
+            .sign_and_run(req, attempt, extensions, next)
+            .await
+            .map_err(from_middleware_error)
     }
 
     async fn send_agent_signed(
@@ -248,7 +250,7 @@ fn interaction_from_response(resp: &Response) -> (Option<String>, Option<String>
     else {
         return (None, None);
     };
-    if let Ok(AAuthChallenge::Interaction { url, code }) = parse_aauth_requirement(header) {
+    if let Ok(AAuthChallenge::Interaction { url, code }) = AAuthChallenge::from_header(header) {
         return (Some(url), Some(code));
     }
     (None, None)

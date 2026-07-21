@@ -30,6 +30,7 @@
 //! - **Access server** — [`access_server`]
 
 pub mod error;
+pub mod http_util;
 pub mod interaction_code;
 pub mod jwt;
 pub mod keys;
@@ -56,12 +57,9 @@ pub mod resource;
 #[cfg(feature = "agent")]
 pub use agent::keys::{
     AgentJwtMinter, KeyMaterialProvider, StaticKeyMaterialProvider, TestAgentJwtMinter,
-    create_key_provider, mint_agent_jwt,
 };
 #[cfg(feature = "agent")]
-pub use agent::resolve::{
-    agent_jwt_from_signature_key, person_server_from_agent_jwt, resolve_person_server_url,
-};
+pub use agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 pub use error::{
     AAuthError, AgentAuthError, DeferredError, HeaderError, IntoAauthProtocol, JwtError,
     MetadataError, ResourceTokenError, Result, SignatureError, VerifyError, VerifyReason,
@@ -72,10 +70,7 @@ pub use jwt::{
     ResourceInteractionClaim, VerifiedToken, decode_resource_token_unverified, jwk_set_from_okp,
     jwk_thumbprint,
 };
-pub use keys::{
-    Ed25519KeyPair, OkpSigningKey, TestKeys, create_test_keys, static_agent_metadata_fetcher,
-    static_person_metadata_fetcher,
-};
+pub use keys::{Ed25519KeyPair, OkpSigningKey, TestKeys};
 pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
 
 // Common protocol prelude used across roles (not the full governance surface).
@@ -86,8 +81,7 @@ pub use protocol::{
     JwtTyp, KeyMaterial, Mission, ParseStrError, PendingBody, PendingPostBody, PendingStatus,
     PendingStatusBody, PersonServerMetadata, RequirementLevel, SignatureKey, SignatureKeyHwk,
     SignatureKeyJktJwt, SignatureKeyJwt, TokenExchangeRequest, TokenResponseBody,
-    UpdatedTokenRequest, build_aauth_requirement, build_capabilities_header, build_mission_header,
-    parse_aauth_requirement, parse_capabilities_header, parse_mission_header,
+    UpdatedTokenRequest,
 };
 
 #[cfg(feature = "deferred")]
@@ -102,7 +96,6 @@ pub use deferred::{
 pub use deferred::{
     OutboundSignatureProvider, ParsedDeferred, ServerPollOptions, ServerPollOutcome,
     parse_auth_token_response, parse_deferred_response, poll_pending_http, post_pending_input,
-    resolve_deferred_location,
 };
 
 #[cfg(feature = "resource-verify")]
@@ -116,14 +109,13 @@ pub use resource_verify::{
 pub use person_server::{
     FederationOutcome, PersonAuthJwtMinter, PersonServerConfig, PersonServerOutboundSigner,
     PersonTokenContext, PersonTokenFlowOutcome, PersonTokenService, TestPersonAuthJwtMinter,
-    federate_to_access_server, mint_person_auth_jwt, verify_federated_auth_token,
-    verify_person_token_request,
+    verify_federated_auth_token,
 };
 
 #[cfg(feature = "access-server")]
 pub use access_server::{
     AccessAuthJwtMinter, AccessServerConfig, AccessTokenContext, AccessTokenService,
-    TestAccessAuthJwtMinter, build_access_context, mint_access_auth_jwt,
+    TestAccessAuthJwtMinter,
 };
 
 #[cfg(feature = "resource")]
@@ -131,5 +123,5 @@ pub use resource::{
     Ed25519ResourceTokenSigner, NoResourceAccessService, ResourceAccessConfig,
     ResourceAccessContext, ResourceAccessMode, ResourceAccessService, ResourceConsentFlowOutcome,
     ResourceInteractionContext, ResourceInteractionProvider, ResourcePollOutcome,
-    ResourceTokenOptions, ResourceTokenSigner, create_resource_token,
+    ResourceTokenOptions, ResourceTokenSigner,
 };

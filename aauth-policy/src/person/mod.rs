@@ -69,10 +69,12 @@ where
         agent_jwt: &str,
     ) -> Result<PersonTokenFlowOutcome, Self::Error> {
         if ctx.resource_claims.interaction.is_some() {
-            return defer::create_resource_initiated_deferred_response(self, &ctx, agent_jwt).await;
+            return self
+                .create_resource_initiated_deferred_response(&ctx, agent_jwt)
+                .await;
         }
         let decision = self.policy.evaluate(&ctx).await?;
-        defer::apply_person_decision(self, &ctx, decision, agent_jwt).await
+        self.apply_person_decision(&ctx, decision, agent_jwt).await
     }
 
     async fn poll_pending(&self, pending_id: &str) -> Result<AuthTokenPollOutcome, Self::Error> {
@@ -86,7 +88,12 @@ where
         pending_id: &str,
         input: PendingInput,
     ) -> Result<PersonTokenFlowOutcome, Self::Error> {
-        let Some(record) = self.pending.load(pending_id).await.map_err(PersonTokenServiceError::PendingStore)? else {
+        let Some(record) = self
+            .pending
+            .load(pending_id)
+            .await
+            .map_err(PersonTokenServiceError::PendingStore)?
+        else {
             return Ok(PersonTokenFlowOutcome::Gone);
         };
 
@@ -107,15 +114,15 @@ where
         } = record.context;
 
         if let Some(fed) = federation {
-            return federation_pending::handle_federated_pending_post(
-                self,
-                pending_id,
-                &fed,
-                &agent_token,
-                &self.config.resource_url,
-                input,
-            )
-            .await;
+            return self
+                .handle_federated_pending_post(
+                    pending_id,
+                    &fed,
+                    &agent_token,
+                    &self.config.resource_url,
+                    input,
+                )
+                .await;
         }
 
         let ctx = PersonTokenContext {
@@ -127,7 +134,8 @@ where
         };
 
         let decision = self.policy.resume(&ctx, input).await?;
-        defer::apply_person_pending_decision(self, &ctx, pending_id, decision, &agent_token).await
+        self.apply_person_pending_decision(&ctx, pending_id, decision, &agent_token)
+            .await
     }
 
     async fn begin_interaction(&self, code: &str) -> Result<PersonInteractionOutcome, Self::Error> {
@@ -153,7 +161,10 @@ where
         if let PendingSnapshot::Waiting { status, .. } = &mut record.snapshot {
             *status = PendingStatus::Interacting;
         }
-        self.pending.save(&pending_id, record.clone()).await.map_err(PersonTokenServiceError::PendingStore)?;
+        self.pending
+            .save(&pending_id, record.clone())
+            .await
+            .map_err(PersonTokenServiceError::PendingStore)?;
 
         if let Some(resource_ix) = record.context.resource_interaction.clone() {
             interaction::validate_interaction_url(&resource_ix.url)?;
@@ -183,7 +194,12 @@ where
         pending_id: &str,
         callback_error: Option<&str>,
     ) -> Result<PersonTokenFlowOutcome, Self::Error> {
-        let Some(record) = self.pending.load(pending_id).await.map_err(PersonTokenServiceError::PendingStore)? else {
+        let Some(record) = self
+            .pending
+            .load(pending_id)
+            .await
+            .map_err(PersonTokenServiceError::PendingStore)?
+        else {
             return Ok(PersonTokenFlowOutcome::Gone);
         };
 
@@ -228,6 +244,7 @@ where
         };
 
         let decision = self.policy.evaluate(&ctx).await?;
-        defer::apply_person_pending_decision(self, &ctx, pending_id, decision, &agent_token).await
+        self.apply_person_pending_decision(&ctx, pending_id, decision, &agent_token)
+            .await
     }
 }

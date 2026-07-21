@@ -23,29 +23,31 @@ pub trait AccessTokenService: Send + Sync + Clone {
     ) -> Result<AuthTokenFlowOutcome, Self::Error>;
 }
 
-pub fn build_access_context(
-    config: &AccessServerConfig,
-    request: &crate::protocol::AccessTokenExchangeRequest,
-) -> Result<AccessTokenContext, AAuthError> {
-    let agent = match VerifiedToken::decode_unverified(&request.agent_token)? {
-        VerifiedToken::Agent(c) => c,
-        VerifiedToken::Auth(_) => {
-            return Err(VerifyError::Invalid {
-                typ: JwtTyp::Auth,
-                reason: VerifyReason::WrongTyp,
+impl AccessTokenContext {
+    pub fn from_exchange(
+        config: &AccessServerConfig,
+        request: &crate::protocol::AccessTokenExchangeRequest,
+    ) -> Result<Self, AAuthError> {
+        let agent = match VerifiedToken::decode_unverified(&request.agent_token)? {
+            VerifiedToken::Agent(c) => c,
+            VerifiedToken::Auth(_) => {
+                return Err(VerifyError::Invalid {
+                    typ: JwtTyp::Auth,
+                    reason: VerifyReason::WrongTyp,
+                }
+                .into());
             }
-            .into());
-        }
-    };
-    let resource_claims = decode_resource_token_unverified(&request.resource_token)?;
+        };
+        let resource_claims = decode_resource_token_unverified(&request.resource_token)?;
 
-    Ok(AccessTokenContext {
-        access_server_url: config.access_server_url.clone(),
-        resource_url: config.resource_url.clone(),
-        person_server_url: config.person_server_url.clone(),
-        agent_claims: agent,
-        resource_claims,
-        resource_token: request.resource_token.clone(),
-        agent_token: request.agent_token.clone(),
-    })
+        Ok(Self {
+            access_server_url: config.access_server_url.clone(),
+            resource_url: config.resource_url.clone(),
+            person_server_url: config.person_server_url.clone(),
+            agent_claims: agent,
+            resource_claims,
+            resource_token: request.resource_token.clone(),
+            agent_token: request.agent_token.clone(),
+        })
+    }
 }

@@ -9,7 +9,9 @@ use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::mint_person_server_signature_jwt;
-use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody, JwtTyp};
+use crate::protocol::{
+    AccessServerMetadata, AccessTokenExchangeRequest, JwtTyp, TokenResponseBody,
+};
 use crate::resource_verify::{VerifyTokenOptions, verify_token};
 use crate::signature::apply_outbound_signature;
 
@@ -23,125 +25,126 @@ pub enum FederationOutcome {
     },
 }
 
-pub async fn federate_to_access_server(
-    client: &reqwest::Client,
-    config: &PersonServerConfig,
-    resource_token: &str,
-    agent_token: &str,
-) -> Result<FederationOutcome> {
-    let claims = crate::jwt::decode_resource_token_unverified(resource_token)?;
-    let access_server_url = claims.aud.trim_end_matches('/').to_string();
-    let metadata_url = format!("{access_server_url}/.well-known/aauth-access.json");
-    let metadata_resp = client
-        .get(&metadata_url)
-        .send()
-        .await
-        .map_err(|e| MetadataError::Request {
-            url: metadata_url.clone(),
+impl PersonServerConfig {
+    pub async fn federate_to_access_server(
+        &self,
+        resource_token: &str,
+        agent_token: &str,
+    ) -> Result<FederationOutcome> {
+        let client = &self.http_client;
+        let claims = crate::jwt::decode_resource_token_unverified(resource_token)?;
+        let access_server_url = claims.aud.trim_end_matches('/').to_string();
+        let metadata_url = format!("{access_server_url}/.well-known/aauth-access.json");
+        let metadata_resp =
+            client
+                .get(&metadata_url)
+                .send()
+                .await
+                .map_err(|e| MetadataError::Request {
+                    url: metadata_url.clone(),
+                    source: Box::new(e),
+                })?;
+
+        if !metadata_resp.status().is_success() {
+            return Err(MetadataError::HttpStatus {
+                url: metadata_url.clone(),
+                status: metadata_resp.status().as_u16(),
+            }
+            .into());
+        }
+
+        let metadata: AccessServerMetadata =
+            metadata_resp
+                .json()
+                .await
+                .map_err(|e| MetadataError::Request {
+                    url: metadata_url,
+                    source: Box::new(e),
+                })?;
+        metadata.validate()?;
+
+        let body = AccessTokenExchangeRequest {
+            resource_token: resource_token.to_string(),
+            agent_token: agent_token.to_string(),
+            upstream_token: None,
+            subagent_token: None,
+        };
+
+        let (authority, path) = url_authority_path(&metadata.token_endpoint)?;
+        let body_json = serde_json::to_string(&body).map_err(DeferredError::Serialize)?;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            http::HeaderName::from_static("content-type"),
+            http::HeaderValue::from_static("application/json"),
+        );
+        apply_outbound_signature(
+            &mut headers,
+            "POST",
+            &authority,
+            &path,
+            &mint_person_server_signature_jwt(&self.keys, &self.person_server_url),
+            &self.person_server_signing_jwk(),
+            None,
+        )?;
+
+        let mut request = client.post(&metadata.token_endpoint).body(body_json);
+        for (name, value) in headers.iter() {
+            request = request.header(name, value);
+        }
+
+        let response = request.send().await.map_err(|e| MetadataError::Request {
+            url: metadata.token_endpoint.clone(),
             source: Box::new(e),
         })?;
 
-    if !metadata_resp.status().is_success() {
-        return Err(MetadataError::HttpStatus {
-            url: metadata_url.clone(),
-            status: metadata_resp.status().as_u16(),
+        let status = response.status().as_u16();
+
+        if status == 402 {
+            return Err(DeferredError::PaymentNotRequirement.into());
         }
-        .into());
-    }
 
-    let metadata: AccessServerMetadata = metadata_resp.json().await.map_err(|e| {
-        MetadataError::Request {
-            url: metadata_url,
-            source: Box::new(e),
-        }
-    })?;
-    metadata.validate()?;
-
-    let body = AccessTokenExchangeRequest {
-        resource_token: resource_token.to_string(),
-        agent_token: agent_token.to_string(),
-        upstream_token: None,
-        subagent_token: None,
-    };
-
-    let (authority, path) = url_authority_path(&metadata.token_endpoint)?;
-    let body_json = serde_json::to_string(&body).map_err(DeferredError::Serialize)?;
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        http::HeaderName::from_static("content-type"),
-        http::HeaderValue::from_static("application/json"),
-    );
-    apply_outbound_signature(
-        &mut headers,
-        "POST",
-        &authority,
-        &path,
-        &mint_person_server_signature_jwt(&config.keys, &config.person_server_url),
-        &config.person_server_signing_jwk(),
-        None,
-    )?;
-
-    let mut request = client.post(&metadata.token_endpoint).body(body_json);
-    for (name, value) in headers.iter() {
-        request = request.header(name, value);
-    }
-
-    let response = request.send().await.map_err(|e| MetadataError::Request {
-        url: metadata.token_endpoint.clone(),
-        source: Box::new(e),
-    })?;
-
-    let status = response.status().as_u16();
-
-    if status == 402 {
-        return Err(DeferredError::PaymentNotRequirement.into());
-    }
-
-    if status == 202 {
-        let headers = response_headers_to_http(response.headers());
-        let body_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| MetadataError::Request {
+        if status == 202 {
+            let headers = crate::http_util::response_headers_to_http(response.headers());
+            let body_bytes = response.bytes().await.map_err(|e| MetadataError::Request {
                 url: metadata.token_endpoint.clone(),
                 source: Box::new(e),
             })?;
-        let ParsedDeferred {
-            location,
-            requirement,
-        } = parse_deferred_response(status, &headers, &body_bytes, &access_server_url)?;
-        return Ok(FederationOutcome::Deferred {
-            requirement,
-            as_pending_url: location,
-            access_server_url,
-        });
-    }
-
-    if !response.status().is_success() {
-        return Err(MetadataError::HttpStatus {
-            url: metadata.token_endpoint.clone(),
-            status,
+            let ParsedDeferred {
+                location,
+                requirement,
+            } = parse_deferred_response(status, &headers, &body_bytes, &access_server_url)?;
+            return Ok(FederationOutcome::Deferred {
+                requirement,
+                as_pending_url: location,
+                access_server_url,
+            });
         }
-        .into());
-    }
 
-    let token_body: TokenResponseBody = response.json().await.map_err(|e| {
-        MetadataError::Request {
-            url: metadata.token_endpoint,
-            source: Box::new(e),
+        if !response.status().is_success() {
+            return Err(MetadataError::HttpStatus {
+                url: metadata.token_endpoint.clone(),
+                status,
+            }
+            .into());
         }
-    })?;
 
-    verify_federated_auth_token(
-        &token_body.auth_token,
-        &access_server_url,
-        &config.resource_url,
-        agent_token,
-        Arc::clone(&config.fetcher),
-    )
-    .await?;
+        let token_body: TokenResponseBody =
+            response.json().await.map_err(|e| MetadataError::Request {
+                url: metadata.token_endpoint,
+                source: Box::new(e),
+            })?;
 
-    Ok(FederationOutcome::Complete(token_body))
+        verify_federated_auth_token(
+            &token_body.auth_token,
+            &access_server_url,
+            &self.resource_url,
+            agent_token,
+            Arc::clone(&self.fetcher),
+        )
+        .await?;
+
+        Ok(FederationOutcome::Complete(token_body))
+    }
 }
 
 pub async fn verify_federated_auth_token(
@@ -207,17 +210,4 @@ fn url_authority_path(url: &str) -> Result<(String, String)> {
     };
     let path = parsed.path().to_string();
     Ok((authority, path))
-}
-
-fn response_headers_to_http(headers: &reqwest::header::HeaderMap) -> http::HeaderMap {
-    let mut map = http::HeaderMap::new();
-    for (name, value) in headers.iter() {
-        if let (Ok(n), Ok(v)) = (
-            http::HeaderName::from_bytes(name.as_str().as_bytes()),
-            http::HeaderValue::from_bytes(value.as_bytes()),
-        ) {
-            map.insert(n, v);
-        }
-    }
-    map
 }

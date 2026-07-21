@@ -1,18 +1,18 @@
+use aauth::TestKeys;
 use aauth::signature::verify_request_signature;
-use aauth::{create_key_provider, create_test_keys, mint_agent_jwt};
-use aauth_reqwest::sign_request;
+use aauth_reqwest::SignRequest;
 
 #[tokio::test]
 async fn sign_request_verify_roundtrip() {
-    let keys = create_test_keys();
+    let keys = TestKeys::generate();
     let agent_url = "http://127.0.0.1";
-    let agent_jwt = mint_agent_jwt(&keys, agent_url, "aauth:test@example.com", None);
-    let provider = create_key_provider(&keys, agent_jwt);
+    let agent_jwt = keys.mint_agent_jwt(agent_url, "aauth:test@example.com", None);
+    let provider = keys.key_provider(agent_jwt);
     let material = provider.key_material().await.unwrap();
 
     let url = format!("{agent_url}/api/data");
     let mut req = reqwest::Client::new().get(&url).build().unwrap();
-    sign_request(&mut req, &material).unwrap();
+    material.sign_request(&mut req).unwrap();
 
     let headers = req.headers().clone();
     let verified = verify_request_signature(

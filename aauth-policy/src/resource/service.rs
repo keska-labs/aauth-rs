@@ -51,6 +51,53 @@ impl<P, S, O> PolicyResourceAccessService<P, S, O> {
     }
 }
 
+impl<P, S, O> PolicyResourceAccessService<P, S, O> {
+    async fn create_deferred_resource_response(
+        &self,
+        ctx: &ResourceAccessContext,
+        requirement: &mut DeferRequirement,
+    ) -> Result<ResourceConsentFlowOutcome, ResourceAccessServiceError<S::Error>>
+    where
+        S: PendingStore<ResourcePendingRecord>,
+    {
+        if let DeferRequirement::Interaction { url, code } = requirement {
+            if url.is_empty() {
+                *url = self.config.interaction_url.clone();
+            }
+            if code.is_empty() {
+                *code = aauth::generate_code();
+            }
+        }
+
+        let id = generate_pending_id();
+        let location = pending_location(
+            &self.config.pending_base_url,
+            &self.config.pending_path,
+            &id,
+        );
+        let record = ResourcePendingRecord::new(
+            id,
+            ResourcePendingContext {
+                resource_url: ctx.resource_url.clone(),
+                agent_claims: ctx.agent_claims.clone(),
+                scope: ctx.scope.clone(),
+            },
+            PendingSnapshot::waiting(requirement.clone()),
+            self.config.pending_ttl_secs,
+        );
+
+        self.pending
+            .create(record)
+            .await
+            .map_err(ResourceAccessServiceError::PendingStore)?;
+
+        Ok(ResourceConsentFlowOutcome::Deferred(DeferCreated {
+            location,
+            requirement: requirement.clone(),
+        }))
+    }
+}
+
 #[async_trait::async_trait]
 impl<P, S, O> ResourceAccessService for PolicyResourceAccessService<P, S, O>
 where
@@ -71,7 +118,8 @@ where
             )),
             ResourceConsentDecision::Deny(err) => Ok(ResourceConsentFlowOutcome::Denied(err)),
             ResourceConsentDecision::Defer(mut requirement) => {
-                create_deferred_resource_response(self, &ctx, &mut requirement).await
+                self.create_deferred_resource_response(&ctx, &mut requirement)
+                    .await
             }
         }
     }
@@ -95,48 +143,4 @@ where
     fn validate_opaque(&self, token: &str, agent_id: &str) -> bool {
         self.opaque.validate(token, agent_id)
     }
-}
-
-async fn create_deferred_resource_response<P, S, O>(
-    service: &PolicyResourceAccessService<P, S, O>,
-    ctx: &ResourceAccessContext,
-    requirement: &mut DeferRequirement,
-) -> Result<ResourceConsentFlowOutcome, ResourceAccessServiceError<S::Error>>
-where
-    P: ResourceConsentPolicy,
-    S: PendingStore<ResourcePendingRecord>,
-    O: OpaqueAccessStore + Clone,
-{
-    if let DeferRequirement::Interaction { url, code } = requirement {
-        if url.is_empty() {
-            *url = service.config.interaction_url.clone();
-        }
-        if code.is_empty() {
-            *code = aauth::generate_code();
-        }
-    }
-
-    let id = generate_pending_id();
-    let location = pending_location(
-        &service.config.pending_base_url,
-        &service.config.pending_path,
-        &id,
-    );
-    let record = ResourcePendingRecord::new(
-        id,
-        ResourcePendingContext {
-            resource_url: ctx.resource_url.clone(),
-            agent_claims: ctx.agent_claims.clone(),
-            scope: ctx.scope.clone(),
-        },
-        PendingSnapshot::waiting(requirement.clone()),
-        service.config.pending_ttl_secs,
-    );
-
-    service.pending.create(record).await.map_err(ResourceAccessServiceError::PendingStore)?;
-
-    Ok(ResourceConsentFlowOutcome::Deferred(DeferCreated {
-        location,
-        requirement: requirement.clone(),
-    }))
 }

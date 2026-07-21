@@ -25,8 +25,7 @@ impl JwtTyp {
     pub fn from_jwt(jwt: &str) -> Result<Self> {
         let header = decode_header(jwt).map_err(JwtError::Decode)?;
         let typ = header.typ.ok_or(JwtError::MissingTyp)?;
-        typ.parse()
-            .map_err(|_| JwtError::UnknownTyp(typ).into())
+        typ.parse().map_err(|_| JwtError::UnknownTyp(typ).into())
     }
 }
 

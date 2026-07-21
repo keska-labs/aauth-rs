@@ -7,7 +7,7 @@ use http::{HeaderMap, StatusCode};
 use crate::error::Result;
 #[cfg(feature = "resource-verify")]
 use crate::metadata::MetadataFetcher;
-use crate::protocol::parse_aauth_requirement;
+use crate::protocol::AAuthChallenge;
 use crate::protocol::{Capability, Mission, PersonServerMetadata};
 use crate::signature::header_value;
 
@@ -401,7 +401,7 @@ impl AgentAuth {
             }
             AgentAuthAttempt::AgentSigned => {
                 if let Some(header) = header_value(headers, "aauth-requirement") {
-                    let challenge = parse_aauth_requirement(header)?;
+                    let challenge = AAuthChallenge::from_header(header)?;
                     if let crate::protocol::AAuthChallenge::AuthToken { resource_token } = challenge
                     {
                         return Ok(AgentAuthStep::ExchangeToken { resource_token });
@@ -421,7 +421,7 @@ impl AgentAuth {
         on_auth_token: Option<&Arc<dyn Fn(String, u64) + Send + Sync>>,
     ) {
         self.token_cache.insert(
-            cache_key(origin, person_server),
+            format!("{origin}|{person_server}"),
             CachedToken {
                 auth_token: token.clone(),
                 expires_at: Instant::now() + Duration::from_secs(expires_in),
@@ -469,10 +469,6 @@ impl AgentAuth {
             }
         }
     }
-}
-
-fn cache_key(resource_origin: &str, person_server: &str) -> String {
-    format!("{resource_origin}|{person_server}")
 }
 
 #[cfg(test)]

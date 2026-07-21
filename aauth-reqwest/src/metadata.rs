@@ -91,12 +91,15 @@ impl CachedMetadataFetcher {
 
         self.cache.record_fetch(metadata_url);
 
-        let response = self.client.get(metadata_url).send().await.map_err(|e| {
-            MetadataError::Request {
-                url: metadata_url.to_string(),
-                source: Box::new(e),
-            }
-        })?;
+        let response =
+            self.client
+                .get(metadata_url)
+                .send()
+                .await
+                .map_err(|e| MetadataError::Request {
+                    url: metadata_url.to_string(),
+                    source: Box::new(e),
+                })?;
 
         if !response.status().is_success() {
             return Err(MetadataError::HttpStatus {
@@ -159,12 +162,15 @@ impl MetadataFetcher for CachedMetadataFetcher {
         }
         self.cache.record_fetch(jwks_uri);
 
-        let response = self.client.get(jwks_uri).send().await.map_err(|e| {
-            MetadataError::Request {
-                url: jwks_uri.to_string(),
-                source: Box::new(e),
-            }
-        })?;
+        let response =
+            self.client
+                .get(jwks_uri)
+                .send()
+                .await
+                .map_err(|e| MetadataError::Request {
+                    url: jwks_uri.to_string(),
+                    source: Box::new(e),
+                })?;
 
         if !response.status().is_success() {
             return Err(MetadataError::HttpStatus {

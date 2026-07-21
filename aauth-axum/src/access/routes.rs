@@ -6,8 +6,9 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 
 use aauth::AccessServerConfig;
+use aauth::AccessTokenContext;
 use aauth::AuthTokenPollOutcome;
-use aauth::access_server::service::{AccessTokenService, build_access_context};
+use aauth::access_server::service::AccessTokenService;
 use aauth::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
 use aauth::signature::verify_request_signature;
 
@@ -89,7 +90,7 @@ where
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
-    let ctx = match build_access_context(&state.config, &request) {
+    let ctx = match AccessTokenContext::from_exchange(&state.config, &request) {
         Ok(c) => c,
         Err(_) => return StatusCode::BAD_REQUEST.into_response(),
     };

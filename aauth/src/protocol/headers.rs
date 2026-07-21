@@ -37,87 +37,93 @@ impl AAuthChallenge {
             Self::Claims => RequirementLevel::Claims,
         }
     }
-}
 
-pub fn build_capabilities_header(capabilities: &[Capability]) -> String {
-    capabilities
-        .iter()
-        .map(|c| c.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
-}
+    /// Serialize to an `AAuth-Requirement` header value.
+    pub fn to_header(&self) -> String {
+        match self {
+            Self::Approval => "requirement=approval".into(),
+            Self::Clarification => "requirement=clarification".into(),
+            Self::Claims => "requirement=claims".into(),
+            Self::AgentToken => "requirement=agent-token".into(),
+            Self::AuthToken { resource_token } => {
+                format!("requirement=auth-token; resource-token=\"{resource_token}\"")
+            }
+            Self::Interaction { url, code } => {
+                format!("requirement=interaction; url=\"{url}\"; code=\"{code}\"")
+            }
+        }
+    }
 
-pub fn parse_capabilities_header(header_value: &str) -> Vec<Capability> {
-    header_value
-        .split(',')
-        .map(str::trim)
-        .filter_map(|value| value.parse().ok())
-        .collect()
-}
+    /// Parse an `AAuth-Requirement` response header value.
+    pub fn from_header(header_value: &str) -> Result<Self> {
+        let trimmed = header_value.trim();
+        if trimmed.is_empty() {
+            return Err(HeaderError::EmptyRequirement.into());
+        }
 
-pub fn build_mission_header(mission: &Mission) -> String {
-    format!(
-        "approver=\"{}\"; s256=\"{}\"",
-        mission.approver, mission.s256
-    )
-}
+        let requirement_match = trimmed
+            .strip_prefix("requirement=")
+            .and_then(|rest| rest.split(';').next())
+            .map(str::trim)
+            .ok_or(HeaderError::MissingRequirementMember)?;
 
-pub fn parse_mission_header(header_value: &str) -> Result<Mission> {
-    let approver =
-        extract_quoted_param(header_value, "approver").ok_or(HeaderError::MissingApprover)?;
-    let s256 = extract_quoted_param(header_value, "s256").ok_or(HeaderError::MissingS256)?;
-    Ok(Mission { approver, s256 })
-}
+        let level = requirement_match
+            .parse()
+            .map_err(|_| HeaderError::UnknownRequirement(requirement_match.to_string()))?;
 
-pub fn build_aauth_requirement(challenge: &AAuthChallenge) -> Result<String> {
-    match challenge {
-        AAuthChallenge::Approval => Ok("requirement=approval".into()),
-        AAuthChallenge::Clarification => Ok("requirement=clarification".into()),
-        AAuthChallenge::Claims => Ok("requirement=claims".into()),
-        AAuthChallenge::AgentToken => Ok("requirement=agent-token".into()),
-        AAuthChallenge::AuthToken { resource_token } => Ok(format!(
-            "requirement=auth-token; resource-token=\"{resource_token}\""
-        )),
-        AAuthChallenge::Interaction { url, code } => Ok(format!(
-            "requirement=interaction; url=\"{url}\"; code=\"{code}\""
-        )),
+        match level {
+            RequirementLevel::AgentToken => Ok(Self::AgentToken),
+            RequirementLevel::Approval => Ok(Self::Approval),
+            RequirementLevel::Clarification => Ok(Self::Clarification),
+            RequirementLevel::Claims => Ok(Self::Claims),
+            RequirementLevel::AuthToken => {
+                let resource_token = extract_quoted_param(trimmed, "resource-token")
+                    .ok_or(HeaderError::MissingResourceToken)?;
+                Ok(Self::AuthToken { resource_token })
+            }
+            RequirementLevel::Interaction => {
+                let url = extract_quoted_param(trimmed, "url")
+                    .ok_or(HeaderError::MissingInteractionUrl)?;
+                let code = extract_quoted_param(trimmed, "code")
+                    .ok_or(HeaderError::MissingInteractionCode)?;
+                Ok(Self::Interaction { url, code })
+            }
+        }
     }
 }
 
-/// Parse an `AAuth-Requirement` response header value.
-pub fn parse_aauth_requirement(header_value: &str) -> Result<AAuthChallenge> {
-    let trimmed = header_value.trim();
-    if trimmed.is_empty() {
-        return Err(HeaderError::EmptyRequirement.into());
+impl Capability {
+    /// Join capabilities into an `AAuth-Capabilities` header value.
+    pub fn join_header(capabilities: &[Capability]) -> String {
+        capabilities
+            .iter()
+            .map(|c| c.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
-    let requirement_match = trimmed
-        .strip_prefix("requirement=")
-        .and_then(|rest| rest.split(';').next())
-        .map(str::trim)
-        .ok_or(HeaderError::MissingRequirementMember)?;
+    /// Parse an `AAuth-Capabilities` header value.
+    pub fn parse_header(header_value: &str) -> Vec<Capability> {
+        header_value
+            .split(',')
+            .map(str::trim)
+            .filter_map(|value| value.parse().ok())
+            .collect()
+    }
+}
 
-    let level = requirement_match
-        .parse()
-        .map_err(|_| HeaderError::UnknownRequirement(requirement_match.to_string()))?;
+impl Mission {
+    /// Serialize to an `AAuth-Mission` header value.
+    pub fn to_header(&self) -> String {
+        format!("approver=\"{}\"; s256=\"{}\"", self.approver, self.s256)
+    }
 
-    match level {
-        RequirementLevel::AgentToken => Ok(AAuthChallenge::AgentToken),
-        RequirementLevel::Approval => Ok(AAuthChallenge::Approval),
-        RequirementLevel::Clarification => Ok(AAuthChallenge::Clarification),
-        RequirementLevel::Claims => Ok(AAuthChallenge::Claims),
-        RequirementLevel::AuthToken => {
-            let resource_token = extract_quoted_param(trimmed, "resource-token")
-                .ok_or(HeaderError::MissingResourceToken)?;
-            Ok(AAuthChallenge::AuthToken { resource_token })
-        }
-        RequirementLevel::Interaction => {
-            let url =
-                extract_quoted_param(trimmed, "url").ok_or(HeaderError::MissingInteractionUrl)?;
-            let code =
-                extract_quoted_param(trimmed, "code").ok_or(HeaderError::MissingInteractionCode)?;
-            Ok(AAuthChallenge::Interaction { url, code })
-        }
+    /// Parse an `AAuth-Mission` header value.
+    pub fn from_header(header_value: &str) -> Result<Self> {
+        let approver =
+            extract_quoted_param(header_value, "approver").ok_or(HeaderError::MissingApprover)?;
+        let s256 = extract_quoted_param(header_value, "s256").ok_or(HeaderError::MissingS256)?;
+        Ok(Self { approver, s256 })
     }
 }
 
@@ -139,7 +145,7 @@ mod tests {
             url: "https://ps.example/interact".into(),
             code: "ABCD-EFGH".into(),
         };
-        let header = build_aauth_requirement(&challenge).unwrap();
-        assert_eq!(parse_aauth_requirement(&header).unwrap(), challenge);
+        let header = challenge.to_header();
+        assert_eq!(AAuthChallenge::from_header(&header).unwrap(), challenge);
     }
 }
