@@ -2,11 +2,12 @@
 
 Core Rust library for the [AAuth authorization protocol](https://github.com/dickhardt/AAuth).
 
-This crate provides protocol wire types, JWT and HTTP-signature helpers, metadata fetchers, and **role service traits** for agents, Person Servers, Access Servers, and resource servers. It has **no** axum or reqwest agent transport — use companion crates for those.
+This crate provides protocol wire types, JWT and HTTP-signature helpers, metadata fetchers, and **role service traits** for agents, Person Servers, Access Servers, and resource servers. It has **no** axum or reqwest transport — use companion crates for those.
 
 | Need | Crate |
 |------|-------|
 | Agent HTTP client | [`aauth-reqwest`](https://docs.rs/aauth-reqwest) |
+| PS→AS federation HTTP | [`aauth-reqwest`](https://docs.rs/aauth-reqwest) (`ReqwestAccessServerClient`, feature `person-server`) |
 | Axum handlers / `ResourceAuthLayer` | [`aauth-axum`](https://docs.rs/aauth-axum) |
 | Policy + in-memory pending stores | [`aauth-policy`](https://docs.rs/aauth-policy) |
 

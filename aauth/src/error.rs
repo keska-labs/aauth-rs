@@ -380,13 +380,11 @@ pub enum DeferredError {
     #[error("pending URL missing host")]
     MissingHost,
 
-    #[cfg(feature = "deferred-http")]
     #[error("HTTP request failed")]
-    Transport(#[source] reqwest::Error),
-
-    #[cfg(feature = "deferred-http")]
-    #[error("invalid response body")]
-    ResponseBody(#[source] reqwest::Error),
+    Transport {
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 
     #[error("failed to serialize request body")]
     Serialize(#[source] serde_json::Error),

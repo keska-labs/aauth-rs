@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Reqwest transport adapter for the AAuth agent client"
+description = "Reqwest transport adapters for the AAuth agent client and Person Server federation"
 documentation = "https://docs.rs/aauth-reqwest"
 readme = "README.md"
 keywords = ["aauth", "oauth", "authentication", "reqwest", "http-signatures"]
@@ -14,6 +14,7 @@ categories = ["authentication", "web-programming", "asynchronous"]
 
 [features]
 default = []
+person-server = ["aauth/person-server"]
 
 [dependencies]
 aauth = { workspace = true, default-features = false, features = ["agent"] }
@@ -35,11 +36,12 @@ trait-variant.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-aauth = { workspace = true, default-features = false, features = ["agent"] }
+aauth = { workspace = true, default-features = false, features = ["agent", "person-server"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio.workspace = true
 rstest.workspace = true
+wiremock.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true

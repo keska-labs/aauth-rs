@@ -1,3 +1,4 @@
+use aauth::AccessServerClient;
 use aauth::DeferCreated;
 use aauth::DeferRequirement;
 use aauth::PendingInput;
@@ -12,8 +13,6 @@ use aauth::generate_pending_id;
 use aauth::metadata::MetadataFetcher;
 use aauth::pending_location;
 use aauth::person_server::verify_federated_auth_token;
-use aauth::poll_pending_http;
-use aauth::post_pending_input;
 use aauth::protocol::{AAuthErrorCode, AAuthProtocolError};
 
 use crate::PersonTokenPolicy;
@@ -24,7 +23,7 @@ use crate::store::{
 use super::PersonTokenServiceError;
 use super::PolicyPersonTokenService;
 
-impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
+impl<P, S, M, F: MetadataFetcher, C: AccessServerClient> PolicyPersonTokenService<P, S, M, F, C> {
     pub(super) async fn create_federated_deferred_response(
         &self,
         ctx: &PersonTokenContext,
@@ -119,18 +118,11 @@ impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
             return Ok(PersonTokenFlowOutcome::denied(err));
         }
 
-        let signer = aauth::PersonServerOutboundSigner {
-            person_server_url: self.config.person_server_url.clone(),
-            signing_jwk: self.config.person_server_signing_jwk(),
-            keys: self.config.keys.clone(),
-        };
-        let post_outcome = match post_pending_input(
-            &self.config.http_client,
-            &federation.as_pending_url,
-            &input,
-            Some(&signer),
-        )
-        .await
+        let post_outcome = match self
+            .config
+            .access_server
+            .resume_pending(&federation.as_pending_url, &input)
+            .await
         {
             Ok(outcome) => outcome,
             Err(_) => return Ok(PersonTokenFlowOutcome::BadGateway),
@@ -139,16 +131,18 @@ impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
         let poll_outcome = if let Some(body) = post_outcome {
             ServerPollOutcome::AuthToken(body)
         } else {
-            match poll_pending_http(
-                &self.config.http_client,
-                ServerPollOptions {
-                    location_url: federation.as_pending_url.clone(),
-                    max_poll_duration_secs: self.config.federation_poll_max_secs,
-                    prefer_wait: None,
-                },
-                &federation.access_server_url,
-            )
-            .await
+            match self
+                .config
+                .access_server
+                .poll_pending(
+                    &federation.access_server_url,
+                    ServerPollOptions {
+                        location_url: federation.as_pending_url.clone(),
+                        max_poll_duration_secs: self.config.federation_poll_max_secs,
+                        prefer_wait: None,
+                    },
+                )
+                .await
             {
                 Ok(outcome) => outcome,
                 Err(_) => return Ok(PersonTokenFlowOutcome::BadGateway),

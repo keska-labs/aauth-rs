@@ -53,7 +53,7 @@ aauth-rs/
 │   │   └── …                   # JWT helpers, metadata cache, protocol types
 │   └── tests/                  # protocol / agent integration tests
 ├── aauth-policy/           # high-level Policy* + PendingStore + Policy*Service
-├── aauth-reqwest/          # reqwest agent transport (`AgentMiddleware`, signing, exchange)
+├── aauth-reqwest/          # reqwest agent transport + `ReqwestAccessServerClient` (PS federation)
 └── aauth-axum/             # axum HTTP adapters
     ├── src/
     │   ├── person/             # Person Server handlers, person_router, PersonServerState
@@ -71,7 +71,7 @@ aauth-rs/
 
 **Cargo features (`aauth-policy`):** `person-server`, `access-server`, `resource`, `full` — each enables the matching `aauth` role feature.
 
-**Cargo features (`aauth-reqwest`):** none optional. Resource-challenge verification always runs; auth-token claim checks always run. Auth JWT signature verification defaults on (`AgentOptions::verify_auth_signature`); set a `MetadataFetcher` for JWKS discovery.
+**Cargo features (`aauth-reqwest`):** optional `person-server` enables `ReqwestAccessServerClient`. Resource-challenge verification always runs; auth-token claim checks always run. Auth JWT signature verification defaults on (`AgentOptions::verify_auth_signature`); set a `MetadataFetcher` for JWKS discovery.
 
 **Cargo features (`aauth-axum`):** `person-server`, `access-server`, `resource`; optional `policy` enables `from_policy` helpers via `aauth-policy`. Prefer `person_router` / `access_router` / `resource_router` (`merge` or `nest`) over hand-wiring individual handlers; apply `ResourceAuthLayer` to protected app routes separately.
 
@@ -116,6 +116,7 @@ The **primary integration surface** is the role service traits in `aauth`. Axum 
 | Trait | Role | Methods |
 |-------|------|---------|
 | `PersonTokenService` | PS token exchange / pending | `exchange_token`, `poll_pending`, `resume_pending` |
+| `AccessServerClient` | PS→AS federation (outbound) | `fetch_metadata`, `exchange_token`, `resume_pending`, `poll_pending` |
 | `AccessTokenService` | AS token exchange / pending | `exchange_token`, `poll_pending`, `resume_pending` |
 | `ResourceAccessService` | RS resource-managed consent | `consent_for_agent`, `poll_pending`, `validate_opaque` |
 

@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Runnable README doctests for agent, Person/Access/Resource servers, and `httpsig-key` sign/verify (workspace README exercised via `aauth-axum` with `--features full`).
-- `aauth-axum` depends on `tokio` and `reqwest`; feature `full` also enables optional `aauth-reqwest` for workspace README doctests.
-- `aauth-policy` pulls optional `reqwest` with feature `person-server` (for `PersonServerConfig` construction).
+- `aauth-axum` depends on `tokio` and `reqwest`; feature `full` also enables optional `aauth-reqwest` (with `person-server`) for workspace README doctests and federation examples.
+- `AccessServerClient` / `AbsentAccessServerClient` / `AccessServerExchangeOutcome` for Person Server → Access Server federation (HTTP-free in `aauth`).
+- `ReqwestAccessServerClient` in `aauth-reqwest` (feature `person-server`) implementing `AccessServerClient`.
 - `From<httpsig_key::Error> for SignatureError` / `AAuthError`.
 - `is_valid_server_identifier` / `is_valid_agent_identifier` for HTTPS server identifiers and `aauth:local@domain` agent IDs (loopback HTTP accepted for local tests).
 - `SIGNATURE_ERROR` / `SIGNATURE_ERROR_NAME` header constants; `SignatureErrorHeader` re-exported from `httpsig_key` at the crate root.
@@ -62,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `PersonServerConfig.http_client: reqwest::Client` replaced by `access_server: C` where `C: AccessServerClient` (default `AbsentAccessServerClient`).
+- `PolicyPersonTokenService` and `PersonServerState` / `person_router` take an `AccessServerClient` type parameter.
 - Call sites sign/verify with `httpsig_key::sign` / `httpsig_key::verify` directly using `SigningMaterial`.
 - `KeyMaterialProvider::key_material` and `StaticKeyMaterialProvider` use `httpsig_key::SigningMaterial` (re-exported from `aauth`); `RequestSigningExt` signs with `&SigningMaterial`.
 - `ResourceAccessMode::IdentityBased` accepts only verified agent JWTs (auth JWTs get `requirement=agent-token`); matches `#overview-identity-access`.
@@ -76,6 +79,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `aauth` feature `deferred-http` and optional `reqwest` / `tokio` dependencies from `aauth` (Person Server federation HTTP lives in `aauth-reqwest`).
+- `poll_pending_http`, `post_pending_input`, and `OutboundSignatureProvider` (use `AccessServerClient` / `ReqwestAccessServerClient`).
+- Optional `reqwest` dependency on `aauth-policy` feature `person-server`.
 - `aauth::KeyMaterial` and aauth-local `SignatureKey` / `SignatureKeyJwt` / `SignatureKeyJktJwt` / `SignatureKeyHwk` (`protocol/signature.rs`); use re-exported `httpsig_key::{SigningMaterial, SignatureKey, SignatureKeyJwt, SignatureKeyHwk, SignatureKeyScheme}`.
 - `aauth::signature` module and façade (`sign_request_headers`, `apply_outbound_signature`, `verify_request_signature` / `verify_request_signature_with_options`, `VerifiedSignature`, `SignatureVerifyOptions`); use `httpsig_key` directly.
 - Orphaned unused `aauth` sources under `*/axum/` and `agent/reqwest/` (not part of the module tree; HTTP adapters live in `aauth-axum` / `aauth-reqwest`).

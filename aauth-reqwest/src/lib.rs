@@ -1,5 +1,7 @@
 #![doc = include_str!("../README.md")]
 
+#[cfg(feature = "person-server")]
+mod access_client;
 mod deferred;
 mod error;
 mod metadata;
@@ -7,6 +9,8 @@ mod middleware;
 pub mod signed;
 mod token_exchange;
 
+#[cfg(feature = "person-server")]
+pub use access_client::ReqwestAccessServerClient;
 pub use aauth::agent::auth::{
     AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions, AgentOptionsBuilder,
     ClarificationCallback, InteractionCallback,

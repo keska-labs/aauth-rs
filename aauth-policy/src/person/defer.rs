@@ -1,3 +1,4 @@
+use aauth::AccessServerClient;
 use aauth::DeferCreated;
 use aauth::DeferRequirement;
 use aauth::PendingOutcome;
@@ -21,7 +22,7 @@ use crate::store::{
 use super::PersonTokenServiceError;
 use super::PolicyPersonTokenService;
 
-impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
+impl<P, S, M, F: MetadataFetcher, C: AccessServerClient> PolicyPersonTokenService<P, S, M, F, C> {
     pub(super) async fn apply_person_decision(
         &self,
         ctx: &PersonTokenContext,

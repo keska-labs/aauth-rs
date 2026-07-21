@@ -121,7 +121,7 @@ App state must implement [`FromRef`](https://docs.rs/axum/latest/axum/extract/tr
 
 ```rust
 #![cfg(all(feature = "person-server", feature = "policy"))]
-use aauth::{DEFAULT_PENDING_TTL_SECS, PersonServerConfig, TestKeys};
+use aauth::{AbsentAccessServerClient, DEFAULT_PENDING_TTL_SECS, PersonServerConfig, TestKeys};
 use aauth_axum::{PersonServerState, person_router};
 use aauth_policy::{AlwaysGrantPersonPolicy, InMemoryPersonPendingStore};
 use axum::body::Body;
@@ -136,8 +136,10 @@ type PersonState = PersonServerState<
         InMemoryPersonPendingStore,
         aauth::person_server::keys::TestPersonAuthJwtMinter,
         aauth::StaticMetadataFetcher,
+        AbsentAccessServerClient,
     >,
     aauth::StaticMetadataFetcher,
+    AbsentAccessServerClient,
 >;
 
 #[derive(Clone)]
@@ -171,13 +173,13 @@ let person = PersonServerState::from_policy(
         pending_path: "/pending".into(),
         pending_ttl_secs: DEFAULT_PENDING_TTL_SECS,
         fetcher: keys.person_metadata_fetcher(person_server_url),
-        http_client: reqwest::Client::new(),
+        access_server: AbsentAccessServerClient,
         federation_poll_max_secs: None,
     },
 );
 
 let app = Router::new()
-    .merge(person_router::<AppState, _, _>())
+    .merge(person_router::<AppState, _, _, _>())
     .with_state(AppState { person });
 
 let res = app

@@ -2,12 +2,16 @@ use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, DeferCreated, 
 use crate::jwt::{AgentClaims, ResourceClaims};
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
+use crate::person_server::access_client::{AbsentAccessServerClient, AccessServerClient};
 use crate::protocol::{AAuthProtocolError, PendingBody, TokenExchangeRequest, TokenResponseBody};
 
 use crate::http_util::normalize_server_url;
 
 #[derive(Clone)]
-pub struct PersonServerConfig<F: MetadataFetcher = crate::metadata::StaticMetadataFetcher> {
+pub struct PersonServerConfig<
+    F: MetadataFetcher = crate::metadata::StaticMetadataFetcher,
+    C: AccessServerClient = AbsentAccessServerClient,
+> {
     pub keys: TestKeys,
     pub person_server_url: String,
     pub resource_url: String,
@@ -17,12 +21,12 @@ pub struct PersonServerConfig<F: MetadataFetcher = crate::metadata::StaticMetada
     pub pending_path: String,
     pub pending_ttl_secs: u64,
     pub fetcher: F,
-    pub http_client: reqwest::Client,
+    pub access_server: C,
     /// Max seconds for federation pending polls (default 300).
     pub federation_poll_max_secs: Option<u64>,
 }
 
-impl<F: MetadataFetcher> PersonServerConfig<F> {
+impl<F: MetadataFetcher, C: AccessServerClient> PersonServerConfig<F, C> {
     pub fn person_server_signing_jwk(&self) -> crate::jwt::SigningJwk {
         self.keys.person_server.signing_jwk()
     }

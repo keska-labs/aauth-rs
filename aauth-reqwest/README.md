@@ -1,8 +1,11 @@
 # aauth-reqwest
 
-Reqwest transport for the AAuth **agent** client.
+Reqwest transport adapters for AAuth:
 
-Wraps [`aauth::agent::auth::AgentAuth`] with HTTP: request signing, resource-token exchange at the Person Server, deferred (`202`) polling, and optional proactive `authorization_endpoint` POSTs. Domain types and the auth state machine live in [`aauth`](https://docs.rs/aauth); this crate is the reqwest adapter.
+- **Agent client** — wraps [`aauth::agent::auth::AgentAuth`] with HTTP: request signing, resource-token exchange at the Person Server, deferred (`202`) polling, and optional proactive `authorization_endpoint` POSTs.
+- **Person Server federation** (feature `person-server`) — [`ReqwestAccessServerClient`] implements [`aauth::AccessServerClient`] for PS→AS metadata, token exchange, and pending resume/poll.
+
+Domain types and state machines live in [`aauth`](https://docs.rs/aauth); this crate is the reqwest adapter.
 
 **Pre-alpha.** Breaking changes are expected.
 
@@ -11,9 +14,12 @@ Wraps [`aauth::agent::auth::AgentAuth`] with HTTP: request signing, resource-tok
 ```toml
 aauth = { version = "0.0", default-features = false, features = ["agent"] }
 aauth-reqwest = { version = "0.0" }
+
+# Person Server federation client:
+aauth-reqwest = { version = "0.0", features = ["person-server"] }
 ```
 
-No optional features. Challenge verification always runs before token exchange; auth-token claim binding always runs after exchange. JWT signature verification of returned auth tokens defaults **on** ([`AgentOptions::verify_auth_signature`](https://docs.rs/aauth/latest/aauth/agent/auth/struct.AgentOptions.html)); provide a [`MetadataFetcher`](https://docs.rs/aauth/latest/aauth/metadata/trait.MetadataFetcher.html) (for example [`CachedMetadataFetcher`]) so JWKS discovery works.
+For the agent path, challenge verification always runs before token exchange; auth-token claim binding always runs after exchange. JWT signature verification of returned auth tokens defaults **on** ([`AgentOptions::verify_auth_signature`](https://docs.rs/aauth/latest/aauth/agent/auth/struct.AgentOptions.html)); provide a [`MetadataFetcher`](https://docs.rs/aauth/latest/aauth/metadata/trait.MetadataFetcher.html) (for example [`CachedMetadataFetcher`]) so JWKS discovery works.
 
 ## Quick start
 
@@ -52,6 +58,10 @@ On each response, [`AgentAuth`](https://docs.rs/aauth/latest/aauth/agent/auth/st
 4. Retry the original request with a cached auth or opaque token when appropriate
 
 Configure interaction / clarification callbacks and poll limits on [`AgentOptions`](https://docs.rs/aauth/latest/aauth/agent/auth/struct.AgentOptions.html) / [`AgentDeferredOptions`].
+
+## Person Server federation
+
+With feature `person-server`, construct a [`ReqwestAccessServerClient`] from a `reqwest::Client` and [`PersonServerOutboundSigner`](https://docs.rs/aauth/latest/aauth/struct.PersonServerOutboundSigner.html), then set it as `PersonServerConfig.access_server`.
 
 ## Re-exports
 

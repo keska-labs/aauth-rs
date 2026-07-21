@@ -37,8 +37,10 @@ type PersonState = PersonServerState<
         InMemoryPersonPendingStore,
         aauth::person_server::keys::TestPersonAuthJwtMinter,
         Arc<MultiPartyMetadataFetcher>,
+        aauth::AbsentAccessServerClient,
     >,
     Arc<MultiPartyMetadataFetcher>,
+    aauth::AbsentAccessServerClient,
 >;
 
 #[derive(Clone)]
@@ -72,13 +74,13 @@ fn person_server_app(
             pending_path: "/pending".into(),
             pending_ttl_secs: aauth::DEFAULT_PENDING_TTL_SECS,
             fetcher,
-            http_client: reqwest::Client::new(),
+            access_server: aauth::AbsentAccessServerClient,
             federation_poll_max_secs: Some(TEST_POLL_MAX_SECS),
         },
     );
 
     Router::new()
-        .merge(person_router::<PersonAppState, _, _>())
+        .merge(person_router::<PersonAppState, _, _, _>())
         .with_state(PersonAppState { person })
 }
 

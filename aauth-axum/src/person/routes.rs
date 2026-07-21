@@ -7,6 +7,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use serde::Deserialize;
 
+use aauth::AccessServerClient;
 use aauth::AuthTokenPollOutcome;
 use aauth::PersonServerConfig;
 use aauth::metadata::MetadataFetcher;
@@ -20,20 +21,28 @@ use crate::{AauthResponse, InternalServiceError, PendingResumeInput};
 pub struct PersonServerState<
     S: PersonTokenService,
     F: MetadataFetcher = aauth::StaticMetadataFetcher,
+    C: AccessServerClient = aauth::AbsentAccessServerClient,
 > {
     pub service: S,
-    pub config: PersonServerConfig<F>,
+    pub config: PersonServerConfig<F, C>,
 }
 
 #[cfg(feature = "policy")]
-impl<P, S, M, F> PersonServerState<aauth_policy::PolicyPersonTokenService<P, S, M, F>, F>
+impl<P, S, M, F, C>
+    PersonServerState<aauth_policy::PolicyPersonTokenService<P, S, M, F, C>, F, C>
 where
     P: aauth_policy::PersonTokenPolicy,
     S: aauth_policy::PendingStore<aauth_policy::PersonPendingRecord>,
     M: aauth::person_server::keys::PersonAuthJwtMinter + Clone,
     F: MetadataFetcher + Clone + 'static,
+    C: AccessServerClient + Clone + 'static,
 {
-    pub fn from_policy(policy: P, pending: S, minter: M, config: PersonServerConfig<F>) -> Self {
+    pub fn from_policy(
+        policy: P,
+        pending: S,
+        minter: M,
+        config: PersonServerConfig<F, C>,
+    ) -> Self {
         Self {
             service: aauth_policy::PolicyPersonTokenService::new(
                 policy,
@@ -46,9 +55,14 @@ where
     }
 }
 
-pub async fn person_metadata_handler<S: PersonTokenService, F: MetadataFetcher>(
-    State(state): State<PersonServerState<S, F>>,
-) -> Json<PersonServerMetadata> {
+pub async fn person_metadata_handler<S, F, C>(
+    State(state): State<PersonServerState<S, F, C>>,
+) -> Json<PersonServerMetadata>
+where
+    S: PersonTokenService,
+    F: MetadataFetcher,
+    C: AccessServerClient,
+{
     // `person_server_url` is the logical issuer; endpoint URLs use the reachable base.
     let base = state.config.pending_base_url.trim_end_matches('/');
     Json(PersonServerMetadata {
@@ -60,20 +74,30 @@ pub async fn person_metadata_handler<S: PersonTokenService, F: MetadataFetcher>(
     })
 }
 
-pub async fn person_jwks_handler<S: PersonTokenService, F: MetadataFetcher>(
-    State(state): State<PersonServerState<S, F>>,
-) -> Json<JwksDocument> {
+pub async fn person_jwks_handler<S, F, C>(
+    State(state): State<PersonServerState<S, F, C>>,
+) -> Json<JwksDocument>
+where
+    S: PersonTokenService,
+    F: MetadataFetcher,
+    C: AccessServerClient,
+{
     Json(JwksDocument {
         keys: state.config.keys.person_server.jwk_set(),
     })
 }
 
-pub async fn token_exchange_handler<S: PersonTokenService, F: MetadataFetcher>(
-    State(state): State<PersonServerState<S, F>>,
+pub async fn token_exchange_handler<S, F, C>(
+    State(state): State<PersonServerState<S, F, C>>,
     OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
     body: Option<Json<TokenExchangeRequest>>,
-) -> Response {
+) -> Response
+where
+    S: PersonTokenService,
+    F: MetadataFetcher,
+    C: AccessServerClient,
+{
     let authority = headers
         .get(HOST)
         .and_then(|h| h.to_str().ok())
@@ -116,10 +140,15 @@ pub async fn token_exchange_handler<S: PersonTokenService, F: MetadataFetcher>(
     }
 }
 
-pub async fn pending_poll_handler<S: PersonTokenService, F: MetadataFetcher>(
-    State(state): State<PersonServerState<S, F>>,
+pub async fn pending_poll_handler<S, F, C>(
+    State(state): State<PersonServerState<S, F, C>>,
     Path(id): Path<String>,
-) -> Result<AauthResponse<AuthTokenPollOutcome>, InternalServiceError> {
+) -> Result<AauthResponse<AuthTokenPollOutcome>, InternalServiceError>
+where
+    S: PersonTokenService,
+    F: MetadataFetcher,
+    C: AccessServerClient,
+{
     state
         .service
         .poll_pending(&id)
@@ -128,11 +157,16 @@ pub async fn pending_poll_handler<S: PersonTokenService, F: MetadataFetcher>(
         .map_err(InternalServiceError::from)
 }
 
-pub async fn pending_post_handler<S: PersonTokenService, F: MetadataFetcher>(
-    State(state): State<PersonServerState<S, F>>,
+pub async fn pending_post_handler<S, F, C>(
+    State(state): State<PersonServerState<S, F, C>>,
     Path(id): Path<String>,
     PendingResumeInput(input): PendingResumeInput,
-) -> Response {
+) -> Response
+where
+    S: PersonTokenService,
+    F: MetadataFetcher,
+    C: AccessServerClient,
+{
     match state.service.resume_pending(&id, input).await {
         Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
@@ -153,20 +187,30 @@ pub struct InteractionCallbackQuery {
     pub error: Option<String>,
 }
 
-pub async fn interaction_start_handler<S: PersonTokenService, F: MetadataFetcher>(
-    State(state): State<PersonServerState<S, F>>,
+pub async fn interaction_start_handler<S, F, C>(
+    State(state): State<PersonServerState<S, F, C>>,
     Query(query): Query<InteractionStartQuery>,
-) -> Response {
+) -> Response
+where
+    S: PersonTokenService,
+    F: MetadataFetcher,
+    C: AccessServerClient,
+{
     match state.service.begin_interaction(&query.code).await {
         Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
     }
 }
 
-pub async fn interaction_callback_handler<S: PersonTokenService, F: MetadataFetcher>(
-    State(state): State<PersonServerState<S, F>>,
+pub async fn interaction_callback_handler<S, F, C>(
+    State(state): State<PersonServerState<S, F, C>>,
     Query(query): Query<InteractionCallbackQuery>,
-) -> Response {
+) -> Response
+where
+    S: PersonTokenService,
+    F: MetadataFetcher,
+    C: AccessServerClient,
+{
     match state
         .service
         .resolve_interaction_callback(&query.id, query.error.as_deref())
@@ -188,27 +232,28 @@ pub async fn interaction_callback_handler<S: PersonTokenService, F: MetadataFetc
 /// - `GET /interact/callback`
 ///
 /// Merge into an app whose state implements [`FromRef`] to [`PersonServerState`].
-pub fn person_router<AppState, Svc, F>() -> Router<AppState>
+pub fn person_router<AppState, Svc, F, C>() -> Router<AppState>
 where
     AppState: Clone + Send + Sync + 'static,
     Svc: PersonTokenService + 'static,
     F: MetadataFetcher + 'static,
-    PersonServerState<Svc, F>: FromRef<AppState>,
+    C: AccessServerClient + 'static,
+    PersonServerState<Svc, F, C>: FromRef<AppState>,
 {
     Router::new()
         .route(
             "/.well-known/aauth-person.json",
-            get(person_metadata_handler::<Svc, F>),
+            get(person_metadata_handler::<Svc, F, C>),
         )
-        .route("/auth/jwks", get(person_jwks_handler::<Svc, F>))
-        .route("/aauth/token", post(token_exchange_handler::<Svc, F>))
+        .route("/auth/jwks", get(person_jwks_handler::<Svc, F, C>))
+        .route("/aauth/token", post(token_exchange_handler::<Svc, F, C>))
         .route(
             "/pending/{id}",
-            get(pending_poll_handler::<Svc, F>).post(pending_post_handler::<Svc, F>),
+            get(pending_poll_handler::<Svc, F, C>).post(pending_post_handler::<Svc, F, C>),
         )
-        .route("/interact", get(interaction_start_handler::<Svc, F>))
+        .route("/interact", get(interaction_start_handler::<Svc, F, C>))
         .route(
             "/interact/callback",
-            get(interaction_callback_handler::<Svc, F>),
+            get(interaction_callback_handler::<Svc, F, C>),
         )
 }

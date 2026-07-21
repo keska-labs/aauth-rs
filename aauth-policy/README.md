@@ -63,7 +63,7 @@ Ready-made policies for examples and tests (feature-gated per role):
 
 ```rust
 #![cfg(feature = "person-server")]
-use aauth::{DEFAULT_PENDING_TTL_SECS, PersonServerConfig, TestKeys};
+use aauth::{AbsentAccessServerClient, DEFAULT_PENDING_TTL_SECS, PersonServerConfig, TestKeys};
 use aauth_policy::{
     AlwaysGrantPersonPolicy, InMemoryPersonPendingStore, PolicyPersonTokenService,
 };
@@ -81,7 +81,7 @@ let config = PersonServerConfig {
     pending_path: "/pending".into(),
     pending_ttl_secs: DEFAULT_PENDING_TTL_SECS,
     fetcher: keys.person_metadata_fetcher(person_server_url),
-    http_client: reqwest::Client::new(),
+    access_server: aauth::AbsentAccessServerClient,
     federation_poll_max_secs: None,
 };
 

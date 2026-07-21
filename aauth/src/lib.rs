@@ -68,13 +68,10 @@ pub use deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from
 #[cfg(feature = "deferred")]
 pub use deferred::{
     DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, DeferWaiting, PaymentRequiredDefer,
-    PendingInput, PendingOutcome, PendingSnapshot, generate_pending_id, parse_pending_post_body,
-    pending_location,
-};
-#[cfg(feature = "deferred-http")]
-pub use deferred::{
-    OutboundSignatureProvider, ParsedDeferred, ServerPollOptions, ServerPollOutcome,
-    parse_auth_token_response, parse_deferred_response, poll_pending_http, post_pending_input,
+    PendingInput, PendingOutcome, PendingSnapshot, SERVER_POLL_DEFAULT_MAX_SECS,
+    SERVER_POLL_DEFAULT_PREFER_WAIT, ServerPollOptions, ServerPollOutcome, generate_pending_id,
+    parse_auth_token_response, parse_deferred_response, parse_pending_post_body, pending_location,
+    ParsedDeferred,
 };
 
 #[cfg(feature = "resource-verify")]
@@ -86,9 +83,11 @@ pub use resource_verify::{
 
 #[cfg(feature = "person-server")]
 pub use person_server::{
-    DynPersonTokenService, FederationOutcome, LocalPersonTokenService, PersonAuthJwtMinter,
-    PersonServerConfig, PersonServerOutboundSigner, PersonTokenContext, PersonTokenFlowOutcome,
-    PersonTokenService, TestPersonAuthJwtMinter, verify_federated_auth_token,
+    AbsentAccessServerClient, AccessServerClient, AccessServerExchangeOutcome,
+    DynAccessServerClient, DynPersonTokenService, FederationOutcome, LocalAccessServerClient,
+    LocalPersonTokenService, PersonAuthJwtMinter, PersonServerConfig, PersonServerOutboundSigner,
+    PersonTokenContext, PersonTokenFlowOutcome, PersonTokenService, TestPersonAuthJwtMinter,
+    verify_federated_auth_token,
 };
 
 #[cfg(feature = "access-server")]

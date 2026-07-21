@@ -1,3 +1,4 @@
+use aauth::AccessServerClient;
 use aauth::AuthTokenPollOutcome;
 use aauth::PendingInput;
 use aauth::PersonServerConfig;
@@ -50,15 +51,15 @@ where
 }
 
 #[derive(Clone)]
-pub struct PolicyPersonTokenService<P, S, M, F: MetadataFetcher> {
+pub struct PolicyPersonTokenService<P, S, M, F: MetadataFetcher, C: AccessServerClient> {
     pub policy: P,
     pub pending: S,
     pub minter: M,
-    pub config: PersonServerConfig<F>,
+    pub config: PersonServerConfig<F, C>,
 }
 
-impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
-    pub fn new(policy: P, pending: S, minter: M, config: PersonServerConfig<F>) -> Self {
+impl<P, S, M, F: MetadataFetcher, C: AccessServerClient> PolicyPersonTokenService<P, S, M, F, C> {
+    pub fn new(policy: P, pending: S, minter: M, config: PersonServerConfig<F, C>) -> Self {
         Self {
             policy,
             pending,
@@ -68,12 +69,13 @@ impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
     }
 }
 
-impl<P, S, M, F> PersonTokenService for PolicyPersonTokenService<P, S, M, F>
+impl<P, S, M, F, C> PersonTokenService for PolicyPersonTokenService<P, S, M, F, C>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
     M: PersonAuthJwtMinter + Clone,
     F: MetadataFetcher + Clone + 'static,
+    C: AccessServerClient + Clone + 'static,
 {
     type Error = PersonTokenServiceError<S::Error>;
 

@@ -1,16 +1,10 @@
-use http::HeaderMap;
-use httpsig_key::{SignOptions, SignatureKey, SignatureKeyJwt, SigningMaterial, sign};
-use url::Url;
-
-use crate::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response};
-use crate::error::{DeferredError, MetadataError, Result, VerifyError, VerifyReason};
+use crate::deferred::{DeferRequirement};
+use crate::error::{Result, VerifyError, VerifyReason};
 use crate::jwt::ParsedToken;
 use crate::metadata::MetadataFetcher;
-use crate::person_server::keys::mint_person_server_signature_jwt;
+use crate::person_server::access_client::{AccessServerClient, AccessServerExchangeOutcome};
 use crate::person_server::service::PersonServerConfig;
-use crate::protocol::{
-    AccessServerMetadata, AccessTokenExchangeRequest, JwtTyp, TokenResponseBody,
-};
+use crate::protocol::{AccessTokenExchangeRequest, JwtTyp, TokenResponseBody};
 use crate::resource_verify::{VerifyTokenOptions, verify_token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,7 +17,7 @@ pub enum FederationOutcome {
     },
 }
 
-impl<F: MetadataFetcher> PersonServerConfig<F> {
+impl<F: MetadataFetcher, C: AccessServerClient> PersonServerConfig<F, C> {
     /// Federate a resource-token exchange to the Access Server named in `aud`.
     ///
     /// Spec: `draft-hardt-oauth-aauth-protocol.md#access-server-federation`,
@@ -33,7 +27,6 @@ impl<F: MetadataFetcher> PersonServerConfig<F> {
         resource_token: &str,
         agent_token: &str,
     ) -> Result<FederationOutcome> {
-        let client = &self.http_client;
         let claims = match ParsedToken::parse(resource_token)? {
             ParsedToken::Resource(c) => c,
             _ => {
@@ -45,123 +38,42 @@ impl<F: MetadataFetcher> PersonServerConfig<F> {
             }
         };
         let access_server_url = claims.aud.trim_end_matches('/').to_string();
-        let metadata_url = format!("{access_server_url}/.well-known/aauth-access.json");
-        let metadata_resp =
-            client
-                .get(&metadata_url)
-                .send()
-                .await
-                .map_err(|e| MetadataError::Request {
-                    url: metadata_url.clone(),
-                    source: Box::new(e),
-                })?;
 
-        if !metadata_resp.status().is_success() {
-            return Err(MetadataError::HttpStatus {
-                url: metadata_url.clone(),
-                status: metadata_resp.status().as_u16(),
-            }
-            .into());
-        }
-
-        let metadata: AccessServerMetadata =
-            metadata_resp
-                .json()
-                .await
-                .map_err(|e| MetadataError::Request {
-                    url: metadata_url,
-                    source: Box::new(e),
-                })?;
+        let metadata = self.access_server.fetch_metadata(&access_server_url).await?;
         metadata.validate()?;
 
-        let body = AccessTokenExchangeRequest {
+        let request = AccessTokenExchangeRequest {
             resource_token: resource_token.to_string(),
             agent_token: agent_token.to_string(),
             upstream_token: None,
             subagent_token: None,
         };
 
-        let (authority, path) = url_authority_path(&metadata.token_endpoint)?;
-        let body_json = serde_json::to_string(&body).map_err(DeferredError::Serialize)?;
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        let signing = SigningMaterial {
-            signing_jwk: self.person_server_signing_jwk(),
-            signature_key: SignatureKey::Jwt(SignatureKeyJwt {
-                jwt: mint_person_server_signature_jwt(&self.keys, &self.person_server_url),
-            }),
-        };
-        sign(
-            &mut headers,
-            "POST",
-            &authority,
-            &path,
-            &signing,
-            &SignOptions::default(),
-        )?;
-
-        let mut request = client.post(&metadata.token_endpoint).body(body_json);
-        for (name, value) in headers.iter() {
-            request = request.header(name, value);
-        }
-
-        let response = request.send().await.map_err(|e| MetadataError::Request {
-            url: metadata.token_endpoint.clone(),
-            source: Box::new(e),
-        })?;
-
-        let status = response.status().as_u16();
-
-        if status == 402 {
-            // Spec: `#as-token-endpoint` Payment required — settle then poll Location.
-            // Stub: payment settlement is not implemented; treat as hard error.
-            return Err(DeferredError::PaymentNotRequirement.into());
-        }
-
-        if status == 202 {
-            let headers = crate::http_util::response_headers_to_http(response.headers());
-            let body_bytes = response.bytes().await.map_err(|e| MetadataError::Request {
-                url: metadata.token_endpoint.clone(),
-                source: Box::new(e),
-            })?;
-            let ParsedDeferred {
-                location,
-                requirement,
-            } = parse_deferred_response(status, &headers, &body_bytes, &access_server_url)?;
-            return Ok(FederationOutcome::Deferred {
-                requirement,
-                as_pending_url: location,
-                access_server_url,
-            });
-        }
-
-        if !response.status().is_success() {
-            return Err(MetadataError::HttpStatus {
-                url: metadata.token_endpoint.clone(),
-                status,
+        match self
+            .access_server
+            .exchange_token(&metadata.token_endpoint, &request)
+            .await?
+        {
+            AccessServerExchangeOutcome::Complete(token_body) => {
+                verify_federated_auth_token(
+                    &token_body.auth_token,
+                    &access_server_url,
+                    &self.resource_url,
+                    agent_token,
+                    &self.fetcher,
+                )
+                .await?;
+                Ok(FederationOutcome::Complete(token_body))
             }
-            .into());
+            AccessServerExchangeOutcome::Deferred {
+                requirement,
+                as_pending_url,
+            } => Ok(FederationOutcome::Deferred {
+                requirement,
+                as_pending_url,
+                access_server_url,
+            }),
         }
-
-        let token_body: TokenResponseBody =
-            response.json().await.map_err(|e| MetadataError::Request {
-                url: metadata.token_endpoint,
-                source: Box::new(e),
-            })?;
-
-        verify_federated_auth_token(
-            &token_body.auth_token,
-            &access_server_url,
-            &self.resource_url,
-            agent_token,
-            &self.fetcher,
-        )
-        .await?;
-
-        Ok(FederationOutcome::Complete(token_body))
     }
 }
 
@@ -218,18 +130,4 @@ pub async fn verify_federated_auth_token<F: MetadataFetcher>(
     }
 
     Ok(())
-}
-
-fn url_authority_path(url: &str) -> Result<(String, String)> {
-    let parsed = Url::parse(url).map_err(DeferredError::InvalidUrl)?;
-    let authority = parsed
-        .host_str()
-        .ok_or(DeferredError::MissingHost)?
-        .to_string();
-    let authority = match parsed.port() {
-        Some(port) => format!("{authority}:{port}"),
-        None => authority,
-    };
-    let path = parsed.path().to_string();
-    Ok((authority, path))
 }
