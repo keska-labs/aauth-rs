@@ -63,7 +63,7 @@ impl MultiPartyMetadataFetcherBuilder {
         self
     }
 
-    pub fn build(self) -> Arc<dyn MetadataFetcher> {
+    pub fn build(self) -> Arc<MultiPartyMetadataFetcher> {
         let agent_jwks_uri = format!("{}/jwks", self.agent_url.trim_end_matches('/'));
         let resource_jwks_uri = format!("{}/jwks", self.resource_url.trim_end_matches('/'));
 

@@ -24,8 +24,8 @@ pub trait AccessTokenService: Send + Sync + Clone {
 }
 
 impl AccessTokenContext {
-    pub fn from_exchange(
-        config: &AccessServerConfig,
+    pub fn from_exchange<F: crate::metadata::MetadataFetcher>(
+        config: &AccessServerConfig<F>,
         request: &crate::protocol::AccessTokenExchangeRequest,
     ) -> Result<Self, AAuthError> {
         let agent = match ParsedToken::parse(&request.agent_token)? {

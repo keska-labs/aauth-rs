@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
+use crate::support::metadata::MultiPartyMetadataFetcher;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth::resource::{ResourceAccessConfig, ResourceAccessMode};
 use aauth_axum::{ResourceAuthLayer, ResourceServerState, resource_router};
 use aauth_policy::{
@@ -89,7 +89,7 @@ pub struct ResourceManagedParts {
 pub fn resource_managed_app(
     keys: &TestKeys,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
     policy_kind: ResourcePolicyKind,
 ) -> ResourceManagedParts {
     let pending = InMemoryResourcePendingStore::new();

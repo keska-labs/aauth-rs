@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
+use crate::support::metadata::MultiPartyMetadataFetcher;
 use aauth::AccessServerConfig;
 use aauth::PersonServerConfig;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth::resource::ResourceAccessMode;
 use aauth_axum::{
     AccessServerState, PersonServerState, ResourceAuthLayer, access_router, person_router,
@@ -94,7 +94,9 @@ type AccessState = AccessServerState<
         AccessPolicy,
         InMemoryAccessPendingStore,
         aauth::access_server::keys::TestAccessAuthJwtMinter,
+        Arc<MultiPartyMetadataFetcher>,
     >,
+    Arc<MultiPartyMetadataFetcher>,
 >;
 
 type PersonState = PersonServerState<
@@ -102,7 +104,9 @@ type PersonState = PersonServerState<
         FederatePersonPolicy,
         InMemoryPersonPendingStore,
         aauth::person_server::keys::TestPersonAuthJwtMinter,
+        Arc<MultiPartyMetadataFetcher>,
     >,
+    Arc<MultiPartyMetadataFetcher>,
 >;
 
 #[derive(Clone)]
@@ -139,7 +143,7 @@ pub fn access_server_app(
     access_server_url: &str,
     person_server_url: &str,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
     policy_kind: AccessPolicyKind,
 ) -> AccessServerParts {
     let pending = InMemoryAccessPendingStore::new();
@@ -177,7 +181,7 @@ pub fn access_server_app(
     );
 
     let app = Router::new()
-        .merge(access_router::<AccessAppState, _>())
+        .merge(access_router::<AccessAppState, _, _>())
         .with_state(AccessAppState { access });
 
     AccessServerParts { app, pending }
@@ -194,7 +198,7 @@ pub fn federated_person_server_app(
     keys: &TestKeys,
     person_server_url: &str,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> FederatedPersonServerParts {
     let pending = InMemoryPersonPendingStore::new();
     let person = PersonServerState::from_policy(
@@ -217,7 +221,7 @@ pub fn federated_person_server_app(
     );
 
     let app = Router::new()
-        .merge(person_router::<PersonAppState, _>())
+        .merge(person_router::<PersonAppState, _, _>())
         .with_state(PersonAppState { person });
 
     FederatedPersonServerParts { app, pending }
@@ -229,7 +233,7 @@ pub fn federated_resource_app(
     resource_url: &str,
     person_server_url: &str,
     access_server_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let mode = ResourceAccessMode::<aauth::NoResourceAccessService>::PsAsserted {
         require_auth_token: true,

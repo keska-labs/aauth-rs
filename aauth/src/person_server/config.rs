@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 
 #[derive(Clone)]
-pub struct PersonServerConfig {
+pub struct PersonServerConfig<F: MetadataFetcher = crate::metadata::StaticMetadataFetcher> {
     pub keys: TestKeys,
     pub person_server_url: String,
     pub resource_url: String,
@@ -13,13 +11,13 @@ pub struct PersonServerConfig {
     pub pending_base_url: String,
     pub pending_path: String,
     pub pending_ttl_secs: u64,
-    pub fetcher: Arc<dyn MetadataFetcher>,
+    pub fetcher: F,
     pub http_client: reqwest::Client,
     /// Max seconds for federation pending polls (default 300).
     pub federation_poll_max_secs: Option<u64>,
 }
 
-impl PersonServerConfig {
+impl<F: MetadataFetcher> PersonServerConfig<F> {
     pub fn person_server_signing_jwk(&self) -> crate::jwt::SigningJwk {
         self.keys.person_server.signing_jwk()
     }

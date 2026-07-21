@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use crate::keys::TestKeys;
 use crate::metadata::MetadataFetcher;
 
 #[derive(Clone)]
-pub struct AccessServerConfig {
+pub struct AccessServerConfig<F: MetadataFetcher = crate::metadata::StaticMetadataFetcher> {
     pub keys: TestKeys,
     pub access_server_url: String,
     pub resource_url: String,
@@ -13,5 +11,5 @@ pub struct AccessServerConfig {
     pub pending_base_url: String,
     pub pending_path: String,
     pub pending_ttl_secs: u64,
-    pub fetcher: Arc<dyn MetadataFetcher>,
+    pub fetcher: F,
 }

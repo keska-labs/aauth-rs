@@ -20,7 +20,7 @@ async fn spawn_identity() -> (
     TestKeys,
     support::listen::Serving,
     support::listen::Serving,
-    Arc<dyn aauth::metadata::MetadataFetcher>,
+    Arc<crate::support::metadata::MultiPartyMetadataFetcher>,
 ) {
     let keys = TestKeys::generate();
     let (agent_listener, agent_url) = bind_ephemeral().await;

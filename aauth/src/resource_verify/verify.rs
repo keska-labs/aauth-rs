@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use jsonwebtoken::DecodingKey;
 
 use crate::error::{Result, VerifyError, VerifyReason};
@@ -10,20 +8,22 @@ use crate::protocol::JwtTyp;
 
 const CLOCK_SKEW: i64 = 60;
 
-pub struct VerifyTokenOptions {
+pub struct VerifyTokenOptions<F> {
     pub jwt: String,
     pub http_signature_thumbprint: String,
-    pub fetcher: Arc<dyn MetadataFetcher>,
+    pub fetcher: F,
 }
 
-pub struct VerifyResourceTokenOptions {
+pub struct VerifyResourceTokenOptions<F> {
     pub jwt: String,
     pub expected_agent: Option<String>,
     pub expected_agent_jkt: Option<String>,
-    pub fetcher: Arc<dyn MetadataFetcher>,
+    pub fetcher: F,
 }
 
-pub async fn verify_token(options: VerifyTokenOptions) -> Result<ParsedToken> {
+pub async fn verify_token<F: MetadataFetcher>(
+    options: VerifyTokenOptions<F>,
+) -> Result<ParsedToken> {
     let parsed = ParsedToken::parse(&options.jwt)?;
     let typ = match &parsed {
         ParsedToken::Agent(_) => JwtTyp::Agent,
@@ -65,7 +65,9 @@ pub async fn verify_token(options: VerifyTokenOptions) -> Result<ParsedToken> {
     })
 }
 
-pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Result<ResourceClaims> {
+pub async fn verify_resource_token<F: MetadataFetcher>(
+    options: VerifyResourceTokenOptions<F>,
+) -> Result<ResourceClaims> {
     let parsed = ParsedToken::parse(&options.jwt)?;
     let claims = match parsed {
         ParsedToken::Resource(c) => c,
@@ -138,12 +140,12 @@ pub fn verify_auth_token_binding(auth: &AuthClaims, resource_url: &str) -> Resul
 }
 
 /// Verify an auth token returned from token exchange before caching.
-pub async fn verify_client_auth_token(
+pub async fn verify_client_auth_token<F: MetadataFetcher>(
     jwt: &str,
     resource_url: &str,
     agent_sub: &str,
     agent_jkt: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: F,
 ) -> Result<AuthClaims> {
     let verified = verify_token(VerifyTokenOptions {
         jwt: jwt.to_string(),
@@ -172,12 +174,12 @@ pub async fn verify_client_auth_token(
 }
 
 /// Verify a resource token from a `401` challenge before token exchange.
-pub async fn verify_resource_challenge(
+pub async fn verify_resource_challenge<F: MetadataFetcher>(
     jwt: &str,
     resource_url: &str,
     agent_sub: &str,
     agent_jkt: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: F,
 ) -> Result<ResourceClaims> {
     verify_resource_token(VerifyResourceTokenOptions {
         jwt: jwt.to_string(),
@@ -194,10 +196,10 @@ pub async fn verify_resource_challenge(
     })
 }
 
-async fn fetch_decoding_key(
+async fn fetch_decoding_key<F: MetadataFetcher>(
     iss: &str,
     dwk: &str,
-    fetcher: &Arc<dyn MetadataFetcher>,
+    fetcher: &F,
     jwt: &str,
 ) -> Result<DecodingKey> {
     let jwks_uri = fetcher.resolve_jwks_uri(iss, dwk).await?;

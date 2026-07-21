@@ -11,7 +11,6 @@ use std::sync::Arc;
 use aauth::ParsedToken;
 use aauth::PersonServerConfig;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AuthOkResponse, JwksDocument, ResourceServerMetadata};
 use aauth::resource::ResourceAccessMode;
 use aauth_axum::{PersonServerState, ResourceAuthLayer, VerifiedAAuthToken, person_router};
@@ -37,7 +36,9 @@ type PersonState = PersonServerState<
         AlwaysGrantPersonPolicy,
         InMemoryPersonPendingStore,
         aauth::person_server::keys::TestPersonAuthJwtMinter,
+        Arc<MultiPartyMetadataFetcher>,
     >,
+    Arc<MultiPartyMetadataFetcher>,
 >;
 
 #[derive(Clone)]
@@ -55,7 +56,7 @@ fn person_server_app(
     keys: &TestKeys,
     person_server_url: &str,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let person = PersonServerState::from_policy(
         AlwaysGrantPersonPolicy::new("user-123"),
@@ -77,7 +78,7 @@ fn person_server_app(
     );
 
     Router::new()
-        .merge(person_router::<PersonAppState, _>())
+        .merge(person_router::<PersonAppState, _, _>())
         .with_state(PersonAppState { person })
 }
 
@@ -85,7 +86,7 @@ fn person_managed_resource_app(
     keys: &TestKeys,
     resource_url: &str,
     person_server_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let layer = ResourceAuthLayer::new(
         fetcher,

@@ -10,6 +10,7 @@ use aauth::PendingSnapshot;
 use aauth::access_server::config::AccessServerConfig;
 use aauth::access_server::keys::AccessAuthJwtMinter;
 use aauth::generate_pending_id;
+use aauth::metadata::MetadataFetcher;
 use aauth::pending_location;
 use aauth::protocol::TokenResponseBody;
 
@@ -35,15 +36,15 @@ where
 }
 
 #[derive(Clone)]
-pub struct PolicyAccessTokenService<P, S, M> {
+pub struct PolicyAccessTokenService<P, S, M, F: MetadataFetcher> {
     pub policy: P,
     pub pending: S,
     pub minter: M,
-    pub config: AccessServerConfig,
+    pub config: AccessServerConfig<F>,
 }
 
-impl<P, S, M> PolicyAccessTokenService<P, S, M> {
-    pub fn new(policy: P, pending: S, minter: M, config: AccessServerConfig) -> Self {
+impl<P, S, M, F: MetadataFetcher> PolicyAccessTokenService<P, S, M, F> {
+    pub fn new(policy: P, pending: S, minter: M, config: AccessServerConfig<F>) -> Self {
         Self {
             policy,
             pending,
@@ -53,7 +54,7 @@ impl<P, S, M> PolicyAccessTokenService<P, S, M> {
     }
 }
 
-impl<P, S, M> PolicyAccessTokenService<P, S, M> {
+impl<P, S, M, F: MetadataFetcher> PolicyAccessTokenService<P, S, M, F> {
     async fn apply_access_decision(
         &self,
         ctx: &AccessTokenContext,
@@ -210,11 +211,12 @@ impl<P, S, M> PolicyAccessTokenService<P, S, M> {
 }
 
 #[async_trait::async_trait]
-impl<P, S, M> AccessTokenService for PolicyAccessTokenService<P, S, M>
+impl<P, S, M, F> AccessTokenService for PolicyAccessTokenService<P, S, M, F>
 where
     P: AccessTokenPolicy,
     S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter + Clone,
+    F: MetadataFetcher + Clone + 'static,
 {
     type Error = AccessTokenServiceError<S::Error>;
 

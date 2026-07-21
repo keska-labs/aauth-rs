@@ -5,6 +5,7 @@ use aauth::PendingSnapshot;
 use aauth::PersonTokenContext;
 use aauth::generate_pending_id;
 use aauth::interaction_code::{canonicalize_code, generate_code};
+use aauth::metadata::MetadataFetcher;
 use aauth::pending_location;
 use aauth::person_server::federation::FederationOutcome;
 use aauth::person_server::keys::PersonAuthJwtMinter;
@@ -20,7 +21,7 @@ use crate::store::{
 use super::PersonTokenServiceError;
 use super::PolicyPersonTokenService;
 
-impl<P, S, M> PolicyPersonTokenService<P, S, M> {
+impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
     pub(super) async fn apply_person_decision(
         &self,
         ctx: &PersonTokenContext,

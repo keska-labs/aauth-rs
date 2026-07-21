@@ -51,11 +51,11 @@ pub enum ServerPollOutcome {
     Gone,
 }
 
-pub async fn post_pending_input(
+pub async fn post_pending_input<S: OutboundSignatureProvider + ?Sized>(
     client: &reqwest::Client,
     url: &str,
     input: &PendingInput,
-    signer: Option<&dyn OutboundSignatureProvider>,
+    signer: Option<&S>,
 ) -> Result<Option<TokenResponseBody>> {
     let (body, content_type) = match input {
         PendingInput::ClarificationResponse(answer) => (
@@ -260,7 +260,7 @@ mod tests {
             &client,
             &format!("{}/pending/abc", mock.uri()),
             &PendingInput::InteractionCompleted,
-            None,
+            None::<&dyn OutboundSignatureProvider>,
         )
         .await
         .expect("post");

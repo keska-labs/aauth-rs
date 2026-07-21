@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use jsonwebtoken::jwk::JwkSet;
 
@@ -7,6 +9,28 @@ use crate::error::{MetadataError, Result};
 pub trait MetadataFetcher: Send + Sync {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String>;
     async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet>;
+}
+
+#[async_trait]
+impl<T: MetadataFetcher + ?Sized> MetadataFetcher for Arc<T> {
+    async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String> {
+        (**self).resolve_jwks_uri(iss, dwk).await
+    }
+
+    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet> {
+        (**self).fetch_jwks(jwks_uri).await
+    }
+}
+
+#[async_trait]
+impl<T: MetadataFetcher + ?Sized> MetadataFetcher for &T {
+    async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String> {
+        (**self).resolve_jwks_uri(iss, dwk).await
+    }
+
+    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet> {
+        (**self).fetch_jwks(jwks_uri).await
+    }
 }
 
 /// Fixed JWKS for tests and examples without HTTP metadata discovery.

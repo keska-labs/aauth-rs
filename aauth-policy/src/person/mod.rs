@@ -3,6 +3,7 @@ use aauth::PendingInput;
 use aauth::PersonTokenContext;
 use aauth::PersonTokenService;
 use aauth::interaction_code::canonicalize_code;
+use aauth::metadata::MetadataFetcher;
 use aauth::person_server::config::PersonServerConfig;
 use aauth::person_server::keys::PersonAuthJwtMinter;
 use aauth::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
@@ -38,15 +39,15 @@ where
 }
 
 #[derive(Clone)]
-pub struct PolicyPersonTokenService<P, S, M> {
+pub struct PolicyPersonTokenService<P, S, M, F: MetadataFetcher> {
     pub policy: P,
     pub pending: S,
     pub minter: M,
-    pub config: PersonServerConfig,
+    pub config: PersonServerConfig<F>,
 }
 
-impl<P, S, M> PolicyPersonTokenService<P, S, M> {
-    pub fn new(policy: P, pending: S, minter: M, config: PersonServerConfig) -> Self {
+impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
+    pub fn new(policy: P, pending: S, minter: M, config: PersonServerConfig<F>) -> Self {
         Self {
             policy,
             pending,
@@ -57,11 +58,12 @@ impl<P, S, M> PolicyPersonTokenService<P, S, M> {
 }
 
 #[async_trait::async_trait]
-impl<P, S, M> PersonTokenService for PolicyPersonTokenService<P, S, M>
+impl<P, S, M, F> PersonTokenService for PolicyPersonTokenService<P, S, M, F>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
     M: PersonAuthJwtMinter + Clone,
+    F: MetadataFetcher + Clone + 'static,
 {
     type Error = PersonTokenServiceError<S::Error>;
 

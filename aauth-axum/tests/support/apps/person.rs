@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
+use crate::support::metadata::MultiPartyMetadataFetcher;
 use aauth::PersonServerConfig;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth::protocol::ResourceInteractionClaim;
 use aauth::resource::{
     ResourceAccessMode, ResourceInteractionContext, ResourceInteractionProvider,
@@ -68,7 +68,9 @@ type PersonState = PersonServerState<
         PersonPolicy,
         InMemoryPersonPendingStore,
         aauth::person_server::keys::TestPersonAuthJwtMinter,
+        Arc<MultiPartyMetadataFetcher>,
     >,
+    Arc<MultiPartyMetadataFetcher>,
 >;
 
 #[derive(Clone)]
@@ -93,7 +95,7 @@ pub fn person_server_app(
     keys: &TestKeys,
     person_server_url: &str,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
     policy_kind: PersonPolicyKind,
 ) -> PersonServerParts {
     let pending = InMemoryPersonPendingStore::new();
@@ -132,7 +134,7 @@ pub fn person_server_app(
 
     let state = PersonAppState { person };
     let app = Router::new()
-        .merge(person_router::<PersonAppState, _>())
+        .merge(person_router::<PersonAppState, _, _>())
         .with_state(state);
 
     PersonServerParts { app, pending }
@@ -157,7 +159,7 @@ pub fn person_managed_resource_app(
     keys: &TestKeys,
     resource_url: &str,
     person_server_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
     resource_initiated_interaction: bool,
 ) -> Router {
     let mode = ResourceAccessMode::<aauth::NoResourceAccessService>::PsAsserted {
@@ -166,32 +168,35 @@ pub fn person_managed_resource_app(
         person_server_fallback: Some(person_server_url.to_string()),
     };
 
-    let mut layer = ResourceAuthLayer::new(
-        fetcher,
-        resource_url.to_string(),
-        mode,
-        Arc::new(keys.resource_token_signer()),
-    );
-    if resource_initiated_interaction {
-        layer = layer.with_interaction_provider(Arc::new(StaticResourceInteractionProvider {
-            claim: ResourceInteractionClaim {
-                url: format!(
-                    "{}/resource-interact",
-                    resource_url.replace("http://", "https://")
-                ),
-                code: "R1S2-C3D4".into(),
-            },
-        }));
-    }
-
     let state = ResourceDiscoveryState::from_keys(keys, resource_url);
+    let signer = Arc::new(keys.resource_token_signer());
 
-    Router::new()
-        .route("/api/data", get(api_data))
-        .route_layer(layer)
-        .route("/.well-known/aauth-resource.json", get(resource_metadata))
-        .route("/jwks", get(resource_jwks))
-        .with_state(state)
+    if resource_initiated_interaction {
+        let layer = ResourceAuthLayer::new(fetcher, resource_url.to_string(), mode, signer)
+            .with_interaction_provider(Arc::new(StaticResourceInteractionProvider {
+                claim: ResourceInteractionClaim {
+                    url: format!(
+                        "{}/resource-interact",
+                        resource_url.replace("http://", "https://")
+                    ),
+                    code: "R1S2-C3D4".into(),
+                },
+            }));
+        Router::new()
+            .route("/api/data", get(api_data))
+            .route_layer(layer)
+            .route("/.well-known/aauth-resource.json", get(resource_metadata))
+            .route("/jwks", get(resource_jwks))
+            .with_state(state)
+    } else {
+        let layer = ResourceAuthLayer::new(fetcher, resource_url.to_string(), mode, signer);
+        Router::new()
+            .route("/api/data", get(api_data))
+            .route_layer(layer)
+            .route("/.well-known/aauth-resource.json", get(resource_metadata))
+            .route("/jwks", get(resource_jwks))
+            .with_state(state)
+    }
 }
 
 /// Local resource only; resource-token `aud` is a hosted Person Server URL.
@@ -199,7 +204,7 @@ pub fn hosted_person_managed_resource_app(
     keys: &TestKeys,
     resource_url: &str,
     hosted_person_server_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     person_managed_resource_app(keys, resource_url, hosted_person_server_url, fetcher, false)
 }

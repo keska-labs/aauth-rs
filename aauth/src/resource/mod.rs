@@ -9,7 +9,9 @@ mod service;
 mod token;
 
 pub use access_context::ResourceAccessContext;
-pub use interaction::{ResourceInteractionContext, ResourceInteractionProvider};
+pub use interaction::{
+    NoResourceInteraction, ResourceInteractionContext, ResourceInteractionProvider,
+};
 pub use keys::{Ed25519ResourceTokenSigner, ResourceTokenSigner};
 pub use mode::ResourceAccessMode;
 pub use no_service::NoResourceAccessService;

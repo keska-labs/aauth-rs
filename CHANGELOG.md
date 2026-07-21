@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resource-initiated interaction: `ResourceInteractionProvider` and `interaction` on `ResourceTokenOptions`; PS `begin_interaction` / `resolve_interaction_callback` with `GET /interact` and `GET /interact/callback` axum handlers (now in `aauth-axum`).
 - `PersonServerConfig` and `AccessServerConfig` as domain config types (no longer gated on axum).
 - `poll_outcome_from_snapshot` in `aauth` deferred module.
+- `NoResourceInteraction` marker for `ResourceAuthLayer` when no resource-initiated interaction claim is needed.
+- Blanket `MetadataFetcher` / `ResourceTokenSigner` / `ResourceInteractionProvider` impls for `Arc<T>` and `MetadataFetcher` for `&T`, so shared deps can be owned concretely or wrapped for cheap `Clone`.
 
 ### Fixed
 
@@ -40,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Person and Access token-exchange handlers verify HTTP signatures against the request path (`OriginalUri`) instead of hardcoded paths, so Access Server routes remain nestable.
 
 ### Changed
+
+- `ResourceAuthLayer` / `ResourceAuthService` take type parameters for `MetadataFetcher`, `ResourceTokenSigner`, and `ResourceInteractionProvider` instead of `Arc<dyn …>` (default interaction provider is `NoResourceInteraction`).
+- `PersonServerConfig` / `AccessServerConfig`, `VerifyTokenOptions` / `VerifyResourceTokenOptions`, and related verify helpers are generic over `MetadataFetcher`; `PersonServerState` / `AccessServerState` and `Policy*TokenService` carry the same fetcher type parameter.
+- `person_router` / `access_router` take a fetcher type parameter so they match generic `*ServerState`.
+- `ResourceTokenOptions::sign` takes `&impl ResourceTokenSigner`; `post_pending_input` takes `Option<&S>` for `OutboundSignatureProvider`.
 
 - Reuse `httpsig-key` JWK types: `OkpJwk` / `OkpSigningJwk` → `PublicJwk` / `SigningJwk` (re-exported); `jwk_thumbprint` delegates to `httpsig-key`; `jwk_set_from_okp` → `jwk_set_from_public`.
 - Rename `VerifiedToken` → `ParsedToken` (now includes `Resource`); `decode_unverified` / `decode_verified` → `parse` / `verify_with_key`; remove `decode_resource_token_unverified`.

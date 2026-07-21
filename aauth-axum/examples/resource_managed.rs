@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use aauth::ParsedToken;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AgentOkResponse, JwksDocument, ResourceServerMetadata};
 use aauth::resource::{ResourceAccessConfig, ResourceAccessMode};
 use aauth_axum::{ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, resource_router};
@@ -57,7 +56,7 @@ impl FromRef<ResourceState> for DiscoveryState {
 fn resource_managed_app(
     keys: &TestKeys,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
     pending: InMemoryResourcePendingStore,
     opaque_store: InMemoryOpaqueAccessStore,
 ) -> Router {

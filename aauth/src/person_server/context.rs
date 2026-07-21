@@ -1,14 +1,13 @@
-use std::sync::Arc;
-
 use crate::error::{Result, VerifyError, VerifyReason};
 use crate::jwt::{AgentClaims, ParsedToken};
+use crate::metadata::MetadataFetcher;
 use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::PersonAuthJwtMinter;
 use crate::person_server::token_context::PersonTokenContext;
 use crate::protocol::{JwtTyp, TokenExchangeRequest, TokenResponseBody};
 use crate::resource_verify::{VerifyResourceTokenOptions, verify_resource_token};
 
-impl PersonServerConfig {
+impl<F: MetadataFetcher> PersonServerConfig<F> {
     pub async fn verify_token_request(
         &self,
         agent_jwt: &str,
@@ -31,7 +30,7 @@ impl PersonServerConfig {
             jwt: resource_token.to_string(),
             expected_agent: Some(agent.identifier().to_string()),
             expected_agent_jkt: Some(agent_jkt.to_string()),
-            fetcher: Arc::clone(&self.fetcher),
+            fetcher: &self.fetcher,
         })
         .await?;
 

@@ -10,28 +10,30 @@ use aauth::AccessServerConfig;
 use aauth::AccessTokenContext;
 use aauth::AuthTokenPollOutcome;
 use aauth::access_server::service::AccessTokenService;
+use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
 use aauth::signature::verify_request_signature;
 
 use crate::{AauthResponse, InternalServiceError, PendingResumeInput};
 
 #[derive(Clone)]
-pub struct AccessServerState<S>
-where
+pub struct AccessServerState<
     S: AccessTokenService,
-{
+    F: MetadataFetcher = aauth::StaticMetadataFetcher,
+> {
     pub service: S,
-    pub config: AccessServerConfig,
+    pub config: AccessServerConfig<F>,
 }
 
 #[cfg(feature = "policy")]
-impl<P, S, M> AccessServerState<aauth_policy::PolicyAccessTokenService<P, S, M>>
+impl<P, S, M, F> AccessServerState<aauth_policy::PolicyAccessTokenService<P, S, M, F>, F>
 where
     P: aauth_policy::AccessTokenPolicy,
     S: aauth_policy::PendingStore<aauth_policy::AccessPendingRecord>,
     M: aauth::access_server::keys::AccessAuthJwtMinter + Clone,
+    F: MetadataFetcher + Clone + 'static,
 {
-    pub fn from_policy(policy: P, pending: S, minter: M, config: AccessServerConfig) -> Self {
+    pub fn from_policy(policy: P, pending: S, minter: M, config: AccessServerConfig<F>) -> Self {
         Self {
             service: aauth_policy::PolicyAccessTokenService::new(
                 policy,
@@ -44,12 +46,9 @@ where
     }
 }
 
-pub async fn access_metadata_handler<S>(
-    State(state): State<AccessServerState<S>>,
-) -> Json<AccessServerMetadata>
-where
-    S: AccessTokenService,
-{
+pub async fn access_metadata_handler<S: AccessTokenService, F: MetadataFetcher>(
+    State(state): State<AccessServerState<S, F>>,
+) -> Json<AccessServerMetadata> {
     Json(AccessServerMetadata {
         issuer: Some(state.config.access_server_url.clone()),
         token_endpoint: format!("{}/access/aauth/token", state.config.access_server_url),
@@ -58,24 +57,20 @@ where
     })
 }
 
-pub async fn access_jwks_handler<S>(State(state): State<AccessServerState<S>>) -> Json<JwksDocument>
-where
-    S: AccessTokenService,
-{
+pub async fn access_jwks_handler<S: AccessTokenService, F: MetadataFetcher>(
+    State(state): State<AccessServerState<S, F>>,
+) -> Json<JwksDocument> {
     Json(JwksDocument {
         keys: state.config.keys.access_server.jwk_set(),
     })
 }
 
-pub async fn access_token_exchange_handler<S>(
-    State(state): State<AccessServerState<S>>,
+pub async fn access_token_exchange_handler<S: AccessTokenService, F: MetadataFetcher>(
+    State(state): State<AccessServerState<S, F>>,
     OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
     body: Option<Json<AccessTokenExchangeRequest>>,
-) -> Response
-where
-    S: AccessTokenService,
-{
+) -> Response {
     let authority = headers
         .get(HOST)
         .and_then(|h| h.to_str().ok())
@@ -102,13 +97,10 @@ where
     }
 }
 
-pub async fn access_pending_poll_handler<S>(
-    State(state): State<AccessServerState<S>>,
+pub async fn access_pending_poll_handler<S: AccessTokenService, F: MetadataFetcher>(
+    State(state): State<AccessServerState<S, F>>,
     Path(id): Path<String>,
-) -> Result<AauthResponse<AuthTokenPollOutcome>, InternalServiceError>
-where
-    S: AccessTokenService,
-{
+) -> Result<AauthResponse<AuthTokenPollOutcome>, InternalServiceError> {
     state
         .service
         .poll_pending(&id)
@@ -117,14 +109,11 @@ where
         .map_err(InternalServiceError::from)
 }
 
-pub async fn access_pending_post_handler<S>(
-    State(state): State<AccessServerState<S>>,
+pub async fn access_pending_post_handler<S: AccessTokenService, F: MetadataFetcher>(
+    State(state): State<AccessServerState<S, F>>,
     Path(id): Path<String>,
     PendingResumeInput(input): PendingResumeInput,
-) -> Response
-where
-    S: AccessTokenService,
-{
+) -> Response {
     match state.service.resume_pending(&id, input).await {
         Ok(outcome) => AauthResponse(outcome).into_response(),
         Err(e) => InternalServiceError::from(e).into_response(),
@@ -142,24 +131,25 @@ where
 /// Nest under the Access Server URL path (for example `.nest("/as", access_router())`)
 /// when the AS shares an origin with other roles. App state must implement [`FromRef`]
 /// to [`AccessServerState`].
-pub fn access_router<AppState, Svc>() -> Router<AppState>
+pub fn access_router<AppState, Svc, F>() -> Router<AppState>
 where
     AppState: Clone + Send + Sync + 'static,
     Svc: AccessTokenService + 'static,
-    AccessServerState<Svc>: FromRef<AppState>,
+    F: MetadataFetcher + 'static,
+    AccessServerState<Svc, F>: FromRef<AppState>,
 {
     Router::new()
         .route(
             "/.well-known/aauth-access.json",
-            get(access_metadata_handler::<Svc>),
+            get(access_metadata_handler::<Svc, F>),
         )
-        .route("/access/jwks", get(access_jwks_handler::<Svc>))
+        .route("/access/jwks", get(access_jwks_handler::<Svc, F>))
         .route(
             "/access/aauth/token",
-            post(access_token_exchange_handler::<Svc>),
+            post(access_token_exchange_handler::<Svc, F>),
         )
         .route(
             "/access/pending/{id}",
-            get(access_pending_poll_handler::<Svc>).post(access_pending_post_handler::<Svc>),
+            get(access_pending_poll_handler::<Svc, F>).post(access_pending_post_handler::<Svc, F>),
         )
 }

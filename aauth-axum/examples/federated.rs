@@ -11,7 +11,6 @@ use aauth::AccessServerConfig;
 use aauth::ParsedToken;
 use aauth::PersonServerConfig;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AuthOkResponse, JwksDocument, ResourceServerMetadata};
 use aauth::resource::ResourceAccessMode;
 use aauth_axum::{
@@ -43,7 +42,9 @@ type PersonState = PersonServerState<
         AlwaysGrantPersonPolicy,
         InMemoryPersonPendingStore,
         aauth::person_server::keys::TestPersonAuthJwtMinter,
+        Arc<MultiPartyMetadataFetcher>,
     >,
+    Arc<MultiPartyMetadataFetcher>,
 >;
 
 type AccessState = AccessServerState<
@@ -51,7 +52,9 @@ type AccessState = AccessServerState<
         AlwaysGrantAccessPolicy,
         InMemoryAccessPendingStore,
         aauth::access_server::keys::TestAccessAuthJwtMinter,
+        Arc<MultiPartyMetadataFetcher>,
     >,
+    Arc<MultiPartyMetadataFetcher>,
 >;
 
 #[derive(Clone)]
@@ -80,7 +83,7 @@ fn person_server_app(
     keys: &TestKeys,
     person_server_url: &str,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let person = PersonServerState::from_policy(
         AlwaysGrantPersonPolicy::new("user-federated"),
@@ -102,7 +105,7 @@ fn person_server_app(
     );
 
     Router::new()
-        .merge(person_router::<PersonAppState, _>())
+        .merge(person_router::<PersonAppState, _, _>())
         .with_state(PersonAppState { person })
 }
 
@@ -111,7 +114,7 @@ fn access_server_app(
     access_server_url: &str,
     person_server_url: &str,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let access = AccessServerState::from_policy(
         AlwaysGrantAccessPolicy::new("user-federated"),
@@ -131,7 +134,7 @@ fn access_server_app(
     );
 
     Router::new()
-        .merge(access_router::<AccessAppState, _>())
+        .merge(access_router::<AccessAppState, _, _>())
         .with_state(AccessAppState { access })
 }
 
@@ -140,7 +143,7 @@ fn federated_resource_app(
     resource_url: &str,
     person_server_url: &str,
     access_server_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let layer = ResourceAuthLayer::new(
         fetcher,

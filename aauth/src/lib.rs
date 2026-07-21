@@ -122,8 +122,8 @@ pub use access_server::{
 
 #[cfg(feature = "resource")]
 pub use resource::{
-    Ed25519ResourceTokenSigner, NoResourceAccessService, ResourceAccessConfig,
-    ResourceAccessContext, ResourceAccessMode, ResourceAccessService, ResourceConsentFlowOutcome,
-    ResourceInteractionContext, ResourceInteractionProvider, ResourcePollOutcome,
-    ResourceTokenOptions, ResourceTokenSigner,
+    Ed25519ResourceTokenSigner, NoResourceAccessService, NoResourceInteraction,
+    ResourceAccessConfig, ResourceAccessContext, ResourceAccessMode, ResourceAccessService,
+    ResourceConsentFlowOutcome, ResourceInteractionContext, ResourceInteractionProvider,
+    ResourcePollOutcome, ResourceTokenOptions, ResourceTokenSigner,
 };

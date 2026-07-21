@@ -1,6 +1,5 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use axum::body::Body;
@@ -17,7 +16,8 @@ use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge};
 use aauth::resource::keys::ResourceTokenSigner;
 use aauth::resource::{
-    ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenOptions,
+    NoResourceInteraction, ResourceInteractionContext, ResourceInteractionProvider,
+    ResourceTokenOptions,
 };
 use aauth::resource_verify::{
     VerifyTokenOptions, resolve_resource_token_audience, verify_auth_token_binding, verify_token,
@@ -27,83 +27,110 @@ use aauth::signature::{SignatureVerifyOptions, verify_request_signature_with_opt
 use crate::AauthResponse;
 
 #[derive(Clone)]
-pub struct ResourceAuthLayer<RAS>
+pub struct ResourceAuthLayer<RAS, F, T, I = NoResourceInteraction>
 where
     RAS: ResourceAccessService,
+    F: MetadataFetcher,
+    T: ResourceTokenSigner,
+    I: ResourceInteractionProvider,
 {
-    pub fetcher: Arc<dyn MetadataFetcher>,
+    pub fetcher: F,
     pub resource_url: String,
     pub mode: ResourceAccessMode<RAS>,
-    pub resource_token_signer: Arc<dyn ResourceTokenSigner>,
-    pub interaction_provider: Option<Arc<dyn ResourceInteractionProvider>>,
+    pub resource_token_signer: T,
+    pub interaction_provider: I,
 }
 
-impl<RAS> ResourceAuthLayer<RAS>
+impl<RAS, F, T> ResourceAuthLayer<RAS, F, T, NoResourceInteraction>
 where
     RAS: ResourceAccessService,
+    F: MetadataFetcher,
+    T: ResourceTokenSigner,
 {
     pub fn new(
-        fetcher: Arc<dyn MetadataFetcher>,
+        fetcher: F,
         resource_url: impl Into<String>,
         mode: ResourceAccessMode<RAS>,
-        resource_token_signer: Arc<dyn ResourceTokenSigner>,
+        resource_token_signer: T,
     ) -> Self {
         Self {
             fetcher,
             resource_url: resource_url.into(),
             mode,
             resource_token_signer,
-            interaction_provider: None,
+            interaction_provider: NoResourceInteraction,
         }
-    }
-
-    pub fn with_interaction_provider(
-        mut self,
-        provider: Arc<dyn ResourceInteractionProvider>,
-    ) -> Self {
-        self.interaction_provider = Some(provider);
-        self
     }
 }
 
-impl<S, RAS> Layer<S> for ResourceAuthLayer<RAS>
+impl<RAS, F, T, I> ResourceAuthLayer<RAS, F, T, I>
 where
     RAS: ResourceAccessService,
+    F: MetadataFetcher,
+    T: ResourceTokenSigner,
+    I: ResourceInteractionProvider,
 {
-    type Service = ResourceAuthService<S, RAS>;
+    pub fn with_interaction_provider<I2: ResourceInteractionProvider>(
+        self,
+        provider: I2,
+    ) -> ResourceAuthLayer<RAS, F, T, I2> {
+        ResourceAuthLayer {
+            fetcher: self.fetcher,
+            resource_url: self.resource_url,
+            mode: self.mode,
+            resource_token_signer: self.resource_token_signer,
+            interaction_provider: provider,
+        }
+    }
+}
+
+impl<S, RAS, F, T, I> Layer<S> for ResourceAuthLayer<RAS, F, T, I>
+where
+    RAS: ResourceAccessService,
+    F: MetadataFetcher + Clone,
+    T: ResourceTokenSigner + Clone,
+    I: ResourceInteractionProvider + Clone,
+{
+    type Service = ResourceAuthService<S, RAS, F, T, I>;
 
     fn layer(&self, inner: S) -> Self::Service {
         ResourceAuthService {
             inner,
-            fetcher: Arc::clone(&self.fetcher),
+            fetcher: self.fetcher.clone(),
             resource_url: self.resource_url.clone(),
             mode: self.mode.clone(),
-            resource_token_signer: Arc::clone(&self.resource_token_signer),
+            resource_token_signer: self.resource_token_signer.clone(),
             interaction_provider: self.interaction_provider.clone(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct ResourceAuthService<S, RAS>
+pub struct ResourceAuthService<S, RAS, F, T, I = NoResourceInteraction>
 where
     RAS: ResourceAccessService,
+    F: MetadataFetcher,
+    T: ResourceTokenSigner,
+    I: ResourceInteractionProvider,
 {
     inner: S,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: F,
     resource_url: String,
     mode: ResourceAccessMode<RAS>,
-    resource_token_signer: Arc<dyn ResourceTokenSigner>,
-    interaction_provider: Option<Arc<dyn ResourceInteractionProvider>>,
+    resource_token_signer: T,
+    interaction_provider: I,
 }
 
-impl<S, B, RAS> Service<Request<B>> for ResourceAuthService<S, RAS>
+impl<S, B, RAS, F, T, I> Service<Request<B>> for ResourceAuthService<S, RAS, F, T, I>
 where
     S: Service<Request<B>, Response = Response<Body>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: std::fmt::Display + Send + 'static,
     B: Send + 'static,
     RAS: ResourceAccessService + Clone + Send + Sync + 'static,
+    F: MetadataFetcher + Clone + 'static,
+    T: ResourceTokenSigner + Clone + 'static,
+    I: ResourceInteractionProvider + Clone + 'static,
 {
     type Response = Response<Body>;
     type Error = S::Error;
@@ -114,10 +141,10 @@ where
     }
 
     fn call(&mut self, mut req: Request<B>) -> Self::Future {
-        let fetcher = Arc::clone(&self.fetcher);
+        let fetcher = self.fetcher.clone();
         let resource_url = self.resource_url.clone();
         let mode = self.mode.clone();
-        let resource_token_signer = Arc::clone(&self.resource_token_signer);
+        let resource_token_signer = self.resource_token_signer.clone();
         let interaction_provider = self.interaction_provider.clone();
         let mut inner = self.inner.clone();
 
@@ -164,7 +191,7 @@ where
             let verified = match verify_token(VerifyTokenOptions {
                 jwt: verified_sig.jwt.clone(),
                 http_signature_thumbprint: verified_sig.thumbprint.clone(),
-                fetcher: Arc::clone(&fetcher),
+                fetcher: &fetcher,
             })
             .await
             {
@@ -202,13 +229,12 @@ where
                         }
                     };
 
-                    let interaction = interaction_provider.as_ref().and_then(|provider| {
-                        provider.interaction_for(&ResourceInteractionContext {
+                    let interaction =
+                        interaction_provider.interaction_for(&ResourceInteractionContext {
                             resource_url: resource_url.clone(),
                             agent: agent.clone(),
                             agent_jkt: verified_sig.thumbprint.clone(),
-                        })
-                    });
+                        });
 
                     let resource_token = match (ResourceTokenOptions {
                         resource: resource_url,
@@ -220,7 +246,7 @@ where
                         lifetime: None,
                         interaction,
                     })
-                    .sign(resource_token_signer.as_ref())
+                    .sign(&resource_token_signer)
                     .await
                     {
                         Ok(token) => token,

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use http::HeaderMap;
 use url::Url;
 
@@ -25,7 +23,7 @@ pub enum FederationOutcome {
     },
 }
 
-impl PersonServerConfig {
+impl<F: MetadataFetcher> PersonServerConfig<F> {
     pub async fn federate_to_access_server(
         &self,
         resource_token: &str,
@@ -148,7 +146,7 @@ impl PersonServerConfig {
             &access_server_url,
             &self.resource_url,
             agent_token,
-            Arc::clone(&self.fetcher),
+            &self.fetcher,
         )
         .await?;
 
@@ -156,12 +154,12 @@ impl PersonServerConfig {
     }
 }
 
-pub async fn verify_federated_auth_token(
+pub async fn verify_federated_auth_token<F: MetadataFetcher>(
     auth_token: &str,
     expected_iss: &str,
     expected_aud: &str,
     agent_token: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: &F,
 ) -> Result<()> {
     let agent = match ParsedToken::parse(agent_token)? {
         ParsedToken::Agent(c) => c,

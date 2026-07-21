@@ -9,7 +9,6 @@ mod support;
 use std::sync::Arc;
 
 use aauth::ParsedToken;
-use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AgentOkResponse, JwksDocument, ResourceServerMetadata};
 use aauth::{NoResourceAccessService, ResourceAccessMode, TestKeys};
 use aauth_axum::{ResourceAuthLayer, VerifiedAAuthToken};
@@ -32,7 +31,7 @@ struct ResourceState {
 fn identity_resource_app(
     keys: &TestKeys,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let layer = ResourceAuthLayer::new(
         fetcher,

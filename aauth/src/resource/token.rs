@@ -22,7 +22,7 @@ pub struct ResourceTokenOptions {
 impl ResourceTokenOptions {
     pub async fn sign(
         self,
-        signer: &dyn ResourceTokenSigner,
+        signer: &impl ResourceTokenSigner,
     ) -> Result<String, ResourceTokenError> {
         let lifetime = self.lifetime.unwrap_or(300);
         let now = SystemTime::now()

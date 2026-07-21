@@ -25,7 +25,7 @@ struct PersonManagedParties {
     person: Serving,
     resource: Serving,
     person_pending: aauth_policy::InMemoryPersonPendingStore,
-    fetcher: Arc<dyn aauth::metadata::MetadataFetcher>,
+    fetcher: Arc<crate::support::metadata::MultiPartyMetadataFetcher>,
 }
 
 async fn spawn_person_managed(

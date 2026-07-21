@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use aauth::DeferCreated;
 use aauth::DeferRequirement;
 use aauth::PendingInput;
@@ -9,6 +7,7 @@ use aauth::PersonTokenContext;
 use aauth::ServerPollOptions;
 use aauth::ServerPollOutcome;
 use aauth::generate_pending_id;
+use aauth::metadata::MetadataFetcher;
 use aauth::pending_location;
 use aauth::person_server::federation::verify_federated_auth_token;
 use aauth::person_server::keys::PersonAuthJwtMinter;
@@ -25,7 +24,7 @@ use crate::store::{
 use super::PersonTokenServiceError;
 use super::PolicyPersonTokenService;
 
-impl<P, S, M> PolicyPersonTokenService<P, S, M> {
+impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
     pub(super) async fn create_federated_deferred_response(
         &self,
         ctx: &PersonTokenContext,
@@ -163,7 +162,7 @@ impl<P, S, M> PolicyPersonTokenService<P, S, M> {
                     &federation.access_server_url,
                     resource_url,
                     agent_token,
-                    Arc::clone(&self.config.fetcher),
+                    &self.config.fetcher,
                 )
                 .await
                 .is_err()

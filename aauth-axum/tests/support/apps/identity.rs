@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
+use crate::support::metadata::MultiPartyMetadataFetcher;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth::{NoResourceAccessService, ResourceAccessMode};
 use aauth_axum::ResourceAuthLayer;
 use axum::Router;
@@ -15,7 +15,7 @@ use super::common::{ResourceDiscoveryState, api_data, resource_jwks, resource_me
 pub fn identity_resource_app(
     keys: &TestKeys,
     resource_url: &str,
-    fetcher: Arc<dyn MetadataFetcher>,
+    fetcher: Arc<MultiPartyMetadataFetcher>,
 ) -> Router {
     let layer = ResourceAuthLayer::new(
         fetcher,

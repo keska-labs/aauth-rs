@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::jwt::AgentClaims;
 use crate::protocol::ResourceInteractionClaim;
 
@@ -13,4 +15,26 @@ pub struct ResourceInteractionContext {
 pub trait ResourceInteractionProvider: Send + Sync {
     fn interaction_for(&self, ctx: &ResourceInteractionContext)
     -> Option<ResourceInteractionClaim>;
+}
+
+impl<T: ResourceInteractionProvider + ?Sized> ResourceInteractionProvider for Arc<T> {
+    fn interaction_for(
+        &self,
+        ctx: &ResourceInteractionContext,
+    ) -> Option<ResourceInteractionClaim> {
+        (**self).interaction_for(ctx)
+    }
+}
+
+/// Marker provider when no resource-initiated interaction claim is needed.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoResourceInteraction;
+
+impl ResourceInteractionProvider for NoResourceInteraction {
+    fn interaction_for(
+        &self,
+        _ctx: &ResourceInteractionContext,
+    ) -> Option<ResourceInteractionClaim> {
+        None
+    }
 }

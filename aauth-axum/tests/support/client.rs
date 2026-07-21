@@ -4,19 +4,19 @@ use std::sync::Arc;
 
 use aauth::KeyMaterialProvider;
 use aauth::TestKeys;
-use aauth::metadata::MetadataFetcher;
 use aauth_reqwest::{
     AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
 
 use super::AGENT_ID;
+use super::metadata::MultiPartyMetadataFetcher;
 use super::timeout::TEST_POLL_MAX_SECS;
 
 /// Builder for an `aauth-reqwest` agent client.
 pub struct AgentClientBuilder {
     keys: TestKeys,
     agent_url: String,
-    metadata_fetcher: Arc<dyn MetadataFetcher>,
+    metadata_fetcher: Arc<MultiPartyMetadataFetcher>,
     person_server_url: Option<String>,
     agent_ps_claim: Option<String>,
     on_interaction: Option<InteractionCallback>,
@@ -28,7 +28,7 @@ impl AgentClientBuilder {
     pub fn new(
         keys: &TestKeys,
         agent_url: impl Into<String>,
-        metadata_fetcher: Arc<dyn MetadataFetcher>,
+        metadata_fetcher: Arc<MultiPartyMetadataFetcher>,
     ) -> Self {
         Self {
             keys: keys.clone(),

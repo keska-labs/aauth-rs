@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use jsonwebtoken::{Header, encode};
 
@@ -14,6 +16,18 @@ pub trait ResourceTokenSigner: Send + Sync {
     ) -> Result<String, ResourceTokenError>;
 }
 
+#[async_trait]
+impl<T: ResourceTokenSigner + ?Sized> ResourceTokenSigner for Arc<T> {
+    async fn sign_resource_token(
+        &self,
+        header: Header,
+        claims: ResourceClaims,
+    ) -> Result<String, ResourceTokenError> {
+        (**self).sign_resource_token(header, claims).await
+    }
+}
+
+#[derive(Clone)]
 pub struct Ed25519ResourceTokenSigner {
     key: Ed25519KeyPair,
 }
