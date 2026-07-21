@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -30,7 +30,13 @@ pub enum AgentAuthAttempt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentAuthStep {
     Finish,
-    ExchangeToken { resource_token: String },
+    /// Cached opaque from this response; retry the original request with it.
+    ///
+    /// Spec: `#fig-resource-managed`, `#aauth-access`
+    RetryWithOpaque,
+    ExchangeToken {
+        resource_token: String,
+    },
     PollDeferred,
     Invalidate(AgentAuthAttempt),
 }
@@ -60,6 +66,8 @@ struct AuthTokenCacheKey {
 pub struct AgentAuth {
     token_cache: HashMap<AuthTokenCacheKey, CachedToken>,
     opaque_cache: HashMap<String, CachedOpaque>,
+    /// Origins for which we already attempted proactive `authorization_endpoint`.
+    authorize_tried: HashSet<String>,
     person_server_url: Option<String>,
     opaque_seed: Option<String>,
     on_opaque_token: Option<Arc<dyn Fn(String) + Send + Sync>>,
@@ -76,6 +84,7 @@ where
     pub(crate) person_server_url: Option<String>,
     pub(crate) person_server_metadata: Option<PersonServerMetadata>,
     pub(crate) opaque_token: Option<String>,
+    pub(crate) scope: Option<String>,
     pub(crate) capabilities: Option<Vec<Capability>>,
     pub(crate) mission: Option<Mission>,
     pub(crate) justification: Option<String>,
@@ -108,6 +117,7 @@ where
     person_server_url: Option<String>,
     person_server_metadata: Option<PersonServerMetadata>,
     opaque_token: Option<String>,
+    scope: Option<String>,
     capabilities: Option<Vec<Capability>>,
     mission: Option<Mission>,
     justification: Option<String>,
@@ -153,6 +163,11 @@ where
 
     pub fn opaque_token(&self) -> Option<&str> {
         self.opaque_token.as_deref()
+    }
+
+    /// Scope string for proactive `authorization_endpoint` requests.
+    pub fn scope(&self) -> Option<&str> {
+        self.scope.as_deref()
     }
 
     pub fn capabilities(&self) -> Option<&Vec<Capability>> {
@@ -226,6 +241,7 @@ where
             person_server_url: None,
             person_server_metadata: None,
             opaque_token: None,
+            scope: None,
             capabilities: None,
             mission: None,
             justification: None,
@@ -262,6 +278,12 @@ where
 
     pub fn opaque_token(mut self, token: impl Into<String>) -> Self {
         self.opaque_token = Some(token.into());
+        self
+    }
+
+    /// Scope for resource `authorization_endpoint` POST body (`AuthorizationRequest.scope`).
+    pub fn scope(mut self, scope: impl Into<String>) -> Self {
+        self.scope = Some(scope.into());
         self
     }
 
@@ -350,6 +372,7 @@ where
             person_server_url: self.person_server_url,
             person_server_metadata: self.person_server_metadata,
             opaque_token: self.opaque_token,
+            scope: self.scope,
             capabilities: self.capabilities,
             mission: self.mission,
             justification: self.justification,
@@ -377,6 +400,7 @@ where
             person_server_url: self.person_server_url,
             person_server_metadata: self.person_server_metadata,
             opaque_token: self.opaque_token,
+            scope: self.scope,
             capabilities: self.capabilities,
             mission: self.mission,
             justification: self.justification,
@@ -405,6 +429,7 @@ impl AgentAuth {
         Self {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
+            authorize_tried: HashSet::new(),
             person_server_url: options.person_server_url.clone(),
             opaque_seed: options.opaque_token.clone(),
             on_opaque_token: options.on_opaque_token.clone(),
@@ -413,6 +438,15 @@ impl AgentAuth {
 
     pub fn person_server_url(&self) -> Option<&str> {
         self.person_server_url.as_deref()
+    }
+
+    /// Mark that proactive authorize was attempted; returns `true` if this is the first try
+    /// and no opaque token is cached yet.
+    pub fn begin_authorize_attempt(&mut self, origin: &str) -> bool {
+        if self.opaque_cache.contains_key(origin) {
+            return false;
+        }
+        self.authorize_tried.insert(origin.to_string())
     }
 
     pub fn resource_origin(url: &str) -> Result<String> {
@@ -455,9 +489,14 @@ impl AgentAuth {
     ) -> Result<AgentAuthStep> {
         // Spec: `#deferred-responses` — agents MUST handle `202` by polling Location.
         if status != StatusCode::UNAUTHORIZED {
-            self.cache_opaque_from_headers(origin, headers);
+            let cached_opaque = self.cache_opaque_from_headers(origin, headers);
             if status == StatusCode::ACCEPTED {
                 return Ok(AgentAuthStep::PollDeferred);
+            }
+            // Spec: `#fig-resource-managed`, `#aauth-access` — immediate opaque grant
+            // on an agent-signed attempt means retry with Authorization: AAuth.
+            if cached_opaque && matches!(attempt, AgentAuthAttempt::AgentSigned) {
+                return Ok(AgentAuthStep::RetryWithOpaque);
             }
             return Ok(AgentAuthStep::Finish);
         }
@@ -477,14 +516,21 @@ impl AgentAuth {
                 Ok(AgentAuthStep::Invalidate(attempt.clone()))
             }
             AgentAuthAttempt::AgentSigned => {
-                // Spec: `#requirement-auth-token`, `#resource-challenge-verification`
+                // Spec: `#requirement-auth-token`, `#resource-challenge-verification`,
+                // `#requirement-agent-token`
                 if let Some(header) = header_value(headers, &AAUTH_REQUIREMENT) {
                     let challenge = AAuthChallenge::from_header(header)?;
-                    if let crate::protocol::AAuthChallenge::AuthToken { resource_token } = challenge
-                    {
-                        return Ok(AgentAuthStep::ExchangeToken { resource_token });
+                    match challenge {
+                        crate::protocol::AAuthChallenge::AuthToken { resource_token } => {
+                            return Ok(AgentAuthStep::ExchangeToken { resource_token });
+                        }
+                        // Already presenting an agent JWT; challenge is for
+                        // non-AAuth clients. Surface the 401.
+                        crate::protocol::AAuthChallenge::AgentToken => {
+                            return Ok(AgentAuthStep::Finish);
+                        }
+                        _ => {}
                     }
-                    // Spec: `#requirement-agent-token` — AgentToken challenge not handled yet.
                 }
                 Ok(AgentAuthStep::Finish)
             }
@@ -532,8 +578,22 @@ impl AgentAuth {
             .cloned()
     }
 
-    fn cache_opaque_from_headers(&mut self, origin: &str, headers: &HeaderMap) {
-        if let Some(token) = header_value(headers, &AAUTH_ACCESS) {
+    fn cache_opaque_from_headers(&mut self, origin: &str, headers: &HeaderMap) -> bool {
+        let mut values = headers.get_all(AAUTH_ACCESS).iter();
+        let Some(raw) = values.next().and_then(|v| v.to_str().ok()) else {
+            return false;
+        };
+        if values.next().is_some() {
+            return false;
+        }
+        let Ok(token) = crate::protocol::parse_aauth_access_header(raw) else {
+            return false;
+        };
+        let changed = self
+            .opaque_cache
+            .get(origin)
+            .is_none_or(|e| e.token != token);
+        if changed {
             self.opaque_cache.insert(
                 origin.to_string(),
                 CachedOpaque {
@@ -544,6 +604,7 @@ impl AgentAuth {
                 on_opaque(token.to_string());
             }
         }
+        changed
     }
 }
 
@@ -587,6 +648,7 @@ mod tests {
                     token: "opaque".into(),
                 },
             )]),
+            authorize_tried: HashSet::new(),
             person_server_url: None,
             opaque_seed: None,
             on_opaque_token: None,
@@ -602,6 +664,7 @@ mod tests {
         let inj = AgentAuth {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
+            authorize_tried: HashSet::new(),
             person_server_url: Some("https://person.example".into()),
             opaque_seed: None,
             on_opaque_token: None,
@@ -633,6 +696,7 @@ mod tests {
         let mut inj = AgentAuth {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),
+            authorize_tried: HashSet::new(),
             person_server_url: None,
             opaque_seed: None,
             on_opaque_token: Some(Arc::new(move |t| {
@@ -647,7 +711,7 @@ mod tests {
                 &headers(&[(AAUTH_ACCESS_NAME, "opaque_tok")]),
             )
             .unwrap();
-        assert_eq!(step, AgentAuthStep::Finish);
+        assert_eq!(step, AgentAuthStep::RetryWithOpaque);
         assert_eq!(
             inj.opaque_cache
                 .get("https://resource.example")
@@ -655,5 +719,59 @@ mod tests {
             Some("opaque_tok")
         );
         assert_eq!(captured.lock().unwrap().as_deref(), Some("opaque_tok"));
+    }
+
+    #[test]
+    fn observe_opaque_retry_finishes_on_rolling_refresh() {
+        let mut inj = AgentAuth {
+            token_cache: HashMap::new(),
+            opaque_cache: HashMap::from([(
+                "https://resource.example".into(),
+                CachedOpaque {
+                    token: "old_tok".into(),
+                },
+            )]),
+            authorize_tried: HashSet::new(),
+            person_server_url: None,
+            opaque_seed: None,
+            on_opaque_token: None,
+        };
+        let step = inj
+            .observe_response(
+                "https://resource.example",
+                &AgentAuthAttempt::OpaqueToken("old_tok".into()),
+                StatusCode::OK,
+                &headers(&[(AAUTH_ACCESS_NAME, "new_tok")]),
+            )
+            .unwrap();
+        assert_eq!(step, AgentAuthStep::Finish);
+        assert_eq!(
+            inj.opaque_cache
+                .get("https://resource.example")
+                .map(|e| e.token.as_str()),
+            Some("new_tok")
+        );
+    }
+
+    #[test]
+    fn observe_ignores_invalid_aauth_access() {
+        let mut inj = AgentAuth {
+            token_cache: HashMap::new(),
+            opaque_cache: HashMap::new(),
+            authorize_tried: HashSet::new(),
+            person_server_url: None,
+            opaque_seed: None,
+            on_opaque_token: None,
+        };
+        let step = inj
+            .observe_response(
+                "https://resource.example",
+                &AgentAuthAttempt::AgentSigned,
+                StatusCode::OK,
+                &headers(&[(AAUTH_ACCESS_NAME, "bad token")]),
+            )
+            .unwrap();
+        assert_eq!(step, AgentAuthStep::Finish);
+        assert!(inj.opaque_cache.is_empty());
     }
 }

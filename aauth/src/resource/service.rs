@@ -85,9 +85,13 @@ pub enum ResourceAccessMode<S = NoResourceAccessService>
 where
     S: ResourceAccessService,
 {
-    /// Grant based on verified agent or auth token identity alone.
+    /// Grant based on a verified agent token identity alone.
     ///
-    /// Spec: `draft-hardt-oauth-aauth-protocol.md#overview-identity-access`
+    /// Accepts only `typ: aa-agent+jwt`. Missing agent credential →
+    /// `401` + `AAuth-Requirement: requirement=agent-token`.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#overview-identity-access`,
+    /// `#requirement-agent-token`
     IdentityBased,
     /// Delegate authorization to the agent's Person Server (or Access Server when federated).
     ///

@@ -90,7 +90,7 @@ async fn signed_request(
     let agent_jwt =
         parties
             .keys
-            .mint_agent_jwt(&parties.agent.url, AGENT_ID, Some(&parties.person.url));
+            .mint_agent_jwt(support::AGENT_ISSUER, AGENT_ID, Some(&parties.person.url));
     let provider = parties.keys.key_provider(agent_jwt);
     let material = provider.key_material().await.expect("key material");
     let client = reqwest::Client::new();

@@ -20,7 +20,7 @@ use support::metadata::MultiPartyMetadataFetcher;
 #[rstest]
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
-async fn resource_managed_over_http() {
+async fn resource_managed_interaction_over_http() {
     let keys = TestKeys::generate();
     let (agent_listener, agent_url) = bind_ephemeral().await;
     let agent = serve(
@@ -57,6 +57,41 @@ async fn resource_managed_over_http() {
     let client = AgentClientBuilder::new(&keys, &agent.url, fetcher)
         .on_interaction(on_interaction)
         .build();
+    let response = client
+        .get(format!("{}/api/data", resource.url))
+        .send()
+        .await
+        .expect("request");
+
+    assert!(response.status().is_success());
+    let body: AgentOkResponse = response.json().await.expect("json");
+    assert_eq!(body.status, "ok");
+    assert_eq!(body.agent, AGENT_ID);
+}
+
+#[rstest]
+#[timeout(Duration::from_secs(1))]
+#[tokio::test]
+async fn resource_managed_always_grant_over_http() {
+    let keys = TestKeys::generate();
+    let (agent_listener, agent_url) = bind_ephemeral().await;
+    let agent = serve(
+        agent_listener,
+        agent_issuer_app(&keys, &agent_url),
+        agent_url,
+    );
+
+    let (resource_listener, resource_url) = bind_ephemeral().await;
+    let fetcher = MultiPartyMetadataFetcher::builder(&keys, &agent.url, &resource_url).build();
+    let parts = resource_managed_app(
+        &keys,
+        &resource_url,
+        Arc::clone(&fetcher),
+        ResourcePolicyKind::Grant,
+    );
+    let resource = serve(resource_listener, parts.app, resource_url);
+
+    let client = AgentClientBuilder::new(&keys, &agent.url, fetcher).build();
     let response = client
         .get(format!("{}/api/data", resource.url))
         .send()

@@ -18,7 +18,11 @@ pub struct JwtHeaderParts {
 }
 
 /// Read `typ`, `alg`, and `kid` from a compact JWT.
+///
+/// Spec: agent/auth/resource token headers MUST NOT accept `alg: none`
+/// (`draft-hardt-oauth-aauth-protocol.md#agent-tokens`).
 pub fn jwt_header(jwt: &str) -> Result<JwtHeaderParts> {
+    reject_alg_none(jwt)?;
     let header = decode_header(jwt).map_err(JwtError::Decode)?;
     let typ_str = header.typ.ok_or(JwtError::MissingTyp)?;
     let typ = typ_str.parse().map_err(|_| JwtError::UnknownTyp(typ_str))?;
@@ -27,6 +31,26 @@ pub fn jwt_header(jwt: &str) -> Result<JwtHeaderParts> {
         alg: header.alg,
         kid: header.kid,
     })
+}
+
+//TODO: Review if needed, I think this is handled by jwt header parsing above.
+fn reject_alg_none(jwt: &str) -> Result<()> {
+    use base64::Engine;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+    let header_b64 = jwt.split('.').next().ok_or(JwtError::AlgNone)?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(header_b64)
+        .map_err(|_| JwtError::AlgNone)?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| JwtError::AlgNone)?;
+    let alg = value
+        .get("alg")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    if alg.eq_ignore_ascii_case("none") {
+        return Err(JwtError::AlgNone.into());
+    }
+    Ok(())
 }
 
 pub(crate) fn decode_unverified<T: DeserializeOwned>(jwt: &str) -> Result<TokenData<T>> {

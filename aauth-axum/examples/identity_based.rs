@@ -111,7 +111,7 @@ async fn resource_metadata(State(state): State<ResourceState>) -> Json<ResourceS
     Json(ResourceServerMetadata {
         issuer: Some(state.resource_url.clone()),
         jwks_uri: Some(format!("{}/jwks", state.resource_url.trim_end_matches('/'))),
-        access_mode: None,
+        access_mode: Some(aauth::protocol::ResourceAccessModeWire::AgentToken),
         name: Some("aauth-rs example resource".into()),
         description: None,
         logo_uri: None,

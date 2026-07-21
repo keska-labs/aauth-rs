@@ -49,6 +49,9 @@ pub enum JwtError {
     #[error("unknown typ: {0}")]
     UnknownTyp(String),
 
+    #[error("JWT alg none is not accepted")]
+    AlgNone,
+
     #[error("unsupported JWK kty: {0}")]
     UnsupportedKty(String),
 
@@ -135,6 +138,49 @@ pub enum SignatureError {
     Jwt(#[from] JwtError),
 }
 
+impl SignatureError {
+    /// Whether this failure means no AAuth agent token was presented.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-agent-token`
+    pub fn is_missing_agent_credential(&self) -> bool {
+        matches!(
+            self,
+            Self::MissingSignatureKey
+                | Self::MissingJwtParam
+                | Self::MissingSignature
+                | Self::MissingSignatureInput
+                | Self::HwkUnsupported
+        )
+    }
+
+    /// Signature-Key draft error code for the `Signature-Error` header.
+    ///
+    /// Spec: `draft-hardt-httpbis-signature-key-05.txt` §5.4
+    pub fn signature_error_code(&self) -> &'static str {
+        match self {
+            Self::MissingComponent(_)
+            | Self::MissingAuthorizationComponent
+            | Self::AuthorizationHeaderMissing
+            | Self::MissingCoveredComponents => "invalid_input",
+            Self::MissingJwtParam | Self::JwtNotQuoted | Self::Jwt(_) => "invalid_jwt",
+            Self::UnsupportedSigningJwk { .. } => "unsupported_algorithm",
+            Self::InvalidKeyLength | Self::MissingEcY | Self::HwkUnsupported => "invalid_key",
+            Self::MissingSignatureKey
+            | Self::MissingSignatureInput
+            | Self::MissingSignature
+            | Self::CreatedInFuture
+            | Self::Expired
+            | Self::MissingCreated
+            | Self::InvalidCreated(_)
+            | Self::InvalidSignatureFormat
+            | Self::InvalidEncoding(_)
+            | Self::VerificationFailed
+            | Self::InvalidHeaderValue(_)
+            | Self::HttpsigKey(_) => "invalid_signature",
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum MetadataError {
@@ -176,6 +222,10 @@ pub enum VerifyReason {
     SignatureFailed,
     ExpectedAuth,
     UnsupportedTyp,
+    FutureIat,
+    InvalidIss,
+    InvalidPs,
+    InvalidParentAgent,
 }
 
 #[derive(Debug, Error)]
@@ -226,6 +276,28 @@ impl VerifyError {
         Self::Token {
             code: code.into(),
             message: message.into(),
+        }
+    }
+
+    /// Signature-Key draft error code for the `Signature-Error` header.
+    ///
+    /// Spec: `draft-hardt-httpbis-signature-key-05.txt` §5.4;
+    /// AAuth `#verification` step 5
+    pub fn signature_error_code(&self) -> &'static str {
+        match self {
+            Self::Expired { .. } => "expired_jwt",
+            Self::KeyBindingFailed => "invalid_key",
+            Self::MissingKid | Self::UnknownKid(_) => "unknown_key",
+            Self::Token { code, .. } if code.contains("expired") => "expired_jwt",
+            Self::Invalid { .. }
+            | Self::AudMismatch
+            | Self::IssMismatch
+            | Self::AgentMismatch
+            | Self::AgentJktMismatch
+            | Self::Token { .. }
+            | Self::Metadata(_)
+            | Self::Jwt(_)
+            | Self::NoAudience => "invalid_jwt",
         }
     }
 }
@@ -359,18 +431,18 @@ impl IntoAauthProtocol for VerifyError {
                     JwtTyp::Resource => AAuthErrorCode::ExpiredResourceToken,
                     JwtTyp::Auth => AAuthErrorCode::ExpiredJwt,
                 };
-                (400, code, self.to_string())
+                (401, code, self.to_string())
             }
             Self::Invalid {
                 typ: JwtTyp::Agent, ..
-            } => (400, AAuthErrorCode::InvalidAgentToken, self.to_string()),
+            } => (401, AAuthErrorCode::InvalidAgentToken, self.to_string()),
             Self::Invalid {
                 typ: JwtTyp::Resource,
                 ..
-            } => (400, AAuthErrorCode::InvalidResourceToken, self.to_string()),
+            } => (401, AAuthErrorCode::InvalidResourceToken, self.to_string()),
             Self::Invalid {
                 typ: JwtTyp::Auth, ..
-            } => (400, AAuthErrorCode::InvalidJwt, self.to_string()),
+            } => (401, AAuthErrorCode::InvalidJwt, self.to_string()),
             Self::KeyBindingFailed => (401, AAuthErrorCode::InvalidKey, self.to_string()),
             Self::MissingKid | Self::UnknownKid(_) => {
                 (401, AAuthErrorCode::UnknownKey, self.to_string())
@@ -410,6 +482,30 @@ impl IntoAauthProtocol for AAuthError {
             )),
             _ => None,
         }
+    }
+}
+
+impl AAuthError {
+    /// Whether this failure means no AAuth agent token was presented.
+    pub fn is_missing_agent_credential(&self) -> bool {
+        match self {
+            Self::Signature(e) => e.is_missing_agent_credential(),
+            _ => false,
+        }
+    }
+
+    /// Build a `Signature-Error` header for signature / JWT verification failures.
+    ///
+    /// Spec: `draft-hardt-oauth-aauth-protocol.md#verification`
+    pub fn signature_error_header(&self) -> Option<httpsig_key::SignatureErrorHeader> {
+        let code = match self {
+            Self::Signature(e) => e.signature_error_code(),
+            Self::Verify(e) => e.signature_error_code(),
+            Self::Jwt(JwtError::AlgNone) => "invalid_jwt",
+            Self::Jwt(_) => "invalid_jwt",
+            _ => return None,
+        };
+        Some(httpsig_key::SignatureErrorHeader::new(code))
     }
 }
 

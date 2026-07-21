@@ -1,8 +1,10 @@
 //! Resource `authorization_endpoint` request and response bodies.
 //!
-//! Wire types only — no axum route or agent client yet.
 //! Spec: `draft-hardt-oauth-aauth-protocol.md#authorization-endpoint-request`,
 //! `#authorization-endpoint-responses`, `#resource-tokens`.
+//!
+//! Runtime: `aauth-axum` mounts `POST /resource/authorize` for the resource-managed
+//! (opaque / interaction) path; resource-token issuance from authorize is not wired yet.
 
 use serde::{Deserialize, Serialize};
 

@@ -2,7 +2,9 @@
 
 use aauth::ParsedToken;
 use aauth::TestKeys;
-use aauth::protocol::{AgentOkResponse, AuthOkResponse, JwksDocument, ResourceServerMetadata};
+use aauth::protocol::{
+    AgentOkResponse, AuthOkResponse, JwksDocument, ResourceAccessModeWire, ResourceServerMetadata,
+};
 use aauth_axum::VerifiedAAuthToken;
 use axum::Json;
 use axum::extract::State;
@@ -11,6 +13,8 @@ use axum::extract::State;
 pub struct ResourceDiscoveryState {
     pub resource_url: String,
     pub resource_jwks: JwksDocument,
+    pub access_mode: Option<ResourceAccessModeWire>,
+    pub authorization_endpoint: Option<String>,
 }
 
 impl ResourceDiscoveryState {
@@ -20,7 +24,21 @@ impl ResourceDiscoveryState {
             resource_jwks: JwksDocument {
                 keys: keys.resource.jwk_set(),
             },
+            access_mode: None,
+            authorization_endpoint: None,
         }
+    }
+
+    pub fn with_access_mode(mut self, mode: ResourceAccessModeWire) -> Self {
+        self.access_mode = Some(mode);
+        self
+    }
+
+    pub fn with_resource_managed_authorize(mut self) -> Self {
+        let base = self.resource_url.trim_end_matches('/');
+        self.access_mode = Some(ResourceAccessModeWire::AauthAccessToken);
+        self.authorization_endpoint = Some(format!("{base}/resource/authorize"));
+        self
     }
 }
 
@@ -53,7 +71,7 @@ pub async fn resource_metadata(
     Json(ResourceServerMetadata {
         issuer: Some(state.resource_url.clone()),
         jwks_uri: Some(format!("{}/jwks", state.resource_url.trim_end_matches('/'))),
-        access_mode: None,
+        access_mode: state.access_mode,
         name: Some("aauth-rs test resource".into()),
         description: None,
         logo_uri: None,
@@ -61,7 +79,7 @@ pub async fn resource_metadata(
         documentation_uri: None,
         tos_uri: None,
         policy_uri: None,
-        authorization_endpoint: None,
+        authorization_endpoint: state.authorization_endpoint.clone(),
         login_endpoint: None,
         scope_descriptions: None,
         signature_window: None,

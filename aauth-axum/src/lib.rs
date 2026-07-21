@@ -35,6 +35,6 @@ pub use person::{
 };
 #[cfg(feature = "resource")]
 pub use resource::{
-    ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, resource_pending_poll_handler,
-    resource_router,
+    ResourceAuthLayer, ResourceServerState, VerifiedAAuthToken, resource_authorize_handler,
+    resource_pending_poll_handler, resource_router,
 };

@@ -43,6 +43,14 @@ pub const SIGNATURE_NAME: &str = "signature";
 /// HTTP Message Signatures `Signature` header.
 pub const SIGNATURE: HeaderName = HeaderName::from_static(SIGNATURE_NAME);
 
+/// Lowercase name for [`SIGNATURE_ERROR`].
+pub const SIGNATURE_ERROR_NAME: &str = "signature-error";
+/// HTTP Signature Keys `Signature-Error` response header.
+///
+/// Spec: `draft-hardt-httpbis-signature-key-05.txt` §5;
+/// AAuth `#verification`
+pub const SIGNATURE_ERROR: HeaderName = HeaderName::from_static(SIGNATURE_ERROR_NAME);
+
 /// Lowercase name for [`PREFER`].
 pub const PREFER_NAME: &str = "prefer";
 /// `Prefer` request header (e.g. `wait=` on token exchange / deferred poll).

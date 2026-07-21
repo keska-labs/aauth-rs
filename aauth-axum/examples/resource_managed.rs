@@ -84,7 +84,10 @@ fn resource_managed_app(
     );
 
     let state = ResourceState {
-        resource: ResourceServerState { service },
+        resource: ResourceServerState {
+            service,
+            resource_url: resource_url.to_string(),
+        },
         discovery: DiscoveryState {
             resource_url: resource_url.to_string(),
             resource_jwks: JwksDocument {
@@ -178,10 +181,11 @@ async fn api_data(token: VerifiedAAuthToken) -> Json<serde_json::Value> {
 }
 
 async fn resource_metadata(State(state): State<DiscoveryState>) -> Json<ResourceServerMetadata> {
+    let base = state.resource_url.trim_end_matches('/');
     Json(ResourceServerMetadata {
         issuer: Some(state.resource_url.clone()),
-        jwks_uri: Some(format!("{}/jwks", state.resource_url.trim_end_matches('/'))),
-        access_mode: None,
+        jwks_uri: Some(format!("{base}/jwks")),
+        access_mode: Some(aauth::protocol::ResourceAccessModeWire::AauthAccessToken),
         name: Some("aauth-rs example resource".into()),
         description: None,
         logo_uri: None,
@@ -189,7 +193,7 @@ async fn resource_metadata(State(state): State<DiscoveryState>) -> Json<Resource
         documentation_uri: None,
         tos_uri: None,
         policy_uri: None,
-        authorization_endpoint: None,
+        authorization_endpoint: Some(format!("{base}/resource/authorize")),
         login_endpoint: None,
         scope_descriptions: None,
         signature_window: None,

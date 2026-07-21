@@ -91,25 +91,18 @@ pub fn parse_pending_post_body(body: &[u8]) -> Result<PendingInput, AAuthError> 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeferRequirement {
     /// Spec: Interaction Required under `#requirement-responses`
-    Interaction {
-        url: String,
-        code: String,
-    },
+    Interaction { url: String, code: String },
     /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-clarification`
     Clarification {
         question: String,
         timeout: Option<u64>,
     },
     /// Spec: `draft-hardt-oauth-aauth-protocol.md#requirement-claims`
-    Claims {
-        required_claims: Vec<String>,
-    },
+    Claims { required_claims: Vec<String> },
     /// Spec: `draft-hardt-oauth-aauth-protocol.md#approval-pending`
     Approval,
     /// Spec: Payment required under `#as-token-endpoint` (stub; not a 202 body)
-    Payment {
-        location: String,
-    },
+    Payment { location: String },
 }
 
 impl DeferRequirement {

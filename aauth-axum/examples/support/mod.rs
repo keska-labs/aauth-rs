@@ -22,6 +22,6 @@ mod agent_issuer;
 
 pub use agent_issuer::agent_issuer_app;
 pub use client::AgentClientBuilder;
-pub use constants::AGENT_ID;
+pub use constants::{AGENT_ID, AGENT_ISSUER};
 pub use listen::{bind_ephemeral, serve};
 pub use metadata::MultiPartyMetadataFetcher;

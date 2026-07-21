@@ -9,7 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Workspace crate `httpsig-key`: HTTP Signature Keys (`Signature-Key` / `Signature-Error` / Accept-Signature `sigkey`) on top of `httpsig` 0.0.24 (`jwt` + `hwk` schemes; Ed25519 + P-256 sign/verify).
+- `is_valid_server_identifier` / `is_valid_agent_identifier` for HTTPS server identifiers and `aauth:local@domain` agent IDs (loopback HTTP accepted for local tests).
+- `SIGNATURE_ERROR` / `SIGNATURE_ERROR_NAME` header constants; `SignatureErrorHeader` re-exported from `aauth::signature`.
+- `SignatureError::signature_error_code` / `is_missing_agent_credential` and `AAuthError::signature_error_header` for `Signature-Error` responses.
+- `is_token68`, `parse_aauth_credential`, and `parse_aauth_access_header` for opaque `AAuth-Access` / `Authorization: AAuth` credentials (RFC9110 token68).
+- `AgentAuthStep::RetryWithOpaque` so agents retry the original request after an immediate opaque grant.
+- `AgentOptions::scope` for proactive resource `authorization_endpoint` POST bodies.
+- `POST /resource/authorize` on `resource_router` (resource-managed opaque / interaction path) and `resource_authorize_handler`.
+- `ResourceServerState::resource_url` for authorize consent context.
+- Agent middleware proactively POSTs `authorization_endpoint` when resource metadata advertises it and no opaque token is cached.
 - `sign_request_headers` in `aauth::signature` for signing a `HeaderMap` with `KeyMaterial`.
 - Canonical protocol header name constants in `protocol::headers` (`AAUTH_REQUIREMENT` / `_NAME`, `AAUTH_ACCESS`, `AAUTH_CAPABILITIES`, `AAUTH_MISSION`, `SIGNATURE_KEY`, `SIGNATURE_INPUT`, `SIGNATURE`, `PREFER`).
 - `StaticKeyMaterialProvider::new` to wrap arbitrary `KeyMaterial` (e.g. from `@aauth/bootstrap token`).
@@ -40,11 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Identity-based resources emit `AAuth-Requirement: requirement=agent-token` when no agent JWT is presented (`#requirement-agent-token`).
+- Resource `401` signature/JWT verification failures include a `Signature-Error` header (`#verification`).
+- Agent JWT verification enforces `alg` ≠ `none`, `dwk`, non-future `iat`, HTTPS `iss`/`ps`, and valid `parent_agent` (`#agent-tokens`).
+- Resource and agent recipients enforce token68 grammar on opaque AAuth credentials (reject empty, whitespace/control, multi-credential).
+- Immediate `GrantOpaque` (e.g. AlwaysGrant) no longer leaves the agent stuck on an empty 200; the agent retries with `Authorization: AAuth`.
+- Person Server metadata `token_endpoint` uses the reachable `pending_base_url` while `issuer` stays the logical `person_server_url`.
 - HTTP Message Signature `@method` component uses uppercase (RFC 9421); lowercase broke verification against `@hellocoop/httpsig` / whoami.aauth.dev.
 - Person and Access token-exchange handlers verify HTTP signatures against the request path (`OriginalUri`) instead of hardcoded paths, so Access Server routes remain nestable.
 
 ### Changed
 
+- `ResourceAccessMode::IdentityBased` accepts only verified agent JWTs (auth JWTs get `requirement=agent-token`); matches `#overview-identity-access`.
+- `SignatureErrorHeader` serializes SFV Token members (`error=invalid_signature`) per the Signature-Key draft.
 - Async traits use `trait_variant` + `dynosaur`: each crate-owned async trait has a `Local*` base (`Sync`), a Send variant keeping the previous public name, and a public `Dyn*` type (except `PendingStore`, which is generic over `R` and uses in-place `trait_variant::make(Send)` only). Prefer concrete generics for owned config; use `DynTrait::new_arc` only when type erasure is required.
 - `AgentOptions<P, F>` / `AgentMiddleware<P, F>` take concrete `KeyMaterialProvider` / `MetadataFetcher` type parameters (default fetcher `AbsentMetadataFetcher`) instead of storing `Arc<Dyn*>`.
 - `aauth` feature `agent` enables `resource-verify` so challenge verification is always available to agents; configure a real `metadata_fetcher` for JWKS discovery.

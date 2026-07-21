@@ -18,6 +18,7 @@ use crate::jwt::SigningJwk;
 use crate::protocol::{KeyMaterial, SignatureKey};
 
 pub use crate::error::SignatureError;
+pub use httpsig_key::SignatureErrorHeader;
 
 const DEFAULT_SIGNATURE_MAX_AGE_SECS: u64 = 60;
 const SIGNATURE_CLOCK_SKEW_SECS: i64 = 60;

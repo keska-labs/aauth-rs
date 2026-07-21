@@ -123,8 +123,12 @@ pub fn resource_managed_app(
     );
 
     let state = ResourceManagedState {
-        resource: ResourceServerState { service },
-        discovery: ResourceDiscoveryState::from_keys(keys, resource_url),
+        resource: ResourceServerState {
+            service,
+            resource_url: resource_url.to_string(),
+        },
+        discovery: ResourceDiscoveryState::from_keys(keys, resource_url)
+            .with_resource_managed_authorize(),
     };
 
     let app = Router::new()

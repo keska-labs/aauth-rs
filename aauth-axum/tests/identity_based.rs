@@ -6,10 +6,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use aauth::TestKeys;
-use aauth::protocol::AgentOkResponse;
+use aauth::protocol::{AAUTH_REQUIREMENT, AgentOkResponse, SIGNATURE_ERROR};
+use aauth::signature::SignatureErrorHeader;
 use rstest::rstest;
 
 use support::AGENT_ID;
+use support::AGENT_ISSUER;
 use support::agent_issuer::agent_issuer_app;
 use support::apps::identity_resource_app;
 use support::client::AgentClientBuilder;
@@ -62,7 +64,7 @@ async fn identity_based_over_http() {
 #[rstest]
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
-async fn unsigned_request_rejected_over_http() {
+async fn unsigned_request_gets_agent_token_challenge() {
     let (_keys, _agent, resource, _fetcher) = spawn_identity().await;
 
     let response = reqwest::Client::new()
@@ -72,16 +74,25 @@ async fn unsigned_request_rejected_over_http() {
         .expect("request");
 
     assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let requirement = response
+        .headers()
+        .get(AAUTH_REQUIREMENT.as_str())
+        .and_then(|v| v.to_str().ok());
+    assert_eq!(requirement, Some("requirement=agent-token"));
+    assert!(
+        response.headers().get(SIGNATURE_ERROR.as_str()).is_none(),
+        "missing credential must not carry Signature-Error"
+    );
 }
 
 #[rstest]
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
-async fn invalid_signature_rejected_over_http() {
+async fn invalid_signature_gets_signature_error() {
     let (keys, agent, resource, fetcher) = spawn_identity().await;
 
     let wrong_keys = TestKeys::generate();
-    let agent_jwt = wrong_keys.mint_agent_jwt(&agent.url, AGENT_ID, None);
+    let agent_jwt = wrong_keys.mint_agent_jwt(AGENT_ISSUER, AGENT_ID, None);
     let provider = wrong_keys.key_provider(agent_jwt);
 
     let client = AgentClientBuilder::new(&keys, &agent.url, fetcher)
@@ -94,4 +105,18 @@ async fn invalid_signature_rejected_over_http() {
         .expect("request");
 
     assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let sig_err = response
+        .headers()
+        .get(SIGNATURE_ERROR.as_str())
+        .and_then(|v| v.to_str().ok())
+        .expect("Signature-Error header");
+    let parsed = SignatureErrorHeader::from_header(sig_err).expect("parse Signature-Error");
+    assert!(
+        matches!(
+            parsed.error.as_str(),
+            "invalid_signature" | "invalid_jwt" | "invalid_key" | "unknown_key"
+        ),
+        "unexpected Signature-Error: {}",
+        parsed.error
+    );
 }

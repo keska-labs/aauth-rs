@@ -102,7 +102,7 @@ Deferred responses (`202 Accepted` + `Location` + optional `AAuth-Requirement`) 
 
 | Mode | Variant | Parties | Description |
 |------|---------|---------|-------------|
-| Identity-based | `IdentityBased` | 2 | Grant on verified agent or auth token alone |
+| Identity-based | `IdentityBased` | 2 | Grant on verified agent JWT alone; missing credential → `requirement=agent-token` |
 | PS-asserted | `PsAsserted { access_server_url: None, ... }` | 3 | Resource token `aud` = agent `ps` claim; PS mints auth token |
 | Federated | `PsAsserted { access_server_url: Some(...), ... }` | 4 | Resource token `aud` = AS; PS federates token exchange to AS |
 | Resource-managed | `ResourceManaged { service, ... }` | 2 | Resource owns consent via `ResourceAccessService` (e.g. `aauth_policy::PolicyResourceAccessService`); issues opaque `AAuth-Access` tokens |

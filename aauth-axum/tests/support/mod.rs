@@ -10,4 +10,4 @@ pub mod listen;
 pub mod metadata;
 pub mod timeout;
 
-pub use constants::AGENT_ID;
+pub use constants::{AGENT_ID, AGENT_ISSUER};

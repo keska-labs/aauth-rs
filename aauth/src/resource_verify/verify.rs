@@ -2,9 +2,11 @@ use jsonwebtoken::DecodingKey;
 
 use crate::error::{Result, VerifyError, VerifyReason};
 use crate::http_util::normalize_server_url;
-use crate::jwt::{AuthClaims, ParsedToken, ResourceClaims, jwk_thumbprint, jwt_header};
+use crate::jwt::{
+    AgentClaims, AuthClaims, ParsedToken, ResourceClaims, jwk_thumbprint, jwt_header,
+};
 use crate::metadata::MetadataFetcher;
-use crate::protocol::JwtTyp;
+use crate::protocol::{JwtTyp, is_valid_agent_identifier, is_valid_server_identifier};
 
 const CLOCK_SKEW: i64 = 60;
 
@@ -29,9 +31,13 @@ pub struct VerifyResourceTokenOptions<F> {
 pub async fn verify_token<F: MetadataFetcher>(
     options: VerifyTokenOptions<F>,
 ) -> Result<ParsedToken> {
+    // Rejects `alg: none` via jwt_header inside parse.
     let parsed = ParsedToken::parse(&options.jwt)?;
     let typ = match &parsed {
-        ParsedToken::Agent(_) => JwtTyp::Agent,
+        ParsedToken::Agent(agent) => {
+            validate_agent_token_claims(agent)?;
+            JwtTyp::Agent
+        }
         ParsedToken::Auth(_) => JwtTyp::Auth,
         ParsedToken::Resource(_) => {
             return Err(VerifyError::Invalid {
@@ -68,6 +74,61 @@ pub async fn verify_token<F: MetadataFetcher>(
         )
         .into(),
     })
+}
+
+/// Agent Token Verification steps 2–4, 6–7 (cnf is checked by the caller).
+///
+/// Spec: `draft-hardt-oauth-aauth-protocol.md#agent-tokens` (Agent Token Verification)
+fn validate_agent_token_claims(agent: &AgentClaims) -> Result<()> {
+    if agent.dwk != "aauth-agent.json" {
+        return Err(VerifyError::Invalid {
+            typ: JwtTyp::Agent,
+            reason: VerifyReason::InvalidDwk,
+        }
+        .into());
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    if agent.iat > now + CLOCK_SKEW {
+        return Err(VerifyError::Invalid {
+            typ: JwtTyp::Agent,
+            reason: VerifyReason::FutureIat,
+        }
+        .into());
+    }
+
+    if !is_valid_server_identifier(&agent.iss) {
+        return Err(VerifyError::Invalid {
+            typ: JwtTyp::Agent,
+            reason: VerifyReason::InvalidIss,
+        }
+        .into());
+    }
+
+    if let Some(ps) = &agent.ps {
+        if !is_valid_server_identifier(ps) {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Agent,
+                reason: VerifyReason::InvalidPs,
+            }
+            .into());
+        }
+    }
+
+    if let Some(parent) = &agent.parent_agent {
+        if !is_valid_agent_identifier(parent) {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Agent,
+                reason: VerifyReason::InvalidParentAgent,
+            }
+            .into());
+        }
+    }
+
+    Ok(())
 }
 
 /// Verify a resource JWT (`typ=aa-resource+jwt`).

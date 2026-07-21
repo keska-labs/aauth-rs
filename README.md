@@ -46,7 +46,7 @@ aauth-rs/
 
 | Mode | Variant | Description |
 |------|---------|-------------|
-| Identity-based | `IdentityBased` | Grant on verified agent or auth token alone |
+| Identity-based | `IdentityBased` | Grant on verified agent JWT alone |
 | PS-asserted (three-party) | `PsAsserted { require_auth_token, access_server_url: None, person_server_fallback }` | Resource token `aud` = agent `ps` claim (or fallback) |
 | Federated (four-party) | `PsAsserted { require_auth_token, access_server_url: Some(...), ... }` | Resource token `aud` = AS; PS federates to AS |
 | Resource-managed (two-party) | `ResourceManaged { service, ... }` | Custom `ResourceAccessService` (or `aauth-policy` helpers) + opaque `AAuth-Access` tokens |

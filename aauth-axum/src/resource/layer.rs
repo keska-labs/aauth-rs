@@ -13,7 +13,7 @@ use aauth::ResourceAccessMode;
 use aauth::ResourceAccessService;
 use aauth::jwt::ParsedToken;
 use aauth::metadata::MetadataFetcher;
-use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge};
+use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge, SIGNATURE_ERROR};
 use aauth::resource::keys::ResourceTokenSigner;
 use aauth::resource::{
     NoResourceInteraction, ResourceInteractionContext, ResourceInteractionProvider,
@@ -155,9 +155,18 @@ where
 
         Box::pin(async move {
             let (method, authority, path) = request_signature_parts(&req);
+            let identity_based = matches!(&mode, ResourceAccessMode::IdentityBased);
 
-            let opaque_retry = matches!(&mode, ResourceAccessMode::ResourceManaged { .. })
-                && extract_aauth_access(req.headers()).is_some();
+            let opaque_auth = if matches!(&mode, ResourceAccessMode::ResourceManaged { .. }) {
+                extract_aauth_access(req.headers())
+            } else {
+                Ok(None)
+            };
+
+            let opaque_retry = opaque_auth
+                .as_ref()
+                .map(|t| t.is_some())
+                .unwrap_or(true);
 
             let sig_options = if opaque_retry {
                 SignatureVerifyOptions {
@@ -176,20 +185,33 @@ where
                 &sig_options,
             ) {
                 Ok(v) => v,
-                Err(e) => return Ok(unauthorized_err(e)),
+                Err(e) => {
+                    let err: aauth::AAuthError = e.into();
+                    if identity_based && err.is_missing_agent_credential() {
+                        return Ok(agent_token_required());
+                    }
+                    return Ok(unauthorized_err(err));
+                }
             };
 
             if let ResourceAccessMode::ResourceManaged { service } = &mode {
-                if let Some(opaque_token) = extract_aauth_access(req.headers()) {
-                    let agent_id = agent_sub_from_jwt(&verified_sig.jwt);
-                    if service.validate_opaque(&opaque_token, &agent_id) {
-                        if let Ok(ParsedToken::Agent(agent)) = ParsedToken::parse(&verified_sig.jwt)
-                        {
-                            req.extensions_mut().insert(ParsedToken::Agent(agent));
-                            return inner.call(req).await;
-                        }
+                match &opaque_auth {
+                    Err(_) => {
+                        return Ok(unauthorized_message("invalid opaque access token"));
                     }
-                    return Ok(unauthorized_message("invalid opaque access token"));
+                    Ok(Some(opaque_token)) => {
+                        let agent_id = agent_sub_from_jwt(&verified_sig.jwt);
+                        if service.validate_opaque(opaque_token, &agent_id) {
+                            if let Ok(ParsedToken::Agent(agent)) =
+                                ParsedToken::parse(&verified_sig.jwt)
+                            {
+                                req.extensions_mut().insert(ParsedToken::Agent(agent));
+                                return inner.call(req).await;
+                            }
+                        }
+                        return Ok(unauthorized_message("invalid opaque access token"));
+                    }
+                    Ok(None) => {}
                 }
             }
 
@@ -201,7 +223,21 @@ where
             .await
             {
                 Ok(v) => v,
-                Err(e) => return Ok(unauthorized_err(e)),
+                Err(e) => {
+                    if identity_based {
+                        // Wrong typ (e.g. resource JWT) without a usable agent token.
+                        if matches!(
+                            &e,
+                            aauth::AAuthError::Verify(aauth::VerifyError::Invalid {
+                                reason: aauth::VerifyReason::UnsupportedTyp,
+                                ..
+                            })
+                        ) {
+                            return Ok(agent_token_required());
+                        }
+                    }
+                    return Ok(unauthorized_err(e));
+                }
             };
 
             if let ParsedToken::Auth(ref auth) = verified {
@@ -211,11 +247,12 @@ where
             }
 
             match (&mode, &verified) {
-                // Spec: `#overview-identity-access`
-                (ResourceAccessMode::IdentityBased, _) => {
+                // Spec: `#overview-identity-access`, `#requirement-agent-token`
+                (ResourceAccessMode::IdentityBased, ParsedToken::Agent(_)) => {
                     req.extensions_mut().insert(verified);
                     inner.call(req).await
                 }
+                (ResourceAccessMode::IdentityBased, _) => Ok(agent_token_required()),
                 (
                     ResourceAccessMode::PsAsserted {
                         require_auth_token: true,
@@ -309,13 +346,21 @@ fn agent_sub_from_jwt(jwt: &str) -> String {
         .unwrap_or_default()
 }
 
-fn extract_aauth_access(headers: &axum::http::HeaderMap) -> Option<String> {
-    let value = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok())?;
-    let rest = value.strip_prefix("AAuth ")?;
-    if rest.is_empty() {
-        return None;
+fn extract_aauth_access(headers: &axum::http::HeaderMap) -> aauth::Result<Option<String>> {
+    let mut values = headers.get_all(AUTHORIZATION).iter();
+    let Some(value) = values.next() else {
+        return Ok(None);
+    };
+    if values.next().is_some() {
+        return Err(aauth::HeaderError::Invalid("multiple Authorization headers".into()).into());
     }
-    Some(rest.to_string())
+    let value = value
+        .to_str()
+        .map_err(|_| aauth::HeaderError::Invalid("non-UTF-8 Authorization".into()))?;
+    if !value.trim().starts_with("AAuth") {
+        return Ok(None);
+    }
+    Ok(Some(aauth::parse_aauth_credential(value)?.to_string()))
 }
 
 fn request_signature_parts<B>(req: &Request<B>) -> (String, String, String) {
@@ -338,32 +383,48 @@ fn request_signature_parts<B>(req: &Request<B>) -> (String, String, String) {
     (method, authority, path)
 }
 
-fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
-    // Spec: `#verification` — failures SHOULD carry Signature-Error (not yet emitted).
-    // Spec: `#requirement-agent-token` — IdentityBased missing-credential path SHOULD
-    // emit `AAuth-Requirement: requirement=agent-token` (not yet emitted).
-    let err = err.into();
-    if let Some((status, protocol)) = aauth::IntoAauthProtocol::into_aauth_protocol(err) {
-        let status = StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED);
-        return Response::builder()
-            .status(status)
-            .header(CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                serde_json::to_vec(&protocol).unwrap_or_default(),
-            ))
-            .expect("valid response");
-    }
+/// Spec: `#requirement-agent-token`
+fn agent_token_required() -> Response<Body> {
     Response::builder()
         .status(StatusCode::UNAUTHORIZED)
-        .header(CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_vec(&aauth::protocol::AAuthProtocolError::with_description(
-                aauth::protocol::AAuthErrorCode::InvalidSignature,
-                "unauthorized",
-            ))
-            .unwrap_or_default(),
-        ))
+        .header(AAUTH_REQUIREMENT, AAuthChallenge::AgentToken.to_header())
+        .body(Body::from("Agent token required"))
         .expect("valid response")
+}
+
+fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
+    // Spec: `#verification` — failures MUST carry Signature-Error.
+    let err = err.into();
+    let signature_error = err.signature_error_header();
+    let mut builder =
+        if let Some((status, protocol)) = aauth::IntoAauthProtocol::into_aauth_protocol(err) {
+            let status = StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED);
+            Response::builder()
+                .status(status)
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&protocol).unwrap_or_default(),
+                ))
+        } else {
+            Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&aauth::protocol::AAuthProtocolError::with_description(
+                        aauth::protocol::AAuthErrorCode::InvalidSignature,
+                        "unauthorized",
+                    ))
+                    .unwrap_or_default(),
+                ))
+        }
+        .expect("valid response");
+
+    if let Some(sig_err) = signature_error {
+        if let Ok(value) = axum::http::HeaderValue::from_str(&sig_err.to_header()) {
+            builder.headers_mut().insert(SIGNATURE_ERROR, value);
+        }
+    }
+    builder
 }
 
 fn unauthorized_message(message: impl Into<String>) -> Response<Body> {

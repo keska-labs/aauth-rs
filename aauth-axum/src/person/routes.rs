@@ -49,9 +49,11 @@ where
 pub async fn person_metadata_handler<S: PersonTokenService, F: MetadataFetcher>(
     State(state): State<PersonServerState<S, F>>,
 ) -> Json<PersonServerMetadata> {
+    // `person_server_url` is the logical issuer; endpoint URLs use the reachable base.
+    let base = state.config.pending_base_url.trim_end_matches('/');
     Json(PersonServerMetadata {
         issuer: Some(state.config.person_server_url.clone()),
-        token_endpoint: format!("{}/aauth/token", state.config.person_server_url),
+        token_endpoint: format!("{base}/aauth/token"),
         jwks_uri: Some(state.config.person_jwks_uri.clone()),
         interaction_endpoint: Some(state.config.interaction_url.clone()),
         ..Default::default()

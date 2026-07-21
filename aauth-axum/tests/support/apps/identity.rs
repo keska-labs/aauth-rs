@@ -24,7 +24,8 @@ pub fn identity_resource_app(
         Arc::new(keys.resource_token_signer()),
     );
 
-    let state = ResourceDiscoveryState::from_keys(keys, resource_url);
+    let state = ResourceDiscoveryState::from_keys(keys, resource_url)
+        .with_access_mode(aauth::protocol::ResourceAccessModeWire::AgentToken);
 
     // `route_layer` applies only to routes registered above it.
     Router::new()

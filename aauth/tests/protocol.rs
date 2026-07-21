@@ -103,6 +103,90 @@ async fn verify_token_agent_jwt() {
 }
 
 #[tokio::test]
+async fn verify_token_rejects_alg_none() {
+    let _guard = test_lock();
+    use base64::Engine;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+    let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"none","typ":"aa-agent+jwt"}"#);
+    let payload =
+        URL_SAFE_NO_PAD.encode(br#"{"iss":"https://agent.example","dwk":"aauth-agent.json"}"#);
+    let jwt = format!("{header}.{payload}.");
+
+    let err = aauth::jwt::jwt_header(&jwt).unwrap_err();
+    assert!(matches!(
+        err,
+        aauth::AAuthError::Jwt(aauth::JwtError::AlgNone)
+    ));
+}
+
+#[tokio::test]
+async fn verify_token_rejects_bad_dwk() {
+    let _guard = test_lock();
+    let keys = TestKeys::generate();
+    let agent_jwt = {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let claims = aauth::AgentClaims {
+            iss: AGENT_URL.into(),
+            dwk: "wrong.json".into(),
+            sub: AGENT_ID.into(),
+            jti: "jti".into(),
+            cnf: aauth::CnfClaim {
+                jwk: keys.agent_ephemeral.public_jwk(),
+            },
+            iat: now,
+            exp: now + 3600,
+            ps: Some(PERSON_SERVER_URL.into()),
+            parent_agent: None,
+        };
+        let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::EdDSA);
+        header.typ = Some("aa-agent+jwt".into());
+        header.kid = keys.agent_root.kid().map(str::to_string);
+        jsonwebtoken::encode(&header, &claims, &keys.agent_root.encoding_key()).unwrap()
+    };
+    let fetcher = keys.agent_metadata_fetcher(AGENT_URL);
+    let err = verify_token(VerifyTokenOptions {
+        jwt: agent_jwt,
+        http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
+        fetcher: Arc::new(fetcher),
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        aauth::AAuthError::Verify(aauth::VerifyError::Invalid {
+            reason: aauth::VerifyReason::InvalidDwk,
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
+async fn verify_token_rejects_http_iss() {
+    let _guard = test_lock();
+    let keys = TestKeys::generate();
+    let agent_jwt = keys.mint_agent_jwt("http://agent.example", AGENT_ID, None);
+    let fetcher = keys.agent_metadata_fetcher(AGENT_URL);
+    let err = verify_token(VerifyTokenOptions {
+        jwt: agent_jwt,
+        http_signature_thumbprint: keys.agent_ephemeral.thumbprint().to_string(),
+        fetcher: Arc::new(fetcher),
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        aauth::AAuthError::Verify(aauth::VerifyError::Invalid {
+            reason: aauth::VerifyReason::InvalidIss,
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
 async fn verify_token_auth_jwt() {
     let _guard = test_lock();
     let keys = TestKeys::generate();

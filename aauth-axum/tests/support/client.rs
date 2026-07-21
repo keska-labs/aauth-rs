@@ -8,14 +8,13 @@ use aauth_reqwest::{
     AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
 
-use super::AGENT_ID;
 use super::metadata::MultiPartyMetadataFetcher;
 use super::timeout::TEST_POLL_MAX_SECS;
+use super::{AGENT_ID, AGENT_ISSUER};
 
 /// Builder for an `aauth-reqwest` agent client.
 pub struct AgentClientBuilder {
     keys: TestKeys,
-    agent_url: String,
     metadata_fetcher: Arc<MultiPartyMetadataFetcher>,
     person_server_url: Option<String>,
     agent_ps_claim: Option<String>,
@@ -27,12 +26,11 @@ pub struct AgentClientBuilder {
 impl AgentClientBuilder {
     pub fn new(
         keys: &TestKeys,
-        agent_url: impl Into<String>,
+        _agent_url: impl Into<String>,
         metadata_fetcher: Arc<MultiPartyMetadataFetcher>,
     ) -> Self {
         Self {
             keys: keys.clone(),
-            agent_url: agent_url.into(),
             metadata_fetcher,
             person_server_url: None,
             agent_ps_claim: None,
@@ -42,7 +40,7 @@ impl AgentClientBuilder {
         }
     }
 
-    /// Override the Person Server URL used for token exchange.
+    /// Override the Person Server URL used for token exchange (listen URL).
     pub fn person_server(mut self, url: impl Into<String>) -> Self {
         self.person_server_url = Some(url.into());
         self
@@ -77,7 +75,8 @@ impl AgentClientBuilder {
 
     pub fn build(self) -> aauth_reqwest::ClientWithMiddleware {
         let ps = self.agent_ps_claim.as_deref();
-        let agent_jwt = self.keys.mint_agent_jwt(&self.agent_url, AGENT_ID, ps);
+        // Logical HTTPS issuer in `iss`; StaticMetadataFetcher ignores iss for JWKS.
+        let agent_jwt = self.keys.mint_agent_jwt(AGENT_ISSUER, AGENT_ID, ps);
         let provider = self
             .provider
             .unwrap_or_else(|| self.keys.key_provider(agent_jwt));
