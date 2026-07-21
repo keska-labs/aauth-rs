@@ -5,15 +5,9 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 
-use aauth::AccessPendingRecord;
 use aauth::AccessServerConfig;
 use aauth::AuthTokenPollOutcome;
-use aauth::PendingStore;
-use aauth::access_server::keys::AccessAuthJwtMinter;
-use aauth::access_server::service::{
-    AccessTokenService, PolicyAccessTokenService, build_access_context,
-};
-use aauth::policy::AccessTokenPolicy;
+use aauth::access_server::service::{AccessTokenService, build_access_context};
 use aauth::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, JwksDocument};
 use aauth::signature::verify_request_signature;
 
@@ -28,15 +22,21 @@ where
     pub config: AccessServerConfig,
 }
 
-impl<P, S, M> AccessServerState<PolicyAccessTokenService<P, S, M>>
+#[cfg(feature = "policy")]
+impl<P, S, M> AccessServerState<aauth_policy::PolicyAccessTokenService<P, S, M>>
 where
-    P: AccessTokenPolicy,
-    S: PendingStore<AccessPendingRecord>,
-    M: AccessAuthJwtMinter + Clone,
+    P: aauth_policy::AccessTokenPolicy,
+    S: aauth_policy::PendingStore<aauth_policy::AccessPendingRecord>,
+    M: aauth::access_server::keys::AccessAuthJwtMinter + Clone,
 {
     pub fn from_policy(policy: P, pending: S, minter: M, config: AccessServerConfig) -> Self {
         Self {
-            service: PolicyAccessTokenService::new(policy, pending, minter, config.clone()),
+            service: aauth_policy::PolicyAccessTokenService::new(
+                policy,
+                pending,
+                minter,
+                config.clone(),
+            ),
             config,
         }
     }

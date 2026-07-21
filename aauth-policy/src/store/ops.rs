@@ -1,5 +1,6 @@
-use super::outcome::{AuthTokenPollOutcome, poll_outcome_from_snapshot};
-use super::store::{PendingStorable, PendingStore};
+use aauth::{AuthTokenPollOutcome, poll_outcome_from_snapshot};
+
+use super::traits::{PendingStorable, PendingStore};
 
 /// Load a pending record, expire if needed, and map to a poll outcome.
 pub async fn poll_auth_pending<S, R>(

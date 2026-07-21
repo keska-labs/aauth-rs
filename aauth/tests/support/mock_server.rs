@@ -1,9 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use aauth::InMemoryPersonPendingStore;
-use aauth::protocol::TokenExchangeRequest;
-
 use aauth::TestKeys;
+use aauth::protocol::TokenExchangeRequest;
+use aauth_policy::InMemoryPersonPendingStore;
 
 use super::mock_transport::{MockServerState, MockTransport};
 

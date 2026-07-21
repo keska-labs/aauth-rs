@@ -7,13 +7,9 @@ use axum::routing::{get, post};
 use serde::Deserialize;
 
 use aauth::AuthTokenPollOutcome;
-use aauth::PendingStore;
-use aauth::PersonPendingRecord;
 use aauth::PersonServerConfig;
-use aauth::person_server::keys::PersonAuthJwtMinter;
-use aauth::person_server::service::{PersonTokenService, PolicyPersonTokenService};
+use aauth::person_server::service::PersonTokenService;
 use aauth::person_server::verify_person_token_request;
-use aauth::policy::PersonTokenPolicy;
 use aauth::protocol::{JwksDocument, PersonServerMetadata, TokenExchangeRequest};
 use aauth::signature::verify_request_signature;
 
@@ -28,15 +24,21 @@ where
     pub config: PersonServerConfig,
 }
 
-impl<P, S, M> PersonServerState<PolicyPersonTokenService<P, S, M>>
+#[cfg(feature = "policy")]
+impl<P, S, M> PersonServerState<aauth_policy::PolicyPersonTokenService<P, S, M>>
 where
-    P: PersonTokenPolicy,
-    S: PendingStore<PersonPendingRecord>,
-    M: PersonAuthJwtMinter + Clone,
+    P: aauth_policy::PersonTokenPolicy,
+    S: aauth_policy::PendingStore<aauth_policy::PersonPendingRecord>,
+    M: aauth::person_server::keys::PersonAuthJwtMinter + Clone,
 {
     pub fn from_policy(policy: P, pending: S, minter: M, config: PersonServerConfig) -> Self {
         Self {
-            service: PolicyPersonTokenService::new(policy, pending, minter, config.clone()),
+            service: aauth_policy::PolicyPersonTokenService::new(
+                policy,
+                pending,
+                minter,
+                config.clone(),
+            ),
             config,
         }
     }

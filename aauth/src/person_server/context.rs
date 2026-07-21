@@ -4,7 +4,7 @@ use crate::error::{AAuthError, Result};
 use crate::jwt::VerifiedToken;
 use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::PersonAuthJwtMinter;
-use crate::policy::{AuthGrant, PersonTokenContext};
+use crate::person_server::token_context::PersonTokenContext;
 use crate::protocol::{TokenExchangeRequest, TokenResponseBody};
 use crate::resource_verify::{VerifyResourceTokenOptions, verify_resource_token};
 
@@ -44,15 +44,16 @@ pub async fn verify_person_token_request(
 pub fn mint_person_auth<M: PersonAuthJwtMinter>(
     minter: &M,
     config: &PersonServerConfig,
-    grant: &AuthGrant,
+    sub: &str,
+    scope: Option<&str>,
     agent_sub: &str,
 ) -> TokenResponseBody {
     let auth_jwt = minter.mint_person_auth_jwt(
         &config.person_server_url,
         &config.resource_url,
         agent_sub,
-        Some(&grant.sub),
-        grant.scope.as_deref(),
+        Some(sub),
+        scope,
     );
     TokenResponseBody {
         auth_token: auth_jwt,

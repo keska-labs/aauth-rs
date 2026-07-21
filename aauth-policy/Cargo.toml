@@ -1,0 +1,41 @@
+[package]
+name = "aauth-policy"
+version = "0.0.3"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "High-level policy, pending store, and reference services for AAuth"
+documentation = "https://docs.rs/aauth-policy"
+readme = "../README.md"
+keywords = ["aauth", "oauth", "authentication", "policy"]
+categories = ["authentication", "web-programming"]
+
+[features]
+default = ["person-server", "access-server", "resource"]
+person-server = ["aauth/person-server"]
+access-server = ["aauth/access-server"]
+resource = ["aauth/resource"]
+full = ["person-server", "access-server", "resource"]
+
+[dependencies]
+aauth = { workspace = true, default-features = false, features = ["deferred"] }
+async-trait.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_with.workspace = true
+thiserror.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+aauth = { workspace = true, default-features = false, features = [
+    "person-server",
+    "access-server",
+    "resource",
+] }
+tokio.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

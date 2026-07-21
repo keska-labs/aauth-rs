@@ -1,9 +1,9 @@
-use crate::deferred::InMemoryResourcePendingStore;
-use crate::resource::service::{PolicyResourceAccessService, ResourceAccessService};
+use crate::resource::no_service::NoResourceAccessService;
+use crate::resource::service::ResourceAccessService;
 
 /// How a resource server evaluates access for incoming agent requests.
 #[derive(Clone)]
-pub enum ResourceAccessMode<S = ResourceAccessPolicyService>
+pub enum ResourceAccessMode<S = NoResourceAccessService>
 where
     S: ResourceAccessService,
 {
@@ -18,10 +18,3 @@ where
     /// Resource manages authorization via interaction and opaque access tokens.
     ResourceManaged { service: S },
 }
-
-/// Default resource-managed mode using in-memory policy, pending store, and opaque tokens.
-pub type ResourceAccessPolicyService = PolicyResourceAccessService<
-    crate::policy::AlwaysGrantResourcePolicy,
-    InMemoryResourcePendingStore,
-    crate::resource::InMemoryOpaqueAccessStore,
->;

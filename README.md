@@ -2,7 +2,7 @@
 
 Rust implementation of the [AAuth authorization protocol](https://github.com/dickhardt/AAuth).
 
-This workspace provides the `aauth` crate with protocol primitives (always on) and optional modules per AAuth party — enable only the roles you implement. Companion crates: `aauth-reqwest` (agent HTTP client) and `aauth-axum` (server HTTP adapters).
+This workspace provides the `aauth` crate with protocol primitives (always on) and optional modules per AAuth party — enable only the roles you implement. Companion crates: `aauth-policy` (high-level policy + pending store), `aauth-reqwest` (agent HTTP client), and `aauth-axum` (server HTTP adapters).
 
 ## ⚠️ WARNING: LLM usage & pre-alpha ⚠️
 This library is currently in pre-alpha and can't in any way be described as satisfactory. It's mainly a LLM translation of the `Javascript` implementation of the `aauth` draft and a start for us to work from. We currently discourage using this, and won't be accepting contributions because our internal plans will make any external contributions moot, but if you check back in a few weeks, we're hopefully in a more acceptable state.
@@ -12,18 +12,18 @@ This library is currently in pre-alpha and can't in any way be described as sati
 ```text
 aauth-rs/
 ├── Cargo.toml              # workspace root
-├── aauth/                  # protocol + role services (no axum / reqwest agent)
+├── aauth/                  # protocol + role service traits
 │   ├── src/
 │   │   ├── agent/              # agent runtime (feature `agent`)
 │   │   ├── person_server/      # Person Server (feature `person-server`)
 │   │   ├── access_server/      # Access Server (feature `access-server`)
 │   │   ├── resource/           # Resource Server (feature `resource`)
 │   │   ├── resource_verify/    # token verification only (feature `resource-verify`)
-│   │   ├── deferred/           # pending store, defer types (feature `deferred`)
-│   │   ├── policy/             # policy traits (feature `policy`)
+│   │   ├── deferred/           # defer wire types (feature `deferred`)
 │   │   ├── signature.rs        # shared HTTP Signature build + verify
 │   │   └── …                   # JWT helpers, metadata, protocol types
 │   └── tests/                  # protocol / agent integration tests
+├── aauth-policy/           # Policy traits, PendingStore, Policy*Service
 ├── aauth-reqwest/          # reqwest agent transport (`AgentMiddleware`, signing, exchange)
 └── aauth-axum/             # axum HTTP adapters (handlers, ResourceAuthLayer)
     ├── src/
@@ -49,21 +49,21 @@ aauth-rs/
 | Identity-based | `IdentityBased` | Grant on verified agent or auth token alone |
 | PS-asserted (three-party) | `PsAsserted { require_auth_token, access_server_url: None, person_server_fallback }` | Resource token `aud` = agent `ps` claim (or fallback) |
 | Federated (four-party) | `PsAsserted { require_auth_token, access_server_url: Some(...), ... }` | Resource token `aud` = AS; PS federates to AS |
-| Resource-managed (two-party) | `ResourceManaged { service, ... }` | `ResourceConsentPolicy` + `PendingStore` + opaque `AAuth-Access` tokens |
+| Resource-managed (two-party) | `ResourceManaged { service, ... }` | Custom `ResourceAccessService` (or `aauth-policy` helpers) + opaque `AAuth-Access` tokens |
 
 When the Access Server returns `202` during federation, the Person Server pass-through defers to the agent on its own pending URL, forwards agent input to the AS pending endpoint, and polls until an auth token is ready. Payment (`402`) from the AS remains a stub.
 
-## Policy and deferred store
+## Integration: services vs `aauth-policy`
 
-Server authorization decisions are pluggable via generic policy traits:
+**Primary path:** implement `PersonTokenService` / `AccessTokenService` / `ResourceAccessService` from `aauth` with your own persistence.
 
-| Trait | Role |
-|-------|------|
+**Shortcut path:** depend on `aauth-policy` for batteries-included policy traits, `PendingStore`, in-memory stores, and `Policy*Service` implementations. Axum `from_policy` helpers require `aauth-axum` feature `policy`.
+
+| Trait (`aauth-policy`) | Role |
+|------------------------|------|
 | `PersonTokenPolicy` | PS token exchange: grant, deny, defer, or federate |
 | `AccessTokenPolicy` | AS token exchange: grant, deny, or defer |
 | `ResourceConsentPolicy` | Resource-managed access: grant opaque, deny, or defer |
-
-Policies are stateless; in-flight deferred requests are persisted in a `PendingStore` implementation (reference: `InMemoryPendingStore`).
 
 Reference policies for tests and examples: `AlwaysGrantPersonPolicy`, `AlwaysGrantAccessPolicy`, `DeferInteractionPersonPolicy`, `ClarificationThenGrantPersonPolicy`, `DeferInteractionResourcePolicy`.
 
@@ -84,11 +84,20 @@ Protocol modules (`error`, `protocol`, `jwt`, `signature`, …) are always avail
 | Feature | Description |
 |---------|-------------|
 | `agent` | `aauth::agent` — `AgentAuth`, `AgentOptions`, keys, resolve |
-| `person-server` | Person Server service |
-| `access-server` | Access Server service |
-| `resource` | Resource Server consent service |
+| `person-server` | Person Server service trait |
+| `access-server` | Access Server service trait |
+| `resource` | Resource Server consent service trait |
 | `resource-verify` | Resource token verification only (no RS service/layer) |
 | `full` | All roles and agent (matches `default`) |
+
+### `aauth-policy`
+
+| Feature | Description |
+|---------|-------------|
+| `person-server` | `PersonTokenPolicy` + `PolicyPersonTokenService` |
+| `access-server` | `AccessTokenPolicy` + `PolicyAccessTokenService` |
+| `resource` | `ResourceConsentPolicy` + `PolicyResourceAccessService` |
+| `full` | All three (matches `default`) |
 
 ### `aauth-reqwest`
 
@@ -103,13 +112,15 @@ Protocol modules (`error`, `protocol`, `jwt`, `signature`, …) are always avail
 | `person-server` | Person Server axum routes (`PersonServerState`, handlers) |
 | `access-server` | Access Server axum routes |
 | `resource` | `ResourceAuthLayer`, pending poll, `VerifiedAAuthToken` |
-| `full` | All three (matches `default`) |
+| `policy` | `from_policy` helpers via `aauth-policy` |
+| `full` | Roles + `policy` |
 
-**Person Server with axum:**
+**Person Server with axum + policy shortcut:**
 
 ```toml
 aauth = { version = "0.0", default-features = false, features = ["person-server"] }
-aauth-axum = { version = "0.0", default-features = false, features = ["person-server"] }
+aauth-policy = { version = "0.0", default-features = false, features = ["person-server"] }
+aauth-axum = { version = "0.0", default-features = false, features = ["person-server", "policy"] }
 ```
 
 **Agent client only:**
@@ -210,11 +221,13 @@ cargo check -p aauth --no-default-features --features access-server
 cargo check -p aauth --no-default-features --features resource
 cargo check -p aauth --no-default-features --features agent
 cargo check -p aauth-reqwest --all-features
+cargo check -p aauth-policy --all-features
 
 # aauth-axum adapters
 cargo check -p aauth-axum --no-default-features --features person-server
 cargo check -p aauth-axum --no-default-features --features access-server
 cargo check -p aauth-axum --no-default-features --features resource
+cargo check -p aauth-axum --all-features
 ```
 
 Release notes: [CHANGELOG.md](CHANGELOG.md).

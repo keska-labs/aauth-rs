@@ -1,19 +1,29 @@
-use crate::deferred::{DeferRequirement, PendingInput};
-use crate::interaction_code::generate_code;
-use crate::protocol::{AAuthErrorCode, AAuthProtocolError};
+use aauth::DeferRequirement;
+use aauth::PendingInput;
+use aauth::generate_code;
+use aauth::protocol::{AAuthErrorCode, AAuthProtocolError};
 
 #[cfg(feature = "access-server")]
-use super::access::{AccessTokenContext, AccessTokenPolicy};
-#[cfg(feature = "access-server")]
-use super::decision::AccessTokenDecision;
-#[cfg(feature = "resource")]
-use super::decision::ResourceConsentDecision;
-use super::decision::{AuthGrant, PersonTokenDecision};
-use super::error::PolicyError;
+use aauth::AccessTokenContext;
 #[cfg(feature = "person-server")]
-use super::person::{PersonTokenContext, PersonTokenPolicy};
+use aauth::PersonTokenContext;
 #[cfg(feature = "resource")]
-use super::resource::{ResourceAccessContext, ResourceConsentPolicy};
+use aauth::ResourceAccessContext;
+
+#[cfg(feature = "access-server")]
+use crate::AccessTokenDecision;
+#[cfg(feature = "access-server")]
+use crate::AccessTokenPolicy;
+use crate::AuthGrant;
+#[cfg(feature = "person-server")]
+use crate::PersonTokenDecision;
+#[cfg(feature = "person-server")]
+use crate::PersonTokenPolicy;
+use crate::PolicyError;
+#[cfg(feature = "resource")]
+use crate::ResourceConsentDecision;
+#[cfg(feature = "resource")]
+use crate::ResourceConsentPolicy;
 
 #[cfg(feature = "person-server")]
 #[derive(Debug, Clone, Default)]

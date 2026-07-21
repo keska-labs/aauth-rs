@@ -5,10 +5,7 @@ pub mod keys;
 mod outbound;
 pub mod outcome;
 pub mod service;
-
-mod defer;
-mod federation_pending;
-mod interaction;
+pub mod token_context;
 
 pub use config::PersonServerConfig;
 pub use context::{mint_person_auth, verify_person_token_request};
@@ -16,4 +13,5 @@ pub use federation::{FederationOutcome, federate_to_access_server, verify_federa
 pub use keys::*;
 pub use outbound::PersonServerOutboundSigner;
 pub use outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
-pub use service::{PersonTokenService, PersonTokenServiceError, PolicyPersonTokenService};
+pub use service::PersonTokenService;
+pub use token_context::PersonTokenContext;

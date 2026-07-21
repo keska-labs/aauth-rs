@@ -1,16 +1,25 @@
-use crate::deferred::{
-    DeferCreated, DeferRequirement, FederationPendingState, PendingOutcome, PendingSnapshot,
-    PendingStore, PersonPendingContext, PersonPendingRecord, generate_pending_id, pending_location,
-};
-use crate::error::AAuthError;
-use crate::interaction_code::{canonicalize_code, generate_code};
-use crate::person_server::context::mint_person_auth;
-use crate::person_server::federation::{FederationOutcome, federate_to_access_server};
-use crate::person_server::keys::PersonAuthJwtMinter;
-use crate::person_server::outcome::PersonTokenFlowOutcome;
-use crate::person_server::service::{PersonTokenServiceError, PolicyPersonTokenService};
-use crate::policy::{PersonTokenContext, PersonTokenDecision, PersonTokenPolicy};
+use aauth::DeferCreated;
+use aauth::DeferRequirement;
+use aauth::PendingOutcome;
+use aauth::PendingSnapshot;
+use aauth::PersonTokenContext;
+use aauth::error::AAuthError;
+use aauth::generate_pending_id;
+use aauth::interaction_code::{canonicalize_code, generate_code};
+use aauth::pending_location;
+use aauth::person_server::context::mint_person_auth;
+use aauth::person_server::federation::{FederationOutcome, federate_to_access_server};
+use aauth::person_server::keys::PersonAuthJwtMinter;
+use aauth::person_server::outcome::PersonTokenFlowOutcome;
 
+use crate::PersonTokenDecision;
+use crate::PersonTokenPolicy;
+use crate::store::{
+    FederationPendingState, PendingStore, PersonPendingContext, PersonPendingRecord,
+};
+
+use super::PersonTokenServiceError;
+use super::PolicyPersonTokenService;
 use super::federation_pending::create_federated_deferred_response;
 
 pub(super) async fn apply_person_decision<P, S, M>(
@@ -29,7 +38,8 @@ where
             let body = mint_person_auth(
                 &service.minter,
                 &service.config,
-                &grant,
+                &grant.sub,
+                grant.scope.as_deref(),
                 ctx.agent_claims.identifier(),
             );
             Ok(PersonTokenFlowOutcome::granted(body))
@@ -87,7 +97,8 @@ where
             let body = mint_person_auth(
                 &service.minter,
                 &service.config,
-                &grant,
+                &grant.sub,
+                grant.scope.as_deref(),
                 ctx.agent_claims.identifier(),
             );
             service

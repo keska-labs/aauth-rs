@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use aauth::protocol::{AgentOkResponse, AuthOkResponse};
-use aauth::{OpaqueAccessStore, PendingStore};
+use aauth_policy::{OpaqueAccessStore, PendingStore};
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};

@@ -17,10 +17,12 @@ default = ["person-server", "access-server", "resource"]
 person-server = ["aauth/person-server"]
 access-server = ["aauth/access-server"]
 resource = ["aauth/resource"]
-full = ["person-server", "access-server", "resource"]
+policy = ["dep:aauth-policy", "aauth-policy/full"]
+full = ["person-server", "access-server", "resource", "policy"]
 
 [dependencies]
 aauth = { workspace = true, default-features = false, features = ["deferred"] }
+aauth-policy = { workspace = true, optional = true, default-features = false }
 async-trait.workspace = true
 axum.workspace = true
 http.workspace = true
@@ -35,6 +37,7 @@ aauth = { workspace = true, default-features = false, features = [
     "access-server",
     "resource",
 ] }
+aauth-policy = { workspace = true, features = ["full"] }
 aauth-reqwest = { workspace = true, features = ["verify"] }
 anyhow.workspace = true
 async-trait.workspace = true
@@ -49,19 +52,19 @@ url.workspace = true
 
 [[example]]
 name = "identity_based"
-required-features = ["person-server", "access-server", "resource"]
+required-features = ["person-server", "access-server", "resource", "policy"]
 
 [[example]]
 name = "person_server_managed"
-required-features = ["person-server", "access-server", "resource"]
+required-features = ["person-server", "access-server", "resource", "policy"]
 
 [[example]]
 name = "resource_managed"
-required-features = ["person-server", "access-server", "resource"]
+required-features = ["person-server", "access-server", "resource", "policy"]
 
 [[example]]
 name = "federated"
-required-features = ["person-server", "access-server", "resource"]
+required-features = ["person-server", "access-server", "resource", "policy"]
 
 [[test]]
 name = "axum_integration"

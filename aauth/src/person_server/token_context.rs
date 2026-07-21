@@ -1,9 +1,5 @@
-use crate::deferred::PendingInput;
 use crate::jwt::{AgentClaims, ResourceClaims};
 use crate::protocol::TokenExchangeRequest;
-
-use super::decision::PersonTokenDecision;
-use super::error::PolicyError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonTokenContext {
@@ -22,15 +18,4 @@ impl PersonTokenContext {
 
 fn normalize_url(url: &str) -> String {
     url.trim_end_matches('/').to_lowercase()
-}
-
-#[async_trait::async_trait]
-pub trait PersonTokenPolicy: Send + Sync + Clone {
-    async fn evaluate(&self, ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError>;
-
-    async fn resume(
-        &self,
-        ctx: &PersonTokenContext,
-        input: PendingInput,
-    ) -> Result<PersonTokenDecision, PolicyError>;
 }

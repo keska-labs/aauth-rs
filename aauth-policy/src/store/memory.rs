@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use super::store::{PendingStorable, PendingStore};
-use super::types::{
-    AccessPendingRecord, PendingOutcome, PendingSnapshot, PersonPendingRecord,
-    ResourcePendingRecord,
-};
+use aauth::{PendingOutcome, PendingSnapshot};
+
+use super::records::{AccessPendingRecord, PersonPendingRecord, ResourcePendingRecord};
+use super::traits::{PendingStorable, PendingStore};
 
 #[derive(Debug, Clone)]
 pub struct InMemoryPendingStore<R> {

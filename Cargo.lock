@@ -6,6 +6,7 @@ version = 4
 name = "aauth"
 version = "0.0.3"
 dependencies = [
+ "aauth-policy",
  "aauth-reqwest",
  "anyhow",
  "async-trait",
@@ -36,6 +37,7 @@ name = "aauth-axum"
 version = "0.0.3"
 dependencies = [
  "aauth",
+ "aauth-policy",
  "aauth-reqwest",
  "anyhow",
  "async-trait",
@@ -49,6 +51,21 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower",
+ "url",
+]
+
+[[package]]
+name = "aauth-policy"
+version = "0.0.3"
+dependencies = [
+ "aauth",
+ "async-trait",
+ "base64",
+ "rand 0.10.1",
+ "serde",
+ "serde_with",
+ "thiserror",
+ "tokio",
  "url",
 ]
 

@@ -1,4 +1,4 @@
-use crate::error::AAuthError;
+use aauth::error::AAuthError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PolicyError {

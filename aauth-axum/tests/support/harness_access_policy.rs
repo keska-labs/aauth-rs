@@ -1,7 +1,8 @@
 //! Test harness access policies that dispatch to concrete reference policies.
 
-use aauth::policy::{
-    AccessTokenContext, AccessTokenDecision, AccessTokenPolicy, AlwaysGrantAccessPolicy,
+use aauth::AccessTokenContext;
+use aauth_policy::{
+    AccessTokenDecision, AccessTokenPolicy, AlwaysGrantAccessPolicy,
     ClarificationThenGrantAccessPolicy, DeferInteractionAccessPolicy, PolicyError,
 };
 

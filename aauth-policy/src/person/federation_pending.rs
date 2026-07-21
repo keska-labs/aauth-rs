@@ -1,17 +1,29 @@
 use std::sync::Arc;
 
-use crate::deferred::{
-    DeferCreated, DeferRequirement, FederationPendingState, PendingInput, PendingOutcome,
-    PendingSnapshot, PendingStore, PersonPendingContext, PersonPendingRecord, ServerPollOptions,
-    ServerPollOutcome, generate_pending_id, pending_location, poll_pending_http,
-    post_pending_input,
+use aauth::DeferCreated;
+use aauth::DeferRequirement;
+use aauth::PendingInput;
+use aauth::PendingOutcome;
+use aauth::PendingSnapshot;
+use aauth::PersonTokenContext;
+use aauth::ServerPollOptions;
+use aauth::ServerPollOutcome;
+use aauth::generate_pending_id;
+use aauth::pending_location;
+use aauth::person_server::federation::verify_federated_auth_token;
+use aauth::person_server::keys::PersonAuthJwtMinter;
+use aauth::person_server::outcome::PersonTokenFlowOutcome;
+use aauth::poll_pending_http;
+use aauth::post_pending_input;
+use aauth::protocol::{AAuthErrorCode, AAuthProtocolError};
+
+use crate::PersonTokenPolicy;
+use crate::store::{
+    FederationPendingState, PendingStore, PersonPendingContext, PersonPendingRecord,
 };
-use crate::person_server::federation::verify_federated_auth_token;
-use crate::person_server::keys::PersonAuthJwtMinter;
-use crate::person_server::outcome::PersonTokenFlowOutcome;
-use crate::person_server::service::{PersonTokenServiceError, PolicyPersonTokenService};
-use crate::policy::{PersonTokenContext, PersonTokenPolicy};
-use crate::protocol::{AAuthErrorCode, AAuthProtocolError};
+
+use super::PersonTokenServiceError;
+use super::PolicyPersonTokenService;
 
 pub(super) async fn create_federated_deferred_response<P, S, M>(
     service: &PolicyPersonTokenService<P, S, M>,
@@ -108,7 +120,7 @@ where
         return Ok(PersonTokenFlowOutcome::denied(err));
     }
 
-    let signer = crate::person_server::PersonServerOutboundSigner {
+    let signer = aauth::PersonServerOutboundSigner {
         person_server_url: service.config.person_server_url.clone(),
         signing_jwk: service.config.person_server_signing_jwk(),
         keys: service.config.keys.clone(),

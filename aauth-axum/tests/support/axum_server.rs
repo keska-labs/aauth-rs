@@ -3,33 +3,29 @@
 use std::sync::Arc;
 
 use aauth::AccessServerConfig;
-use aauth::InMemoryAccessPendingStore;
-use aauth::InMemoryOpaqueAccessStore;
-use aauth::InMemoryPersonPendingStore;
-use aauth::InMemoryResourcePendingStore;
-use aauth::OpaqueAccessStore;
 use aauth::PendingOutcome;
-use aauth::PendingStore;
 use aauth::PersonServerConfig;
 use aauth::TestKeys;
 use aauth::VerifiedToken;
 use aauth::access_server::keys::TestAccessAuthJwtMinter;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::person_server::keys::TestPersonAuthJwtMinter;
-use aauth::policy::{
-    AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
-    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy,
-};
 use aauth::protocol::{
     AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument, ResourceInteractionClaim,
 };
 use aauth::resource::{
-    PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessMode,
-    ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenSigner,
+    ResourceAccessConfig, ResourceAccessMode, ResourceInteractionContext,
+    ResourceInteractionProvider, ResourceTokenSigner,
 };
 use aauth_axum::{
     AccessServerState, PersonServerState, ResourceAuthLayer, ResourceServerState,
     VerifiedAAuthToken, access_router, person_router, resource_router,
+};
+use aauth_policy::{
+    AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
+    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, InMemoryAccessPendingStore,
+    InMemoryOpaqueAccessStore, InMemoryPersonPendingStore, InMemoryResourcePendingStore,
+    OpaqueAccessStore, PendingStore, PolicyResourceAccessService,
 };
 use async_trait::async_trait;
 use axum::Json;
@@ -139,14 +135,14 @@ impl Drop for SpawnedServer {
 }
 
 type TestPersonState = PersonServerState<
-    aauth::person_server::PolicyPersonTokenService<
+    aauth_policy::PolicyPersonTokenService<
         HarnessPersonPolicy,
         InMemoryPersonPendingStore,
         TestPersonAuthJwtMinter,
     >,
 >;
 type TestAccessState = AccessServerState<
-    aauth::access_server::PolicyAccessTokenService<
+    aauth_policy::PolicyAccessTokenService<
         HarnessAccessPolicy,
         InMemoryAccessPendingStore,
         TestAccessAuthJwtMinter,
@@ -237,19 +233,17 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     };
 
     let access_policy = if config.federated && config.as_clarification {
-        HarnessAccessPolicy::Clarify(aauth::policy::ClarificationThenGrantAccessPolicy {
+        HarnessAccessPolicy::Clarify(aauth_policy::ClarificationThenGrantAccessPolicy {
             sub: "user-federated".into(),
             question: "What is your purpose?".into(),
         })
     } else if config.federated && config.as_deferred_mode {
         HarnessAccessPolicy::Defer(DeferInteractionAccessPolicy {
-            inner: aauth::policy::AlwaysGrantAccessPolicy::new("user-federated"),
+            inner: aauth_policy::AlwaysGrantAccessPolicy::new("user-federated"),
             interaction_url: format!("{access_server_url}/interact"),
         })
     } else {
-        HarnessAccessPolicy::Grant(aauth::policy::AlwaysGrantAccessPolicy::new(
-            "user-federated",
-        ))
+        HarnessAccessPolicy::Grant(aauth_policy::AlwaysGrantAccessPolicy::new("user-federated"))
     };
 
     let resource_service = PolicyResourceAccessService::new(

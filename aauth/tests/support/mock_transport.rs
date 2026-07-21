@@ -1,8 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use aauth::InMemoryPersonPendingStore;
 use aauth::PendingOutcome;
-use aauth::PendingStore;
 use aauth::VerifiedToken;
 use aauth::error::Result;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
@@ -14,8 +12,11 @@ use aauth::protocol::{
 use aauth::resolve_resource_token_audience;
 use aauth::{
     DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, PendingSnapshot,
-    PersonPendingContext, PersonPendingRecord, ResourceTokenOptions, VerifyTokenOptions,
-    create_resource_token, generate_pending_id, pending_location, verify_token,
+    ResourceTokenOptions, VerifyTokenOptions, create_resource_token, generate_pending_id,
+    pending_location, verify_token,
+};
+use aauth_policy::{
+    InMemoryPersonPendingStore, PendingStore, PersonPendingContext, PersonPendingRecord,
 };
 use async_trait::async_trait;
 use http::StatusCode;

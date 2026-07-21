@@ -4,6 +4,9 @@
 //! role routers ([`person_router`], [`access_router`], [`resource_router`]),
 //! extractors, [`ResourceAuthLayer`], and [`AauthResponse`] (`IntoResponse`
 //! wrappers for orphan-rule compliance).
+//!
+//! Enable feature `policy` to use `from_policy` constructors backed by
+//! [`aauth_policy`].
 
 mod extract;
 mod respond;

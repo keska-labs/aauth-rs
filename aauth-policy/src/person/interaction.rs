@@ -1,6 +1,7 @@
-use crate::error::AAuthError;
-use crate::person_server::service::PersonTokenServiceError;
-use crate::protocol::{AAuthErrorCode, AAuthProtocolError, ResourceInteractionClaim};
+use aauth::error::AAuthError;
+use aauth::protocol::{AAuthErrorCode, AAuthProtocolError, ResourceInteractionClaim};
+
+use super::PersonTokenServiceError;
 
 pub(super) fn validate_interaction_url(url: &str) -> Result<(), PersonTokenServiceError> {
     let parsed = url::Url::parse(url).map_err(|e| {

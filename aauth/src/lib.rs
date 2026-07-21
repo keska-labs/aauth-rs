@@ -6,18 +6,19 @@
 //! Enable role-specific features to compile only what you need:
 //!
 //! - `agent` — agent runtime (transport-agnostic state machine and options)
-//! - `person-server` — Person Server service
-//! - `access-server` — Access Server service
-//! - `resource` — Resource Server consent service
+//! - `person-server` — Person Server service trait
+//! - `access-server` — Access Server service trait
+//! - `resource` — Resource Server consent service trait
 //! - `resource-verify` — resource token verification only (used by `person-server` and `aauth-reqwest`'s `verify`)
 //! - `full` — all roles and agent (matches `default`)
 //!
 //! For axum HTTP adapters (handlers, `ResourceAuthLayer`), use the companion
 //! crate `aauth-axum`. For the reqwest agent client (`AgentMiddleware`), use
-//! `aauth-reqwest`.
+//! `aauth-reqwest`. For batteries-included policy + pending store services, use
+//! `aauth-policy`.
 //!
-//! Role services, policy traits, and deferred store types live under their modules
-//! (`person_server`, `access_server`, `resource`, `policy`, `deferred`). Spec wire
+//! Role services and deferred wire types live under their modules
+//! (`person_server`, `access_server`, `resource`, `deferred`). Spec wire
 //! types that have no runtime yet (missions, permissions, authorization endpoint, …)
 //! live under [`protocol`] only — they are not re-exported at the crate root.
 //!
@@ -41,8 +42,6 @@ pub mod agent;
 
 #[cfg(feature = "deferred")]
 pub mod deferred;
-#[cfg(feature = "policy")]
-pub mod policy;
 
 #[cfg(feature = "resource-verify")]
 pub mod resource_verify;
@@ -89,32 +88,19 @@ pub use protocol::{
 };
 
 #[cfg(feature = "deferred")]
+pub use deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
+#[cfg(feature = "deferred")]
 pub use deferred::{
-    AccessPendingContext, AccessPendingRecord, DEFAULT_PENDING_TTL_SECS, DeferCreated,
-    DeferRequirement, DeferWaiting, FederationPendingState, InMemoryAccessPendingStore,
-    InMemoryPendingStore, InMemoryPersonPendingStore, InMemoryResourcePendingStore,
-    PaymentRequiredDefer, PendingInput, PendingOutcome, PendingRecord, PendingSnapshot,
-    PendingStorable, PendingStore, PersonPendingContext, PersonPendingRecord,
-    ResourcePendingContext, ResourcePendingRecord, generate_pending_id, parse_pending_post_body,
+    DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, DeferWaiting, PaymentRequiredDefer,
+    PendingInput, PendingOutcome, PendingSnapshot, generate_pending_id, parse_pending_post_body,
     pending_location,
 };
-#[cfg(feature = "deferred")]
-pub use deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
 #[cfg(feature = "deferred-http")]
 pub use deferred::{
     OutboundSignatureProvider, ParsedDeferred, ServerPollOptions, ServerPollOutcome,
     parse_auth_token_response, parse_deferred_response, poll_pending_http, post_pending_input,
     resolve_deferred_location,
 };
-
-#[cfg(all(feature = "policy", feature = "access-server"))]
-pub use policy::{AccessTokenContext, AccessTokenDecision, AccessTokenPolicy};
-#[cfg(feature = "policy")]
-pub use policy::{AuthGrant, PolicyError};
-#[cfg(all(feature = "policy", feature = "person-server"))]
-pub use policy::{PersonTokenContext, PersonTokenDecision, PersonTokenPolicy};
-#[cfg(all(feature = "policy", feature = "resource"))]
-pub use policy::{ResourceAccessContext, ResourceConsentDecision, ResourceConsentPolicy};
 
 #[cfg(feature = "resource-verify")]
 pub use resource_verify::{
@@ -126,22 +112,21 @@ pub use resource_verify::{
 #[cfg(feature = "person-server")]
 pub use person_server::{
     FederationOutcome, PersonAuthJwtMinter, PersonServerConfig, PersonServerOutboundSigner,
-    PersonTokenFlowOutcome, PersonTokenService, PersonTokenServiceError, PolicyPersonTokenService,
-    TestPersonAuthJwtMinter, federate_to_access_server, mint_person_auth_jwt,
-    verify_federated_auth_token, verify_person_token_request,
+    PersonTokenContext, PersonTokenFlowOutcome, PersonTokenService, TestPersonAuthJwtMinter,
+    federate_to_access_server, mint_person_auth_jwt, verify_federated_auth_token,
+    verify_person_token_request,
 };
 
 #[cfg(feature = "access-server")]
 pub use access_server::{
-    AccessAuthJwtMinter, AccessServerConfig, AccessTokenService, AccessTokenServiceError,
-    PolicyAccessTokenService, TestAccessAuthJwtMinter, build_access_context, mint_access_auth_jwt,
+    AccessAuthJwtMinter, AccessServerConfig, AccessTokenContext, AccessTokenService,
+    TestAccessAuthJwtMinter, build_access_context, mint_access_auth_jwt,
 };
 
 #[cfg(feature = "resource")]
 pub use resource::{
-    Ed25519ResourceTokenSigner, InMemoryOpaqueAccessStore, OpaqueAccessStore,
-    PolicyResourceAccessService, ResourceAccessConfig, ResourceAccessMode,
-    ResourceAccessPolicyService, ResourceAccessService, ResourceAccessServiceError,
-    ResourceConsentFlowOutcome, ResourceInteractionContext, ResourceInteractionProvider,
-    ResourcePollOutcome, ResourceTokenOptions, ResourceTokenSigner, create_resource_token,
+    Ed25519ResourceTokenSigner, NoResourceAccessService, ResourceAccessConfig,
+    ResourceAccessContext, ResourceAccessMode, ResourceAccessService, ResourceConsentFlowOutcome,
+    ResourceInteractionContext, ResourceInteractionProvider, ResourcePollOutcome,
+    ResourceTokenOptions, ResourceTokenSigner, create_resource_token,
 };

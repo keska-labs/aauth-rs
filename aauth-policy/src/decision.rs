@@ -1,5 +1,5 @@
-use crate::deferred::DeferRequirement;
-use crate::protocol::AAuthProtocolError;
+use aauth::DeferRequirement;
+use aauth::protocol::AAuthProtocolError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthGrant {

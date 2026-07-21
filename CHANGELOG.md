@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Workspace crate `aauth-policy`: high-level `PersonTokenPolicy` / `AccessTokenPolicy` / `ResourceConsentPolicy`, `PendingStore` + in-memory stores, and `Policy*Service` implementations of the `aauth` role service traits.
+- `NoResourceAccessService` marker for `ResourceAccessMode` variants that do not use a consent service.
+- Optional `aauth-axum` feature `policy` for `PersonServerState::from_policy` / `AccessServerState::from_policy` via `aauth-policy`.
 - Workspace crate `aauth-reqwest`: reqwest agent transport (`AgentMiddleware`, `sign_request`, token exchange, deferred poll, `CachedMetadataFetcher`). Default feature `verify` enables challenge/auth-token binding checks via `aauth/resource-verify`.
 - Public getters on `AgentOptions` for transport adapters (`provider`, callbacks, hints, `metadata_fetcher` when `resource-verify` is on).
 - Public `signing_key_from_jwk` for custom signing adapters (was crate-private).
@@ -22,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PaymentRequiredBody` in `protocol::pending` for `402` deferred poll responses.
 - Resource-initiated interaction: `ResourceInteractionProvider` and `interaction` on `ResourceTokenOptions`; PS `begin_interaction` / `resolve_interaction_callback` with `GET /interact` and `GET /interact/callback` axum handlers (now in `aauth-axum`).
 - `PersonServerConfig` and `AccessServerConfig` as domain config types (no longer gated on axum).
-- `poll_outcome_from_snapshot` and `poll_auth_pending` in `aauth` deferred module.
+- `poll_outcome_from_snapshot` in `aauth` deferred module.
 
 ### Fixed
 
@@ -30,13 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Role service traits (`PersonTokenService`, `AccessTokenService`, `ResourceAccessService`) are the primary integration API in `aauth`; policy + pending-store orchestration lives in `aauth-policy`.
+- Service input contexts (`PersonTokenContext`, `AccessTokenContext`, `ResourceAccessContext`) moved to role modules in `aauth`.
+- `mint_person_auth` takes `sub` / `scope` primitives instead of `AuthGrant`.
 - HTTP signature verification rebuilds the signature base in `Signature-Input` component order and includes covered headers such as `content-type` (interop with `@hellocoop/httpsig`). Incoming `Signature` values accept standard base64 in addition to URL-safe. `@method` in the signature base uses uppercase.
 - `sign_request` includes `content-type` in covered components for POST requests when that header is present.
 - JWT claim payload structs (`AgentClaims`, `AuthClaims`, `ResourceClaims`, …) moved from `jwt::claims` to `protocol::jwt`; `jwt` retains decode/verify only.
 - `AAuthChallenge` and header build/parse helpers moved from `headers` to `protocol::headers`.
-- Pending wire bodies (`PendingBody`, `PendingPostBody`, `PendingStatusBody`, clarification/claims challenges) moved from `deferred`/`types` to `protocol::pending`; `deferred` keeps server-state types only.
+- Pending wire bodies (`PendingBody`, `PendingPostBody`, `PendingStatusBody`, clarification/claims challenges) moved from `deferred`/`types` to `protocol::pending`; `deferred` keeps defer wire outcomes only.
 - Crate-root re-exports now source protocol types from `protocol` instead of removed `types` and `headers` modules.
-- Restructured `src/` into protocol-party modules: `agent`, `person_server`, `access_server`, `resource`, with shared siblings `deferred` and `policy`.
+- Restructured `src/` into protocol-party modules: `agent`, `person_server`, `access_server`, `resource`, with shared sibling `deferred`.
 - Granular Cargo features per role: `person-server`, `access-server`, `resource`; agent `agent`; meta-features `server` and `full`.
 - Renamed features `client` → `agent`; reqwest agent client moved to companion crate `aauth-reqwest` (optional `verify` for 401 challenge binding checks via `resource-verify`).
 - `AuthTokenFlowOutcome` / `AuthTokenPollOutcome` moved to `deferred` (shared by Person and Access servers).
@@ -47,7 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Collapsed `PersonOrchestrateConfig` into `PersonServerConfig`; token-request verify lives in `person_server::context`.
 - Renamed `AuthJwtMinter` → `PersonAuthJwtMinter`, `mint_auth_jwt` → `mint_person_auth_jwt`, `TokenPolicyDecision` → `AccessTokenDecision`.
 - Flattened `PersonTokenFlowOutcome` to `Granted` / `Deferred` / `Denied` / `Gone` / `Unauthorized` / `BadGateway` (no nested `Flow`).
-- Reference test policies (`AlwaysGrant*`, `Defer*`, …) are exported from `aauth::policy` only, not the crate root.
 - `resource` no longer re-exports `resource_verify`; import verify APIs from `aauth::resource_verify` or the crate root when the feature is on.
 - Renamed agent module `injector` → `auth` (`AgentAuth` types unchanged).
 - Person Server feature no longer depends on `agent`.
@@ -56,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `aauth` module `policy` and feature `policy` (use crate `aauth-policy`).
+- `PendingStore`, `*PendingRecord`, `InMemory*PendingStore`, `Policy*Service`, `OpaqueAccessStore`, and `poll_auth_pending` from `aauth` (use `aauth-policy`).
 - `aauth` features `agent-reqwest` and `agent-reqwest-verify` (use crate `aauth-reqwest`).
 - `aauth::types` and `aauth::headers` modules (use `aauth::protocol` or flat crate-root re-exports).
 - `MetadataDocument` (use `AgentProviderMetadata`).

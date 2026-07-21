@@ -1,15 +1,8 @@
-use crate::deferred::PendingInput;
-use crate::jwt::AgentClaims;
+use aauth::PendingInput;
+use aauth::ResourceAccessContext;
 
-use super::decision::ResourceConsentDecision;
-use super::error::PolicyError;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResourceAccessContext {
-    pub resource_url: String,
-    pub agent_claims: AgentClaims,
-    pub scope: Option<String>,
-}
+use crate::PolicyError;
+use crate::ResourceConsentDecision;
 
 #[async_trait::async_trait]
 pub trait ResourceConsentPolicy: Send + Sync + Clone {

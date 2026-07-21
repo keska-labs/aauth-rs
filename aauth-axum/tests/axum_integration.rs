@@ -7,9 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aauth::protocol::AuthOkResponse;
-use aauth::{
-    PendingStore, create_key_provider, create_test_keys, mint_agent_jwt, mint_person_auth_jwt,
-};
+use aauth::{create_key_provider, create_test_keys, mint_agent_jwt, mint_person_auth_jwt};
+use aauth_policy::PendingStore;
 use aauth_reqwest::{ClarificationCallback, InteractionCallback};
 use rstest::rstest;
 

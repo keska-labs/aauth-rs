@@ -8,11 +8,11 @@ use axum::http::{Request, Response, StatusCode};
 use axum::response::IntoResponse;
 use tower::{Layer, Service};
 
+use aauth::ResourceAccessContext;
 use aauth::ResourceAccessMode;
 use aauth::ResourceAccessService;
 use aauth::jwt::VerifiedToken;
 use aauth::metadata::MetadataFetcher;
-use aauth::policy::ResourceAccessContext;
 use aauth::protocol::AAuthChallenge;
 use aauth::protocol::build_aauth_requirement;
 use aauth::resource::keys::ResourceTokenSigner;

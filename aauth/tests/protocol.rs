@@ -3,11 +3,12 @@ mod support;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use aauth::KeyMaterialProvider;
+use aauth::PendingOutcome;
 use aauth::VerifiedToken;
 use aauth::protocol::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
 use aauth::protocol::{build_aauth_requirement, parse_aauth_requirement};
 use aauth::{DeferCreated, DeferRequirement, VerifyTokenOptions, verify_token};
-use aauth::{InMemoryPersonPendingStore, PendingOutcome, PendingStore};
+use aauth_policy::{InMemoryPersonPendingStore, PendingStore};
 use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
 use http::Extensions;
 use reqwest::{Request, Response};
