@@ -1,4 +1,4 @@
-use aauth::{PendingOutcome, PendingSnapshot};
+use aauth::{AuthTokenPollOutcome, PendingOutcome, PendingSnapshot, poll_outcome_from_snapshot};
 
 use super::records::PendingRecord;
 
@@ -50,4 +50,25 @@ pub trait PendingStore<R: PendingStorable>: Send + Sync {
         &self,
         pred: impl Fn(&R) -> bool + Send,
     ) -> Result<Option<(String, R)>, Self::Error>;
+}
+
+/// Load a pending record, expire if needed, and map to a poll outcome.
+pub async fn poll_auth_pending<S, R>(
+    store: &S,
+    pending_id: &str,
+) -> Result<AuthTokenPollOutcome, S::Error>
+where
+    S: PendingStore<R>,
+    R: PendingStorable,
+{
+    let Some(record) = store.load(pending_id).await? else {
+        return Ok(AuthTokenPollOutcome::Gone);
+    };
+
+    if record.is_expired() {
+        let _ = store.remove(pending_id).await;
+        return Ok(AuthTokenPollOutcome::Gone);
+    }
+
+    Ok(poll_outcome_from_snapshot(record.snapshot()))
 }

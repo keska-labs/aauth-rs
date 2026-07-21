@@ -1,5 +1,6 @@
 use aauth::DeferCreated;
 use aauth::DeferRequirement;
+use aauth::PendingInput;
 use aauth::PendingOutcome;
 use aauth::PendingSnapshot;
 use aauth::ResourceAccessConfig;
@@ -12,12 +13,26 @@ use aauth::pending_location;
 
 use crate::PolicyError;
 use crate::ResourceConsentDecision;
-use crate::ResourceConsentPolicy;
 use crate::store::{
     PendingStore, ResourcePendingContext, ResourcePendingRecord, poll_auth_pending,
 };
 
 use super::opaque::OpaqueAccessStore;
+
+#[trait_variant::make(ResourceConsentPolicy: Send)]
+#[dynosaur::dynosaur(pub DynResourceConsentPolicy = dyn(box) ResourceConsentPolicy, bridge(dyn))]
+pub trait LocalResourceConsentPolicy: Sync {
+    async fn evaluate(
+        &self,
+        ctx: &ResourceAccessContext,
+    ) -> Result<ResourceConsentDecision, PolicyError>;
+
+    async fn resume(
+        &self,
+        ctx: &ResourceAccessContext,
+        input: PendingInput,
+    ) -> Result<ResourceConsentDecision, PolicyError>;
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceAccessServiceError<E>

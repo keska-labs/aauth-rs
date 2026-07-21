@@ -5,8 +5,8 @@ use crate::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response}
 use crate::error::{DeferredError, MetadataError, Result, VerifyError, VerifyReason};
 use crate::jwt::ParsedToken;
 use crate::metadata::MetadataFetcher;
-use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::mint_person_server_signature_jwt;
+use crate::person_server::service::PersonServerConfig;
 use crate::protocol::{
     AccessServerMetadata, AccessTokenExchangeRequest, JwtTyp, TokenResponseBody,
 };

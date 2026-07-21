@@ -4,7 +4,6 @@ mod parse;
 #[cfg(feature = "deferred-http")]
 mod poll;
 mod types;
-mod util;
 
 pub use outcome::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
 #[cfg(feature = "deferred-http")]
@@ -15,7 +14,7 @@ pub use poll::{
     post_pending_input,
 };
 pub use types::{
-    DeferCreated, DeferRequirement, DeferWaiting, PaymentRequiredDefer, PendingInput,
-    PendingOutcome, PendingSnapshot, parse_pending_post_body,
+    DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, DeferWaiting, PaymentRequiredDefer,
+    PendingInput, PendingOutcome, PendingSnapshot, generate_pending_id, parse_pending_post_body,
+    pending_location,
 };
-pub use util::{DEFAULT_PENDING_TTL_SECS, generate_pending_id, pending_location};

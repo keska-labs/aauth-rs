@@ -2,14 +2,14 @@ use aauth::DeferCreated;
 use aauth::DeferRequirement;
 use aauth::PendingOutcome;
 use aauth::PendingSnapshot;
+use aauth::PersonAuthJwtMinter;
 use aauth::PersonTokenContext;
+use aauth::PersonTokenFlowOutcome;
 use aauth::generate_pending_id;
 use aauth::interaction_code::{canonicalize_code, generate_code};
 use aauth::metadata::MetadataFetcher;
 use aauth::pending_location;
-use aauth::person_server::federation::FederationOutcome;
-use aauth::person_server::keys::PersonAuthJwtMinter;
-use aauth::person_server::outcome::PersonTokenFlowOutcome;
+use aauth::person_server::FederationOutcome;
 
 use crate::PersonOrchestrationError;
 use crate::PersonTokenDecision;

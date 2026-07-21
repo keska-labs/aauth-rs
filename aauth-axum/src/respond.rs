@@ -6,7 +6,7 @@ use axum::response::{IntoResponse, Response};
 use aauth::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 use aauth::deferred::{DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingOutcome};
 #[cfg(feature = "person-server")]
-use aauth::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
+use aauth::person_server::{PersonInteractionOutcome, PersonTokenFlowOutcome};
 use aauth::protocol::{
     AAUTH_ACCESS, AAUTH_REQUIREMENT, AAuthErrorCode, AAuthProtocolError, PaymentRequiredBody,
     PendingBody,

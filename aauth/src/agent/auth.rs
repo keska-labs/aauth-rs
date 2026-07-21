@@ -46,13 +46,19 @@ struct CachedOpaque {
     token: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AuthTokenCacheKey {
+    origin: String,
+    person_server: String,
+}
+
 /// Framework-agnostic auth/caching state machine for the AAuth protocol.
 ///
 /// Operates on `http::StatusCode` and `http::HeaderMap` only — no reqwest dependency.
 /// Pair with a transport adapter (e.g. `aauth_reqwest::AgentMiddleware`) that performs
 /// signing and HTTP.
 pub struct AgentAuth {
-    token_cache: HashMap<String, CachedToken>,
+    token_cache: HashMap<AuthTokenCacheKey, CachedToken>,
     opaque_cache: HashMap<String, CachedOpaque>,
     person_server_url: Option<String>,
     opaque_seed: Option<String>,
@@ -488,7 +494,10 @@ impl AgentAuth {
         on_auth_token: Option<&Arc<dyn Fn(String, u64) + Send + Sync>>,
     ) {
         self.token_cache.insert(
-            format!("{origin}|{person_server}"),
+            AuthTokenCacheKey {
+                origin: origin.to_string(),
+                person_server: person_server.to_string(),
+            },
             CachedToken {
                 auth_token: token.clone(),
                 expires_at: Instant::now() + Duration::from_secs(expires_in),
@@ -500,12 +509,7 @@ impl AgentAuth {
     }
 
     fn find_cached_token(&mut self, resource_origin: &str) -> Option<CachedToken> {
-        let prefix = format!("{resource_origin}|");
-        let key = self
-            .token_cache
-            .keys()
-            .find(|k| k.starts_with(&prefix))?
-            .clone();
+        let key = self.find_cached_token_key(resource_origin)?;
         let cached = self.token_cache.get(&key)?.clone();
         if cached.expires_at > Instant::now() + Duration::from_secs(60) {
             Some(cached)
@@ -515,11 +519,10 @@ impl AgentAuth {
         }
     }
 
-    fn find_cached_token_key(&self, resource_origin: &str) -> Option<String> {
-        let prefix = format!("{resource_origin}|");
+    fn find_cached_token_key(&self, resource_origin: &str) -> Option<AuthTokenCacheKey> {
         self.token_cache
             .keys()
-            .find(|k| k.starts_with(&prefix))
+            .find(|k| k.origin == resource_origin)
             .cloned()
     }
 
@@ -563,7 +566,10 @@ mod tests {
     fn next_attempt_prefers_auth_over_opaque() {
         let mut inj = AgentAuth {
             token_cache: HashMap::from([(
-                "https://resource.example|https://auth.example".into(),
+                AuthTokenCacheKey {
+                    origin: "https://resource.example".into(),
+                    person_server: "https://auth.example".into(),
+                },
                 CachedToken {
                     auth_token: "auth".into(),
                     expires_at: Instant::now() + Duration::from_secs(3600),

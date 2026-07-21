@@ -1,3 +1,4 @@
+use aauth::AccessServerConfig;
 use aauth::AccessTokenContext;
 use aauth::AccessTokenService;
 use aauth::AuthTokenFlowOutcome;
@@ -7,7 +8,6 @@ use aauth::DeferRequirement;
 use aauth::PendingInput;
 use aauth::PendingOutcome;
 use aauth::PendingSnapshot;
-use aauth::access_server::config::AccessServerConfig;
 use aauth::access_server::keys::AccessAuthJwtMinter;
 use aauth::generate_pending_id;
 use aauth::metadata::MetadataFetcher;
@@ -15,10 +15,21 @@ use aauth::pending_location;
 use aauth::protocol::TokenResponseBody;
 
 use crate::AccessTokenDecision;
-use crate::AccessTokenPolicy;
 use crate::AuthGrant;
 use crate::PolicyError;
 use crate::store::{AccessPendingContext, AccessPendingRecord, PendingStore, poll_auth_pending};
+
+#[trait_variant::make(AccessTokenPolicy: Send)]
+#[dynosaur::dynosaur(pub DynAccessTokenPolicy = dyn(box) AccessTokenPolicy, bridge(dyn))]
+pub trait LocalAccessTokenPolicy: Sync {
+    async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<AccessTokenDecision, PolicyError>;
+
+    async fn resume(
+        &self,
+        ctx: &AccessTokenContext,
+        input: PendingInput,
+    ) -> Result<AccessTokenDecision, PolicyError>;
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AccessTokenServiceError<E>

@@ -1,25 +1,36 @@
 use aauth::AuthTokenPollOutcome;
 use aauth::PendingInput;
+use aauth::PersonServerConfig;
 use aauth::PersonTokenContext;
+use aauth::PersonTokenFlowOutcome;
 use aauth::PersonTokenService;
 use aauth::interaction_code::canonicalize_code;
 use aauth::metadata::MetadataFetcher;
-use aauth::person_server::config::PersonServerConfig;
-use aauth::person_server::keys::PersonAuthJwtMinter;
-use aauth::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
+use aauth::person_server::PersonAuthJwtMinter;
+use aauth::person_server::PersonInteractionOutcome;
 use aauth::protocol::PendingStatus;
 use aauth::{PendingOutcome, PendingSnapshot};
 
 use crate::PersonOrchestrationError;
+use crate::PersonTokenDecision;
 use crate::PolicyError;
 use crate::store::{PendingStore, PersonPendingContext, PersonPendingRecord, poll_auth_pending};
 
 mod defer;
 mod federation_pending;
 mod interaction;
-mod policy;
 
-pub use policy::{DynPersonTokenPolicy, LocalPersonTokenPolicy, PersonTokenPolicy};
+#[trait_variant::make(PersonTokenPolicy: Send)]
+#[dynosaur::dynosaur(pub DynPersonTokenPolicy = dyn(box) PersonTokenPolicy, bridge(dyn))]
+pub trait LocalPersonTokenPolicy: Sync {
+    async fn evaluate(&self, ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError>;
+
+    async fn resume(
+        &self,
+        ctx: &PersonTokenContext,
+        input: PendingInput,
+    ) -> Result<PersonTokenDecision, PolicyError>;
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersonTokenServiceError<E>

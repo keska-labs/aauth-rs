@@ -17,7 +17,7 @@ use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use crate::deferred::{AgentDeferredOptions, poll_deferred_with};
 use crate::error::{AgentError, Result, from_middleware_error};
 use crate::middleware::signing::SigningMiddleware;
-use crate::send::SignedSend;
+use crate::signed::SignedSend;
 use crate::signed::SigningOptions;
 use crate::token_exchange::{TokenExchangeOptions, exchange_token_with};
 

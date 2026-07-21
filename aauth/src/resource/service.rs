@@ -1,5 +1,28 @@
-use crate::resource::access_context::ResourceAccessContext;
-use crate::resource::outcome::{ResourceConsentFlowOutcome, ResourcePollOutcome};
+use std::sync::Arc;
+
+use crate::deferred::AuthTokenPollOutcome;
+use crate::deferred::DeferCreated;
+use crate::jwt::AgentClaims;
+use crate::protocol::AAuthProtocolError;
+use crate::protocol::ResourceInteractionClaim;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceAccessContext {
+    pub resource_url: String,
+    pub agent_claims: AgentClaims,
+    pub scope: Option<String>,
+}
+
+/// Resource-managed consent evaluation result.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResourceConsentFlowOutcome {
+    GrantOpaque(String),
+    Deferred(DeferCreated),
+    Denied(AAuthProtocolError),
+}
+
+/// Resource pending poll result (same wire shape as auth token poll).
+pub type ResourcePollOutcome = AuthTokenPollOutcome;
 
 #[derive(Clone)]
 pub struct ResourceAccessConfig {
@@ -22,4 +45,82 @@ pub trait LocalResourceAccessService: Sync {
     async fn poll_pending(&self, pending_id: &str) -> Result<ResourcePollOutcome, Self::Error>;
 
     fn validate_opaque(&self, token: &str, agent_id: &str) -> bool;
+}
+
+/// Marker service for [`ResourceAccessMode`] variants that do not use a
+/// consent service (`IdentityBased`, `PsAsserted`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoResourceAccessService;
+
+impl ResourceAccessService for NoResourceAccessService {
+    type Error = std::convert::Infallible;
+
+    async fn consent_for_agent(
+        &self,
+        _ctx: ResourceAccessContext,
+    ) -> Result<ResourceConsentFlowOutcome, Self::Error> {
+        unreachable!("NoResourceAccessService is only for IdentityBased/PsAsserted modes")
+    }
+
+    async fn poll_pending(&self, _pending_id: &str) -> Result<ResourcePollOutcome, Self::Error> {
+        unreachable!("NoResourceAccessService is only for IdentityBased/PsAsserted modes")
+    }
+
+    fn validate_opaque(&self, _token: &str, _agent_id: &str) -> bool {
+        false
+    }
+}
+
+/// How a resource server evaluates access for incoming agent requests.
+#[derive(Clone)]
+pub enum ResourceAccessMode<S = NoResourceAccessService>
+where
+    S: ResourceAccessService,
+{
+    /// Grant based on verified agent or auth token identity alone.
+    IdentityBased,
+    /// Delegate authorization to the agent's Person Server (or Access Server when federated).
+    PsAsserted {
+        require_auth_token: bool,
+        access_server_url: Option<String>,
+        person_server_fallback: Option<String>,
+    },
+    /// Resource manages authorization via interaction and opaque access tokens.
+    ResourceManaged { service: S },
+}
+
+/// Context passed to [`ResourceInteractionProvider::interaction_for`].
+#[derive(Debug, Clone)]
+pub struct ResourceInteractionContext {
+    pub resource_url: String,
+    pub agent: AgentClaims,
+    pub agent_jkt: String,
+}
+
+/// Optional hook for PS-asserted resources to embed a resource-initiated interaction claim.
+pub trait ResourceInteractionProvider: Send + Sync {
+    fn interaction_for(&self, ctx: &ResourceInteractionContext)
+    -> Option<ResourceInteractionClaim>;
+}
+
+impl<T: ResourceInteractionProvider + ?Sized> ResourceInteractionProvider for Arc<T> {
+    fn interaction_for(
+        &self,
+        ctx: &ResourceInteractionContext,
+    ) -> Option<ResourceInteractionClaim> {
+        (**self).interaction_for(ctx)
+    }
+}
+
+/// Marker provider when no resource-initiated interaction claim is needed.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoResourceInteraction;
+
+impl ResourceInteractionProvider for NoResourceInteraction {
+    fn interaction_for(
+        &self,
+        _ctx: &ResourceInteractionContext,
+    ) -> Option<ResourceInteractionClaim> {
+        None
+    }
 }

@@ -14,7 +14,7 @@ use reqwest::{Request, Response};
 
 use crate::deferred::{AgentDeferredOptions, poll_deferred_with};
 use crate::error::Result;
-use crate::send::SignedSend;
+use crate::signed::SignedSend;
 
 const PREFER_WAIT: u64 = 45;
 

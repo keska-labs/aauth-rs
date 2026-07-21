@@ -14,7 +14,7 @@ use reqwest::{Request, Response};
 use tokio::time::sleep;
 
 use crate::error::Result;
-use crate::send::SignedSend;
+use crate::signed::SignedSend;
 
 const DEFAULT_MAX_POLL_DURATION: u64 = 300;
 const DEFAULT_PREFER_WAIT: u64 = 45;

@@ -153,10 +153,7 @@ fn verify_client_auth_token_claims(
         .unwrap()
         .as_secs() as i64;
     if auth.exp < now - CLOCK_SKEW {
-        return Err(VerifyError::Expired {
-            typ: JwtTyp::Auth,
-        }
-        .into());
+        return Err(VerifyError::Expired { typ: JwtTyp::Auth }.into());
     }
 
     // Step 2: iss matches the resource token's aud.
@@ -226,8 +223,7 @@ pub async fn verify_client_auth_token<F: MetadataFetcher>(
     )?;
 
     if verify_signature {
-        let decoding_key =
-            fetch_decoding_key(&auth.iss, &auth.dwk, &fetcher, jwt).await?;
+        let decoding_key = fetch_decoding_key(&auth.iss, &auth.dwk, &fetcher, jwt).await?;
         match ParsedToken::verify_with_key(jwt, &decoding_key)? {
             ParsedToken::Auth(c) => Ok(c),
             _ => Err(VerifyError::Invalid {

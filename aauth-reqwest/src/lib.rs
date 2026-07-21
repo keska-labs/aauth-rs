@@ -13,7 +13,6 @@ mod deferred;
 mod error;
 mod metadata;
 mod middleware;
-mod send;
 pub mod signed;
 mod token_exchange;
 

@@ -73,10 +73,7 @@ impl TestKeys {
         AgentJwtMinter::mint_agent_jwt(&self.agent_jwt_minter(), agent_url, sub, ps)
     }
 
-    pub fn key_provider(
-        &self,
-        agent_jwt: impl Into<String>,
-    ) -> Arc<StaticKeyMaterialProvider> {
+    pub fn key_provider(&self, agent_jwt: impl Into<String>) -> Arc<StaticKeyMaterialProvider> {
         Arc::new(StaticKeyMaterialProvider::from_test_keys(self, agent_jwt))
     }
 }

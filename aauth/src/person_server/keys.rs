@@ -1,5 +1,6 @@
+use crate::deferred::OutboundSignatureProvider;
 use crate::error::Result;
-use crate::jwt::{AuthJwtMintParams, PublicJwk, encode_auth_jwt};
+use crate::jwt::{AuthJwtMintParams, PublicJwk, SigningJwk, encode_auth_jwt};
 use crate::keys::TestKeys;
 
 pub trait PersonAuthJwtMinter: Send + Sync {
@@ -108,4 +109,22 @@ pub fn mint_person_server_signature_jwt(keys: &TestKeys, person_server_url: &str
 
     encode(&header, &claims, &keys.person_server.encoding_key())
         .expect("sign person server signature jwt")
+}
+
+/// Person Server outbound signer for federation pending POST/poll to an Access Server.
+#[derive(Clone)]
+pub struct PersonServerOutboundSigner {
+    pub person_server_url: String,
+    pub signing_jwk: SigningJwk,
+    pub keys: TestKeys,
+}
+
+impl OutboundSignatureProvider for PersonServerOutboundSigner {
+    fn signature_jwt(&self) -> String {
+        mint_person_server_signature_jwt(&self.keys, &self.person_server_url)
+    }
+
+    fn signing_jwk(&self) -> &SigningJwk {
+        &self.signing_jwk
+    }
 }

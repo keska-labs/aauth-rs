@@ -1,9 +1,8 @@
 use crate::error::{Result, VerifyError, VerifyReason};
 use crate::jwt::{AgentClaims, ParsedToken};
 use crate::metadata::MetadataFetcher;
-use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::PersonAuthJwtMinter;
-use crate::person_server::token_context::PersonTokenContext;
+use crate::person_server::service::{PersonServerConfig, PersonTokenContext};
 use crate::protocol::{JwtTyp, TokenExchangeRequest, TokenResponseBody};
 use crate::resource_verify::{VerifyResourceTokenOptions, verify_resource_token};
 

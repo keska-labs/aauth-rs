@@ -1,9 +1,33 @@
-use crate::access_server::config::AccessServerConfig;
-use crate::access_server::token_context::AccessTokenContext;
 use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, PendingInput};
 use crate::error::{AAuthError, VerifyError, VerifyReason};
-use crate::jwt::ParsedToken;
+use crate::jwt::{AgentClaims, ParsedToken, ResourceClaims};
+use crate::keys::TestKeys;
+use crate::metadata::MetadataFetcher;
 use crate::protocol::JwtTyp;
+
+#[derive(Clone)]
+pub struct AccessServerConfig<F: MetadataFetcher = crate::metadata::StaticMetadataFetcher> {
+    pub keys: TestKeys,
+    pub access_server_url: String,
+    pub resource_url: String,
+    pub person_server_url: String,
+    pub access_jwks_uri: String,
+    pub pending_base_url: String,
+    pub pending_path: String,
+    pub pending_ttl_secs: u64,
+    pub fetcher: F,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccessTokenContext {
+    pub access_server_url: String,
+    pub resource_url: String,
+    pub person_server_url: String,
+    pub agent_claims: AgentClaims,
+    pub resource_claims: ResourceClaims,
+    pub resource_token: String,
+    pub agent_token: String,
+}
 
 #[trait_variant::make(AccessTokenService: Send)]
 #[dynosaur::dynosaur(pub DynAccessTokenService = dyn(box) AccessTokenService, bridge(dyn))]
