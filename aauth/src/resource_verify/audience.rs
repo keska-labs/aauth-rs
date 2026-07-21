@@ -51,6 +51,7 @@ mod tests {
                     kty: "OKP".into(),
                     crv: "Ed25519".into(),
                     x: "x".into(),
+                    y: None,
                     kid: None,
                 },
             },

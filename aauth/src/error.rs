@@ -107,14 +107,23 @@ pub enum SignatureError {
     #[error("invalid signature encoding")]
     InvalidEncoding(#[source] base64::DecodeError),
 
-    #[error("invalid Ed25519 signature")]
+    #[error("invalid signature bytes")]
     InvalidSignatureBytes(#[source] ed25519_dalek::SignatureError),
 
-    #[error("invalid Ed25519 key length")]
+    #[error("invalid key length")]
     InvalidKeyLength,
 
-    #[error("invalid Ed25519 verifying key")]
+    #[error("invalid verifying key")]
     InvalidVerifyingKey(#[source] ed25519_dalek::SignatureError),
+
+    #[error("invalid ES256 key material")]
+    InvalidEs256Key(String),
+
+    #[error("unsupported signing JWK: kty={kty} crv={crv}")]
+    UnsupportedSigningJwk { kty: String, crv: String },
+
+    #[error("EC signing JWK missing y coordinate")]
+    MissingEcY,
 
     #[error("HTTP signature verification failed")]
     VerificationFailed,

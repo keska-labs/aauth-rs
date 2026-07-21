@@ -77,15 +77,17 @@ pub struct StaticKeyMaterialProvider {
 }
 
 impl StaticKeyMaterialProvider {
+    pub fn new(material: KeyMaterial) -> Self {
+        Self { material }
+    }
+
     pub fn from_test_keys(keys: &TestKeys, agent_jwt: impl Into<String>) -> Self {
-        Self {
-            material: KeyMaterial {
-                signing_jwk: keys.agent_ephemeral.signing_jwk(),
-                signature_key: SignatureKey::Jwt(SignatureKeyJwt {
-                    jwt: agent_jwt.into(),
-                }),
-            },
-        }
+        Self::new(KeyMaterial {
+            signing_jwk: keys.agent_ephemeral.signing_jwk(),
+            signature_key: SignatureKey::Jwt(SignatureKeyJwt {
+                jwt: agent_jwt.into(),
+            }),
+        })
     }
 
     pub fn into_arc(self) -> Arc<dyn KeyMaterialProvider> {

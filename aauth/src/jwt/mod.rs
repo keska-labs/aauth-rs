@@ -82,6 +82,7 @@ mod tests {
             kty: "OKP".into(),
             crv: "Ed25519".into(),
             x: "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo".into(),
+            y: None,
             kid: None,
         };
         let tp = jwk_thumbprint(&jwk).unwrap();

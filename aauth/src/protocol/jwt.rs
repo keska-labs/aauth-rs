@@ -58,7 +58,9 @@ impl FromStr for JwtTyp {
     }
 }
 
-/// Ed25519 OKP public JWK (`kty`, `crv`, `x`).
+/// Public JWK used in JWKS and JWT `cnf.jwk` claims.
+///
+/// Supports Ed25519 (`kty=OKP`, `crv=Ed25519`) and P-256 (`kty=EC`, `crv=P-256`).
 ///
 /// Direction: Any -> Any GET `{jwks_uri}`; embedded in JWT `cnf.jwk` claims.
 ///
@@ -68,17 +70,21 @@ impl FromStr for JwtTyp {
 )]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OkpJwk {
-    /// Key type. OKP keys use `"OKP"`.
+    /// Key type (`OKP` or `EC`).
     pub kty: String,
-    /// Curve name. Ed25519 keys use `"Ed25519"`.
+    /// Curve name (`Ed25519` or `P-256`).
     pub crv: String,
-    /// Base64url-encoded public key coordinate.
+    /// Base64url-encoded public key coordinate (`x`).
     pub x: String,
+    /// Base64url-encoded public key coordinate (`y`). Required for `kty=EC`.
+    pub y: Option<String>,
     /// Key identifier, matched against the JWT header `kid` during verification.
     pub kid: Option<String>,
 }
 
-/// Ed25519 OKP private JWK used locally for HTTP request signing.
+/// Private JWK used locally for HTTP request signing.
+///
+/// Supports Ed25519 (`kty=OKP`) and P-256 ES256 (`kty=EC`).
 ///
 /// Direction: local signing material; public half published via GET `{jwks_uri}`.
 ///
@@ -88,12 +94,14 @@ pub struct OkpJwk {
 )]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OkpSigningJwk {
-    /// Key type. OKP keys use `"OKP"`.
+    /// Key type (`OKP` or `EC`).
     pub kty: String,
-    /// Curve name. Ed25519 keys use `"Ed25519"`.
+    /// Curve name (`Ed25519` or `P-256`).
     pub crv: String,
-    /// Base64url-encoded public key coordinate.
+    /// Base64url-encoded public key coordinate (`x`).
     pub x: String,
+    /// Base64url-encoded public key coordinate (`y`). Required for `kty=EC`.
+    pub y: Option<String>,
     /// Base64url-encoded private key coordinate.
     pub d: String,
     /// Key identifier published in JWKS and referenced by JWT header `kid`.
@@ -106,6 +114,7 @@ impl OkpSigningJwk {
             kty: self.kty.clone(),
             crv: self.crv.clone(),
             x: self.x.clone(),
+            y: self.y.clone(),
             kid: self.kid.clone(),
         }
     }

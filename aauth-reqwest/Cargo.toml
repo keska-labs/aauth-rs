@@ -34,7 +34,10 @@ url.workspace = true
 
 [dev-dependencies]
 aauth = { workspace = true, default-features = false, features = ["agent"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 tokio.workspace = true
+rstest.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true

@@ -3,9 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use aauth::SignatureError;
 use aauth::protocol::SignatureKeyJwt;
 use aauth::protocol::{Capability, KeyMaterial, Mission, SignatureKey};
-use aauth::signature::{build_signature_base_with_extras, signing_key_from_jwk};
+use aauth::signature::{build_signature_base_with_extras, sign_http_message};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use ed25519_dalek::Signer;
 use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use reqwest::Request;
 
@@ -68,7 +67,6 @@ impl SignRequest for KeyMaterial {
             HeaderValue::from_str(&signature_key).map_err(SignatureError::InvalidHeaderValue)?,
         );
 
-        let signing_key = signing_key_from_jwk(&self.signing_jwk)?;
         let created = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -115,8 +113,8 @@ impl SignRequest for KeyMaterial {
             &extra_refs,
         )
         .0;
-        let signature_bytes = signing_key.sign(signature_base.as_bytes());
-        let signature = URL_SAFE_NO_PAD.encode(signature_bytes.to_bytes());
+        let signature_bytes = sign_http_message(&self.signing_jwk, signature_base.as_bytes())?;
+        let signature = URL_SAFE_NO_PAD.encode(signature_bytes);
 
         request.headers_mut().insert(
             HeaderName::from_static("signature-input"),

@@ -68,6 +68,7 @@ impl Ed25519KeyPair {
             kty: "OKP".into(),
             crv: "Ed25519".into(),
             x: URL_SAFE_NO_PAD.encode(self.verifying_key.as_bytes()),
+            y: None,
             d: URL_SAFE_NO_PAD.encode(self.signing_key.to_bytes()),
             kid: self.kid.clone(),
         }
@@ -87,6 +88,7 @@ impl Ed25519KeyPair {
             kty: "OKP".into(),
             crv: "Ed25519".into(),
             x: URL_SAFE_NO_PAD.encode(key.as_bytes()),
+            y: None,
             kid: kid.map(str::to_string),
         }
     }

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `StaticKeyMaterialProvider::new` to wrap arbitrary `KeyMaterial` (e.g. from `@aauth/bootstrap token`).
+- ES256 (P-256) HTTP Message Signature sign/verify via `sign_http_message` (Secure Enclave / EC JWKs).
 - `IntoAauthProtocol` to map domain errors to HTTP status + `AAuthProtocolError`.
 - Typed domain errors under `AAuthError`: `JwtError`, `MetadataError`, `VerifyError`, `DeferredError`, `HeaderError`, `AgentAuthError`, `ResourceTokenError` (catch-all `Message` / stringly `TokenError` removed).
 - `AgentError` in `aauth-reqwest` for typed agent transport failures (`Auth`, `Exchange`, `Deferred`, `Signature`, `Jwt`, `Metadata`, `Aauth`, `BodyNotCloneable`).
@@ -34,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- HTTP Message Signature `@method` component uses uppercase (RFC 9421); lowercase broke verification against `@hellocoop/httpsig` / whoami.aauth.dev.
 - Person and Access token-exchange handlers verify HTTP signatures against the request path (`OriginalUri`) instead of hardcoded paths, so Access Server routes remain nestable.
 
 ### Changed

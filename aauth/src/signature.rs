@@ -1,8 +1,17 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use ed25519_dalek::{Signature, Signer, Verifier, VerifyingKey};
+use ed25519_dalek::{
+    Signature as Ed25519Signature, Signer as Ed25519Signer, Verifier as Ed25519Verifier,
+    VerifyingKey as Ed25519VerifyingKey,
+};
 use http::HeaderMap;
+use p256::ecdsa::signature::{Signer as Es256Signer, Verifier as Es256Verifier};
+use p256::ecdsa::{
+    Signature as Es256Signature, SigningKey as Es256SigningKey, VerifyingKey as Es256VerifyingKey,
+};
+use p256::elliptic_curve::sec1::FromEncodedPoint;
+use p256::{EncodedPoint, SecretKey as P256SecretKey};
 
 use crate::error::{AAuthError, JwtError};
 use crate::jwt::{OkpSigningJwk, VerifiedToken, jwk_thumbprint};
@@ -75,7 +84,7 @@ pub fn build_signature_base_with_extras(
     let signature_params = format!("({params});created={created}");
 
     let mut lines = vec![
-        format!("\"@method\": {}", method.to_lowercase()),
+        format!("\"@method\": {}", method.to_uppercase()),
         format!("\"@authority\": {authority}"),
         format!("\"@path\": {path}"),
         format!("\"signature-key\": {signature_key}"),
@@ -206,13 +215,7 @@ pub fn verify_request_signature_with_options(
     let (signature_base, _) =
         build_signature_base_with_extras(method, authority, path, &signature_key, created, &extras);
     let signature_bytes = parse_signature_value(&signature_header)?;
-    let verifying_key = verifying_key_from_jwk(cnf_jwk)?;
-    let signature =
-        Signature::from_slice(&signature_bytes).map_err(SignatureError::InvalidSignatureBytes)?;
-
-    verifying_key
-        .verify(signature_base.as_bytes(), &signature)
-        .map_err(|_| SignatureError::VerificationFailed)?;
+    verify_signature(cnf_jwk, signature_base.as_bytes(), &signature_bytes)?;
 
     Ok(VerifiedSignature { jwt, thumbprint })
 }
@@ -242,9 +245,8 @@ pub fn apply_outbound_signature(
     let (signature_base, signature_params) =
         build_signature_base_with_extras(method, authority, path, &signature_key, created, &extras);
 
-    let signing_key = signing_key_from_jwk(signing_jwk)?;
-    let signature_bytes = signing_key.sign(signature_base.as_bytes());
-    let signature = URL_SAFE_NO_PAD.encode(signature_bytes.to_bytes());
+    let signature =
+        URL_SAFE_NO_PAD.encode(sign_http_message(signing_jwk, signature_base.as_bytes())?);
 
     let mut components = vec![
         "\"@method\"".to_string(),
@@ -276,7 +278,35 @@ pub fn apply_outbound_signature(
     Ok(())
 }
 
+/// Sign an HTTP Message Signature base string with an Ed25519 or ES256 (P-256) JWK.
+pub fn sign_http_message(jwk: &OkpSigningJwk, message: &[u8]) -> Result<Vec<u8>> {
+    match (jwk.kty.as_str(), jwk.crv.as_str()) {
+        ("OKP", "Ed25519") => {
+            let signing_key = signing_key_from_jwk(jwk)?;
+            Ok(Ed25519Signer::sign(&signing_key, message)
+                .to_bytes()
+                .to_vec())
+        }
+        ("EC", "P-256") => {
+            let signing_key = es256_signing_key_from_jwk(jwk)?;
+            let signature: Es256Signature = signing_key.sign(message);
+            Ok(signature.to_bytes().to_vec())
+        }
+        _ => Err(SignatureError::UnsupportedSigningJwk {
+            kty: jwk.kty.clone(),
+            crv: jwk.crv.clone(),
+        }),
+    }
+}
+
+/// Decode an Ed25519 private key from a JWK (`kty=OKP`, `crv=Ed25519`).
 pub fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<ed25519_dalek::SigningKey> {
+    if jwk.kty != "OKP" || jwk.crv != "Ed25519" {
+        return Err(SignatureError::UnsupportedSigningJwk {
+            kty: jwk.kty.clone(),
+            crv: jwk.crv.clone(),
+        });
+    }
     let bytes = URL_SAFE_NO_PAD
         .decode(&jwk.d)
         .map_err(SignatureError::InvalidEncoding)?;
@@ -286,14 +316,72 @@ pub fn signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<ed25519_dalek::Signin
     Ok(ed25519_dalek::SigningKey::from_bytes(&key_bytes))
 }
 
-fn verifying_key_from_jwk(jwk: &crate::jwt::OkpJwk) -> Result<VerifyingKey> {
+fn es256_signing_key_from_jwk(jwk: &OkpSigningJwk) -> Result<Es256SigningKey> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(&jwk.d)
+        .map_err(SignatureError::InvalidEncoding)?;
+    let secret = P256SecretKey::from_slice(&bytes)
+        .map_err(|e| SignatureError::InvalidEs256Key(e.to_string()))?;
+    Ok(Es256SigningKey::from(secret))
+}
+
+fn verify_signature(jwk: &crate::jwt::OkpJwk, message: &[u8], signature: &[u8]) -> Result<()> {
+    match (jwk.kty.as_str(), jwk.crv.as_str()) {
+        ("OKP", "Ed25519") => {
+            let verifying_key = ed25519_verifying_key_from_jwk(jwk)?;
+            let signature = Ed25519Signature::from_slice(signature)
+                .map_err(SignatureError::InvalidSignatureBytes)?;
+            verifying_key
+                .verify(message, &signature)
+                .map_err(|_| SignatureError::VerificationFailed)
+        }
+        ("EC", "P-256") => {
+            let verifying_key = es256_verifying_key_from_jwk(jwk)?;
+            let signature = Es256Signature::from_slice(signature)
+                .map_err(|e| SignatureError::InvalidEs256Key(e.to_string()))?;
+            verifying_key
+                .verify(message, &signature)
+                .map_err(|_| SignatureError::VerificationFailed)
+        }
+        _ => Err(SignatureError::UnsupportedSigningJwk {
+            kty: jwk.kty.clone(),
+            crv: jwk.crv.clone(),
+        }),
+    }
+}
+
+fn ed25519_verifying_key_from_jwk(jwk: &crate::jwt::OkpJwk) -> Result<Ed25519VerifyingKey> {
     let bytes = URL_SAFE_NO_PAD
         .decode(&jwk.x)
         .map_err(SignatureError::InvalidEncoding)?;
     let key_bytes: [u8; 32] = bytes
         .try_into()
         .map_err(|_| SignatureError::InvalidKeyLength)?;
-    VerifyingKey::from_bytes(&key_bytes).map_err(SignatureError::InvalidVerifyingKey)
+    Ed25519VerifyingKey::from_bytes(&key_bytes).map_err(SignatureError::InvalidVerifyingKey)
+}
+
+fn es256_verifying_key_from_jwk(jwk: &crate::jwt::OkpJwk) -> Result<Es256VerifyingKey> {
+    let y = jwk.y.as_deref().ok_or(SignatureError::MissingEcY)?;
+    let x = URL_SAFE_NO_PAD
+        .decode(&jwk.x)
+        .map_err(SignatureError::InvalidEncoding)?;
+    let y = URL_SAFE_NO_PAD
+        .decode(y)
+        .map_err(SignatureError::InvalidEncoding)?;
+    let x: [u8; 32] = x
+        .as_slice()
+        .try_into()
+        .map_err(|_| SignatureError::InvalidKeyLength)?;
+    let y: [u8; 32] = y
+        .as_slice()
+        .try_into()
+        .map_err(|_| SignatureError::InvalidKeyLength)?;
+    let point = EncodedPoint::from_affine_coordinates(&x.into(), &y.into(), false);
+    let option = p256::PublicKey::from_encoded_point(&point);
+    let public = option
+        .into_option()
+        .ok_or_else(|| SignatureError::InvalidEs256Key("invalid P-256 public point".into()))?;
+    Ok(Es256VerifyingKey::from(public))
 }
 
 pub(crate) fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
@@ -358,8 +446,13 @@ mod tests {
             &[],
         )
         .0;
-        let signing_key = signing_key_from_jwk(&keys.agent_ephemeral.signing_jwk()).unwrap();
-        let sig = URL_SAFE_NO_PAD.encode(signing_key.sign(signature_base.as_bytes()).to_bytes());
+        let sig = URL_SAFE_NO_PAD.encode(
+            sign_http_message(
+                &keys.agent_ephemeral.signing_jwk(),
+                signature_base.as_bytes(),
+            )
+            .unwrap(),
+        );
 
         let mut headers = HeaderMap::new();
         headers.insert("signature-key", signature_key.parse().unwrap());
