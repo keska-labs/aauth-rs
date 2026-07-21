@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["aauth", "aauth-axum", "aauth-policy", "aauth-reqwest"]
+members = ["aauth", "aauth-axum", "aauth-policy", "aauth-reqwest", "httpsig-key"]
 
 [workspace.package]
 edition = "2024"
@@ -23,6 +23,8 @@ ed25519-dalek = { version = "3.0.0-rc.1", features = [
     "pkcs8",
 ] }
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
+httpsig = "0.0.24"
+httpsig-key = { path = "httpsig-key", default-features = false }
 http = "1"
 jsonwebtoken = { version = "10.4.0", default-features = false, features = [
     "use_pem",

@@ -2,11 +2,11 @@ use http::HeaderMap;
 use http::header::LOCATION;
 
 use crate::error::{DeferredError, HeaderError, Result};
+use crate::http_util::header_value;
 use crate::protocol::AAuthChallenge;
 use crate::protocol::{
     AAUTH_REQUIREMENT, ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody,
 };
-use crate::signature::header_value;
 
 use super::types::DeferRequirement;
 

@@ -107,17 +107,8 @@ pub enum SignatureError {
     #[error("invalid signature encoding")]
     InvalidEncoding(#[source] base64::DecodeError),
 
-    #[error("invalid signature bytes")]
-    InvalidSignatureBytes(#[source] ed25519_dalek::SignatureError),
-
     #[error("invalid key length")]
     InvalidKeyLength,
-
-    #[error("invalid verifying key")]
-    InvalidVerifyingKey(#[source] ed25519_dalek::SignatureError),
-
-    #[error("invalid ES256 key material")]
-    InvalidEs256Key(String),
 
     #[error("unsupported signing JWK: kty={kty} crv={crv}")]
     UnsupportedSigningJwk { kty: String, crv: String },
@@ -136,6 +127,9 @@ pub enum SignatureError {
 
     #[error("signature-input missing covered components")]
     MissingCoveredComponents,
+
+    #[error("httpsig-key error: {0}")]
+    HttpsigKey(String),
 
     #[error(transparent)]
     Jwt(#[from] JwtError),

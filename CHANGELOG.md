@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Workspace crate `httpsig-key`: HTTP Signature Keys (`Signature-Key` / `Signature-Error` / Accept-Signature `sigkey`) on top of `httpsig` 0.0.24 (`jwt` + `hwk` schemes; Ed25519 + P-256 sign/verify).
+- `sign_request_headers` in `aauth::signature` for signing a `HeaderMap` with `KeyMaterial`.
 - Canonical protocol header name constants in `protocol::headers` (`AAUTH_REQUIREMENT` / `_NAME`, `AAUTH_ACCESS`, `AAUTH_CAPABILITIES`, `AAUTH_MISSION`, `SIGNATURE_KEY`, `SIGNATURE_INPUT`, `SIGNATURE`, `PREFER`).
 - `StaticKeyMaterialProvider::new` to wrap arbitrary `KeyMaterial` (e.g. from `@aauth/bootstrap token`).
-- ES256 (P-256) HTTP Message Signature sign/verify via `sign_http_message` (Secure Enclave / EC JWKs).
 - `IntoAauthProtocol` to map domain errors to HTTP status + `AAuthProtocolError`.
 - Typed domain errors under `AAuthError`: `JwtError`, `MetadataError`, `VerifyError`, `DeferredError`, `HeaderError`, `AgentAuthError`, `ResourceTokenError` (catch-all `Message` / stringly `TokenError` removed).
 - `AgentError` in `aauth-reqwest` for typed agent transport failures (`Auth`, `Exchange`, `Deferred`, `Signature`, `Jwt`, `Metadata`, `Aauth`, `BodyNotCloneable`).
@@ -22,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional `aauth-axum` feature `policy` for `PersonServerState::from_policy` / `AccessServerState::from_policy` via `aauth-policy`.
 - Workspace crate `aauth-reqwest`: reqwest agent transport (`AgentMiddleware`, `sign_request`, token exchange, deferred poll, `CachedMetadataFetcher`). Default feature `verify` enables challenge/auth-token binding checks via `aauth/resource-verify`.
 - Public getters on `AgentOptions` for transport adapters (`provider`, callbacks, hints, `metadata_fetcher` when `resource-verify` is on).
-- Public `signing_key_from_jwk` for custom signing adapters (was crate-private).
 - `person_router`, `access_router`, and `resource_router` in `aauth-axum` to mount canonical role routes (`merge` / `nest` into an app whose state implements `FromRef` to the matching `*ServerState`).
 - Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
 - Cross-language e2e suite in `e2e/` against vendored [packages-js](https://github.com/aauth-dev/packages-js) `main`: JS client → Rust server and Rust client → JS server over real HTTP.
@@ -42,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `aauth-reqwest` signing: `RequestSigningExt` on `reqwest::Request` (`.sign` / `.signed`, `.sign_with_auth_token` / `.signed_with_auth_token`), `SigningOptions::apply_to`; removed free `sign_request` / `SignRequest` on `KeyMaterial` / free `sign_and_run` shim.
+- `aauth` HTTP Message Signature sign/verify uses workspace crate `httpsig-key` (RFC 9421 via `httpsig`).
+- `aauth-reqwest` signing: `RequestSigningExt` on `reqwest::Request` (`.sign` / `.sign_with_auth_token`), `SigningOptions::apply_to`; removed free `sign_request` / `SignRequest` on `KeyMaterial` / free `sign_and_run` shim.
 - Demoted signature parse helpers (`parse_signature_*`) and removed thin `build_signature_base`; shared `http_util` for URL normalize + reqwest→http header copy; folded `person_server_from_agent_jwt` into `resolve_person_server_url`; demoted `resolve_deferred_location`.
 - `aauth-policy` defer/decision/federation helpers are private methods on `Policy*Service`; `AccessPendingContext` converts via `From` into `AccessTokenContext`.
 - Role constructors are methods: `AccessTokenContext::from_exchange`, `PersonServerConfig::verify_token_request` / `mint_person_auth` / `federate_to_access_server`, `ResourceTokenOptions::sign` (free `build_access_context`, `verify_person_token_request`, `create_resource_token`, and free `federate_to_access_server` / `mint_person_auth` removed).
@@ -50,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remodeled `AAuthError` as a transparent umbrella over domain errors (`JwtError`, `SignatureError`, `MetadataError`, `VerifyError`, `DeferredError`, `HeaderError`, `AgentAuthError`, `ResourceTokenError`); removed catch-all `Message` / stringly `HttpError` / `TokenError`.
 - `ResourceTokenSigner` / `create_resource_token` return `ResourceTokenError` instead of `String`; metadata `validate()` returns `MetadataError`.
 - `aauth-reqwest` public APIs (`exchange_token`, `poll_deferred`, `sign_request`, …) return `Result<T, AgentError>` instead of `aauth::Result`; token exchange failures propagate `TokenExchangeError` without stringifying.
-- Signature helpers (`verify_request_signature`, `apply_outbound_signature`, `signing_key_from_jwk`, parsers) return `Result<T, SignatureError>` instead of `AAuthError`.
+- Signature helpers (`verify_request_signature`, `apply_outbound_signature`, parsers) return `Result<T, SignatureError>` instead of `AAuthError`.
 - `PersonTokenServiceError`, `AccessTokenServiceError`, and `ResourceAccessServiceError` are generic over the pending-store error type (`*ServiceError<E>`); store failures keep their typed source instead of `String`.
 - `InMemoryPendingStore::Error` is `std::convert::Infallible` (the in-memory store never returns `Err`).
 - Role service traits (`PersonTokenService`, `AccessTokenService`, `ResourceAccessService`) are the primary integration API in `aauth`; policy + pending-store orchestration lives in `aauth-policy`.
@@ -81,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Hand-rolled RFC 9421 crypto/base from `aauth::signature` (`build_signature_base_with_extras`, `sign_http_message`, `signing_key_from_jwk`).
 - Thin free `TestKeys` wrappers: `create_test_keys`, `static_agent_metadata_fetcher`, `static_person_metadata_fetcher`, free `mint_agent_jwt` / `mint_person_auth_jwt` / `mint_access_auth_jwt`, and `create_key_provider` (use `TestKeys::generate()`, `TestKeys::*_metadata_fetcher`, `TestKeys::mint_*` / `key_provider` instead).
 - `aauth` module `policy` and feature `policy` (use crate `aauth-policy`).
 - `PendingStore`, `*PendingRecord`, `InMemory*PendingStore`, `Policy*Service`, `OpaqueAccessStore`, and `poll_auth_pending` from `aauth` (use `aauth-policy`).

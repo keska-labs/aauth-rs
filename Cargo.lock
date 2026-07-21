@@ -15,8 +15,8 @@ dependencies = [
  "ed25519-dalek 3.0.0-rc.1",
  "http",
  "http-body-util",
+ "httpsig-key",
  "jsonwebtoken",
- "p256",
  "rand 0.10.1",
  "reqwest",
  "reqwest-middleware",
@@ -24,7 +24,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "sfv",
+ "sfv 0.15.0",
  "sha2 0.11.0",
  "thiserror",
  "tokio",
@@ -626,6 +626,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519-compact"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c24599140dc39d7a81e4476e7573d41bbc18e07c803900298e522a5fbcfbfb6"
+dependencies = [
+ "getrandom 0.4.3",
+]
+
+[[package]]
 name = "ed25519-dalek"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -870,9 +879,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
  "rand_core 0.10.1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -997,6 +1008,49 @@ name = "httpdate"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
+name = "httpsig"
+version = "0.0.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5c2b530de2c85aa07eafdf40489cc714eae4668948ebe92cdcb81e38e176315"
+dependencies = [
+ "base64",
+ "bytes",
+ "ecdsa",
+ "ed25519-compact",
+ "hmac",
+ "indexmap 2.14.0",
+ "p256",
+ "p384",
+ "pkcs8 0.10.2",
+ "rand 0.10.1",
+ "rustc-hash",
+ "sec1",
+ "sfv 0.14.0",
+ "sha2 0.10.9",
+ "spki 0.7.3",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "httpsig-key"
+version = "0.0.3"
+dependencies = [
+ "base64",
+ "ed25519-dalek 3.0.0-rc.1",
+ "http",
+ "httpsig",
+ "p256",
+ "rand 0.10.1",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sfv 0.15.0",
+ "sha2 0.11.0",
+ "thiserror",
+]
 
 [[package]]
 name = "hybrid-array"
@@ -2236,6 +2290,17 @@ dependencies = [
 
 [[package]]
 name = "sfv"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d471eaefb14f4b30032525bdb124b36e55ba9cb1292080e06f1a236cd10fe87"
+dependencies = [
+ "base64",
+ "indexmap 2.14.0",
+ "ref-cast",
+]
+
+[[package]]
+name = "sfv"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "890ef0e5532daf21fdaa3dbaf991417187f3a87ab69231fe69be942495746480"
@@ -2622,7 +2687,19 @@ checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
  "log",
  "pin-project-lite",
+ "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-attributes"
+version = "0.1.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

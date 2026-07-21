@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 use http::{HeaderMap, StatusCode};
 
 use crate::error::Result;
+use crate::http_util::header_value;
 #[cfg(feature = "resource-verify")]
 use crate::metadata::MetadataFetcher;
 use crate::protocol::AAuthChallenge;
 use crate::protocol::{AAUTH_ACCESS, AAUTH_REQUIREMENT, Capability, Mission, PersonServerMetadata};
-use crate::signature::header_value;
 
 pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
 
