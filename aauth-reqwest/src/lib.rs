@@ -3,9 +3,11 @@
 //! Pair [`AgentMiddleware`] with [`aauth::agent::auth::AgentOptions`] (re-exported here)
 //! to drive signed requests, token exchange, and deferred polling over HTTP.
 //!
-//! Enable the `verify` feature (on by default) to verify resource challenges and
-//! auth tokens when a [`aauth::metadata::MetadataFetcher`] is configured on
-//! [`AgentOptions`].
+//! Challenge verification always runs before token exchange. Auth-token claim binding
+//! always runs after exchange. JWT signature verification of returned auth tokens is
+//! controlled by [`AgentOptions::verify_auth_signature`] (default `true`, spec SHOULD).
+//! Provide a [`aauth::metadata::MetadataFetcher`] (for example [`CachedMetadataFetcher`])
+//! so JWKS discovery succeeds for challenges and optional auth signatures.
 
 mod deferred;
 mod error;

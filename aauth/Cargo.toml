@@ -21,7 +21,8 @@ default = [
 ]
 
 # --- Agent ---
-agent = []
+# Pulls in resource-verify: agents MUST verify resource-token challenges (spec).
+agent = ["resource-verify"]
 
 # --- Shared server infrastructure ---
 deferred = []
@@ -69,7 +70,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 aauth-policy = { workspace = true, features = ["person-server"] }
-aauth-reqwest = { workspace = true, features = ["verify"] }
+aauth-reqwest = { workspace = true }
 tokio.workspace = true
 wiremock.workspace = true
 reqwest.workspace = true

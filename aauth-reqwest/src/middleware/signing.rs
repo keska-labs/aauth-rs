@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use aauth::DynKeyMaterialProvider;
 use aauth::KeyMaterialProvider;
 use aauth::agent::auth::AgentAuthAttempt;
 use http::Extensions;
@@ -13,16 +10,13 @@ use crate::signed::{RequestSigningExt, SigningOptions, apply_opaque_token};
 #[derive(Clone)]
 pub(crate) struct AgentAuthAttemptKey(pub AgentAuthAttempt);
 
-pub(crate) struct SigningMiddleware {
-    provider: Arc<DynKeyMaterialProvider<'static>>,
+pub(crate) struct SigningMiddleware<P> {
+    provider: P,
     options: SigningOptions,
 }
 
-impl SigningMiddleware {
-    pub(crate) fn new(
-        provider: Arc<DynKeyMaterialProvider<'static>>,
-        options: SigningOptions,
-    ) -> Self {
+impl<P: KeyMaterialProvider + Clone> SigningMiddleware<P> {
+    pub(crate) fn new(provider: P, options: SigningOptions) -> Self {
         Self { provider, options }
     }
 
@@ -33,7 +27,7 @@ impl SigningMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
-        let material = self.provider.as_ref().key_material().await.map_err(|e| {
+        let material = self.provider.key_material().await.map_err(|e| {
             reqwest_middleware::Error::Middleware(anyhow::Error::from(AgentError::from(e)))
         })?;
 
@@ -61,7 +55,10 @@ impl SigningMiddleware {
 }
 
 #[async_trait::async_trait]
-impl Middleware for SigningMiddleware {
+impl<P> Middleware for SigningMiddleware<P>
+where
+    P: KeyMaterialProvider + Clone + Send + Sync + 'static,
+{
     async fn handle(
         &self,
         req: Request,

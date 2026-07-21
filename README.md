@@ -83,11 +83,11 @@ Protocol modules (`error`, `protocol`, `jwt`, `signature`, …) are always avail
 
 | Feature | Description |
 |---------|-------------|
-| `agent` | `aauth::agent` — `AgentAuth`, `AgentOptions`, keys, resolve |
+| `agent` | `aauth::agent` — `AgentAuth`, `AgentOptions`, keys, resolve (includes `resource-verify`) |
 | `person-server` | Person Server service trait |
 | `access-server` | Access Server service trait |
 | `resource` | Resource Server consent service trait |
-| `resource-verify` | Resource token verification only (no RS service/layer) |
+| `resource-verify` | Resource token verification only (no RS service/layer; also via `agent`) |
 | `full` | All roles and agent (matches `default`) |
 
 ### `aauth-policy`
@@ -101,9 +101,7 @@ Protocol modules (`error`, `protocol`, `jwt`, `signature`, …) are always avail
 
 ### `aauth-reqwest`
 
-| Feature | Description |
-|---------|-------------|
-| `verify` (default) | 401 challenge / auth-token binding checks via `aauth/resource-verify` |
+No optional features. Resource-challenge verification always runs on exchange; auth-token claim checks always run. Auth-token JWT signature verification defaults on (`AgentOptions::verify_auth_signature`). Provide a `MetadataFetcher` (e.g. `CachedMetadataFetcher`) for JWKS discovery.
 
 ### `aauth-axum`
 
@@ -133,11 +131,13 @@ aauth-reqwest = { version = "0.0" }
 ## Quick example
 
 ```rust
-use aauth::DynKeyMaterialProvider;
 use aauth::agent::auth::AgentOptions;
 use aauth::agent::keys::KeyMaterialProvider;
 use aauth::protocol::KeyMaterial;
-use aauth_reqwest::{AgentMiddleware, ClientBuilder};
+use aauth_reqwest::{AgentMiddleware, CachedMetadataFetcher, ClientBuilder};
+
+#[derive(Clone)]
+struct MyProvider;
 
 impl KeyMaterialProvider for MyProvider {
     async fn key_material(&self) -> aauth::Result<KeyMaterial> {
@@ -148,9 +148,11 @@ impl KeyMaterialProvider for MyProvider {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let client = ClientBuilder::new(reqwest::Client::new())
+    let http = reqwest::Client::new();
+    let client = ClientBuilder::new(http.clone())
         .with(AgentMiddleware::new(
-            AgentOptions::builder(DynKeyMaterialProvider::new_arc(MyProvider))
+            AgentOptions::builder(MyProvider)
+                .metadata_fetcher(CachedMetadataFetcher::new(http))
                 // person_server_url omitted — resolved from agent JWT `ps` when challenged
                 .build(),
         ))

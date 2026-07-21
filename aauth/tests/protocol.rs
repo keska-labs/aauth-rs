@@ -2,10 +2,9 @@ mod support;
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use aauth::DynKeyMaterialProvider;
-use aauth::DynMetadataFetcher;
 use aauth::ParsedToken;
 use aauth::PendingOutcome;
+use aauth::StaticKeyMaterialProvider;
 use aauth::protocol::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
 use aauth::{DeferCreated, DeferRequirement, VerifyTokenOptions, verify_token};
 use aauth_policy::{InMemoryPersonPendingStore, PendingStore};
@@ -18,6 +17,7 @@ use aauth::TestKeys;
 
 use support::AGENT_ID;
 use support::mock_server::{MockServer, MockServerConfig};
+use support::mock_transport::DualMetadataFetcher;
 
 const AGENT_URL: &str = "https://agent.example";
 const PERSON_SERVER_URL: &str = "https://person.example";
@@ -31,7 +31,14 @@ fn test_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn build_client(options: AgentOptions, server: &MockServer) -> aauth_reqwest::ClientWithMiddleware {
+fn build_client<P, F>(
+    options: AgentOptions<P, F>,
+    server: &MockServer,
+) -> aauth_reqwest::ClientWithMiddleware
+where
+    P: aauth::KeyMaterialProvider + Clone + Send + Sync + 'static,
+    F: aauth::MetadataFetcher + Clone + Send + Sync + 'static,
+{
     ClientBuilder::new(reqwest::Client::new())
         .with(AgentMiddleware::new(options))
         .with(server.mock_transport())
@@ -288,6 +295,7 @@ async fn deferred_interaction_grant() {
         .person_server_url(PERSON_SERVER_URL)
         .on_interaction(on_interaction)
         .max_poll_duration_secs(5)
+        .metadata_fetcher(server.metadata_fetcher())
         .build();
     let client = build_client(options, &server);
 
@@ -352,11 +360,11 @@ fn mock_config(
 }
 
 fn aauth_options(
-    provider: Arc<DynKeyMaterialProvider<'static>>,
-    fetcher: Arc<DynMetadataFetcher<'static>>,
+    provider: Arc<StaticKeyMaterialProvider>,
+    fetcher: Arc<DualMetadataFetcher>,
     justification: Option<String>,
     hints: Option<(String, String, String)>,
-) -> AgentOptions {
+) -> AgentOptions<Arc<StaticKeyMaterialProvider>, Arc<DualMetadataFetcher>> {
     let mut builder = AgentOptions::builder(provider)
         .person_server_url(PERSON_SERVER_URL)
         .max_poll_duration_secs(5)
@@ -374,7 +382,7 @@ fn aauth_options(
 }
 
 fn aauth_client(
-    provider: Arc<DynKeyMaterialProvider<'static>>,
+    provider: Arc<StaticKeyMaterialProvider>,
     server: &MockServer,
     justification: Option<String>,
     hints: Option<(String, String, String)>,

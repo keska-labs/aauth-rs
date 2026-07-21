@@ -5,11 +5,11 @@
 //! Protocol-wide modules (`error`, `protocol`, `jwt`, `signature`, …) are always available.
 //! Enable role-specific features to compile only what you need:
 //!
-//! - `agent` — agent runtime (transport-agnostic state machine and options)
+//! - `agent` — agent runtime (includes `resource-verify` for challenge / auth-token checks)
 //! - `person-server` — Person Server service trait
 //! - `access-server` — Access Server service trait
 //! - `resource` — Resource Server consent service trait
-//! - `resource-verify` — resource token verification only (used by `person-server` and `aauth-reqwest`'s `verify`)
+//! - `resource-verify` — resource token verification only (also pulled in by `agent` and `person-server`)
 //! - `full` — all roles and agent (matches `default`)
 //!
 //! For axum HTTP adapters (handlers, `ResourceAuthLayer`), use the companion
@@ -72,7 +72,8 @@ pub use jwt::{
 };
 pub use keys::{Ed25519KeyPair, SigningKey, TestKeys};
 pub use metadata::{
-    DynMetadataFetcher, LocalMetadataFetcher, MetadataFetcher, StaticMetadataFetcher,
+    AbsentMetadataFetcher, DynMetadataFetcher, LocalMetadataFetcher, MetadataFetcher,
+    StaticMetadataFetcher,
 };
 
 // Common protocol prelude used across roles (not the full governance surface).

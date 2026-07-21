@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use aauth::ParsedToken;
 use aauth::PendingOutcome;
 use aauth::error::Result;
-use aauth::metadata::{DynMetadataFetcher, MetadataFetcher, StaticMetadataFetcher};
+use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::protocol::{
     AAUTH_REQUIREMENT, AAuthChallenge, AgentOkResponse, AgentProviderMetadata, AuthOkResponse,
     JwksDocument, PersonServerMetadata, SIGNATURE_KEY, TokenExchangeRequest, TokenResponseBody,
@@ -457,7 +457,8 @@ impl MockServerState {
     }
 }
 
-struct DualMetadataFetcher {
+#[derive(Clone)]
+pub struct DualMetadataFetcher {
     agent: StaticMetadataFetcher,
     person: StaticMetadataFetcher,
     resource: StaticMetadataFetcher,
@@ -467,8 +468,8 @@ struct DualMetadataFetcher {
 }
 
 impl MockServerState {
-    pub fn metadata_fetcher(&self) -> Arc<DynMetadataFetcher<'static>> {
-        DynMetadataFetcher::new_arc(DualMetadataFetcher {
+    pub fn metadata_fetcher(&self) -> Arc<DualMetadataFetcher> {
+        Arc::new(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
             person: self.keys.person_metadata_fetcher(&self.person_server_url),
             resource: self.keys.resource_metadata_fetcher(&self.resource_url),

@@ -45,12 +45,16 @@ impl AgentDeferredOptions {
     }
 
     /// Build deferred poll options from shared [`AgentOptions`] callbacks/limits.
-    pub(crate) fn from_agent_options(
-        options: &AgentOptions,
+    pub(crate) fn from_agent_options<P, F>(
+        options: &AgentOptions<P, F>,
         location_url: String,
         interaction_url: Option<String>,
         interaction_code: Option<String>,
-    ) -> Self {
+    ) -> Self
+    where
+        P: aauth::KeyMaterialProvider + Clone,
+        F: aauth::MetadataFetcher + Clone,
+    {
         let mut builder = Self::builder(location_url);
         if let (Some(url), Some(code)) = (interaction_url, interaction_code) {
             builder = builder.interaction(url, code);

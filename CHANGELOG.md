@@ -21,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Workspace crate `aauth-policy`: high-level `PersonTokenPolicy` / `AccessTokenPolicy` / `ResourceConsentPolicy`, `PendingStore` + in-memory stores, and `Policy*Service` implementations of the `aauth` role service traits.
 - `NoResourceAccessService` marker for `ResourceAccessMode` variants that do not use a consent service.
 - Optional `aauth-axum` feature `policy` for `PersonServerState::from_policy` / `AccessServerState::from_policy` via `aauth-policy`.
-- Workspace crate `aauth-reqwest`: reqwest agent transport (`AgentMiddleware`, `sign_request`, token exchange, deferred poll, `CachedMetadataFetcher`). Default feature `verify` enables challenge/auth-token binding checks via `aauth/resource-verify`.
-- Public getters on `AgentOptions` for transport adapters (`provider`, callbacks, hints, `metadata_fetcher` when `resource-verify` is on).
+- Workspace crate `aauth-reqwest`: reqwest agent transport (`AgentMiddleware`, `sign_request`, token exchange, deferred poll, `CachedMetadataFetcher`). Resource-challenge verification always runs; auth-token claim checks always run; auth JWT signature verification defaults on via `AgentOptions::verify_auth_signature` (agent feature includes `resource-verify`).
+- Public getters on `AgentOptions` for transport adapters (`provider`, callbacks, hints, `metadata_fetcher`, `verify_auth_signature`).
+- `verify_auth_signature` on `AgentOptions` (default `true`) to optionally skip auth-token JWT signature verification (spec SHOULD); MUST challenge and claim checks are never skipped.
 - `person_router`, `access_router`, and `resource_router` in `aauth-axum` to mount canonical role routes (`merge` / `nest` into an app whose state implements `FromRef` to the matching `*ServerState`).
 - Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
 - `@aauth/fetch` CLI interop tests (`fetch_person_server`, `fetch_federated_hosted_ps`) for hybrid local axum + hosted whoami / Person Server (ignored; need bootstrap + `AAUTH_E2E_PUBLIC_BASE`).
@@ -44,13 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Async traits use `trait_variant` + `dynosaur`: each crate-owned async trait has a `Local*` base (`Sync`), a Send variant keeping the previous public name, and a public `Dyn*` type (except `PendingStore`, which is generic over `R` and uses in-place `trait_variant::make(Send)` only). `Arc<dyn Trait>` call sites use `Arc<DynTrait<'static>>` (construct with `DynTrait::new_arc`).
+- Async traits use `trait_variant` + `dynosaur`: each crate-owned async trait has a `Local*` base (`Sync`), a Send variant keeping the previous public name, and a public `Dyn*` type (except `PendingStore`, which is generic over `R` and uses in-place `trait_variant::make(Send)` only). Prefer concrete generics for owned config; use `DynTrait::new_arc` only when type erasure is required.
+- `AgentOptions<P, F>` / `AgentMiddleware<P, F>` take concrete `KeyMaterialProvider` / `MetadataFetcher` type parameters (default fetcher `AbsentMetadataFetcher`) instead of storing `Arc<Dyn*>`.
+- `aauth` feature `agent` enables `resource-verify` so challenge verification is always available to agents; configure a real `metadata_fetcher` for JWKS discovery.
+- `verify_client_auth_token` always applies MUST claim checks (including `iss` vs resource-token `aud`); JWT signature verification is controlled by a `verify_signature` argument (from `AgentOptions::verify_auth_signature`).
 - `PendingStore::find_if` takes `impl Fn(&R) -> bool + Send` instead of a generic type parameter.
 - `Clone` is no longer a supertrait of role/policy service traits (needed for `Dyn*` object-safety); call sites that clone keep an explicit `+ Clone` bound.
 - Blanket `MetadataFetcher` / `ResourceTokenSigner` `Arc<T>` (and `MetadataFetcher` for `&T`) impls remain for concrete shared ownership.
 
 ### Removed
 
+- `aauth-reqwest` feature `verify` (verification is always compiled with `agent`; use `AgentOptions::verify_auth_signature(false)` only to skip auth-token JWT signature checks).
 - Direct `async-trait` dependency from `aauth` / `aauth-policy` / `aauth-axum` production deps (retained as `aauth` / `aauth-reqwest` **dev**/runtime deps only for foreign `reqwest_middleware::Middleware` impls).
 
 ### Changed (prior)

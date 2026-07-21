@@ -71,7 +71,7 @@ aauth-rs/
 
 **Cargo features (`aauth-policy`):** `person-server`, `access-server`, `resource`, `full` — each enables the matching `aauth` role feature.
 
-**Cargo features (`aauth-reqwest`):** `verify` (default) enables `aauth/resource-verify` for challenge/auth-token checks.
+**Cargo features (`aauth-reqwest`):** none optional. Resource-challenge verification always runs; auth-token claim checks always run. Auth JWT signature verification defaults on (`AgentOptions::verify_auth_signature`); set a `MetadataFetcher` for JWKS discovery.
 
 **Cargo features (`aauth-axum`):** `person-server`, `access-server`, `resource`; optional `policy` enables `from_policy` helpers via `aauth-policy`. Prefer `person_router` / `access_router` / `resource_router` (`merge` or `nest`) over hand-wiring individual handlers; apply `ResourceAuthLayer` to protected app routes separately.
 

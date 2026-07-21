@@ -37,7 +37,7 @@ aauth = { workspace = true, default-features = false, features = [
     "resource",
 ] }
 aauth-policy = { workspace = true, features = ["full"] }
-aauth-reqwest = { workspace = true, features = ["verify"] }
+aauth-reqwest = { workspace = true }
 anyhow.workspace = true
 jsonwebtoken.workspace = true
 reqwest.workspace = true

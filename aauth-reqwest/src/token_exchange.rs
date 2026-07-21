@@ -67,11 +67,15 @@ impl TokenExchangeOptions {
     }
 
     /// Build exchange options from shared [`AgentOptions`] fields.
-    pub(crate) fn from_agent_options(
-        options: &AgentOptions,
+    pub(crate) fn from_agent_options<P, F>(
+        options: &AgentOptions<P, F>,
         person_server_url: String,
         resource_token: String,
-    ) -> Self {
+    ) -> Self
+    where
+        P: aauth::KeyMaterialProvider + Clone,
+        F: aauth::MetadataFetcher + Clone,
+    {
         let mut builder = Self::builder(person_server_url, resource_token);
         if let Some(metadata) = options.person_server_metadata().cloned() {
             builder = builder.person_server_metadata(metadata);

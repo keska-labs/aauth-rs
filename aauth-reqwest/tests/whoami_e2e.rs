@@ -18,7 +18,7 @@ use std::process::Command;
 use std::sync::Arc;
 
 use aauth::{KeyMaterial, SignatureKey, SignatureKeyJwt, SigningJwk, StaticKeyMaterialProvider};
-use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder};
+use aauth_reqwest::{AgentMiddleware, AgentOptions, CachedMetadataFetcher, ClientBuilder};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -94,7 +94,7 @@ fn load_bootstrap_token() -> BootstrapToken {
         .unwrap_or_else(|e| panic!("failed to parse bootstrap token JSON ({e}). stdout:\n{stdout}"))
 }
 
-fn provider_from_bootstrap() -> Arc<aauth::DynKeyMaterialProvider<'static>> {
+fn provider_from_bootstrap() -> Arc<aauth::StaticKeyMaterialProvider> {
     let token = load_bootstrap_token();
     assert_eq!(
         token.signature_key.key_type, "jwt",
@@ -135,8 +135,10 @@ fn provider_from_bootstrap() -> Arc<aauth::DynKeyMaterialProvider<'static>> {
 #[rstest::fixture]
 #[once]
 fn client() -> aauth_reqwest::ClientWithMiddleware {
+    let http = reqwest::Client::new();
     let provider = provider_from_bootstrap();
     let mut builder = AgentOptions::builder(provider)
+        .metadata_fetcher(CachedMetadataFetcher::new(http.clone()))
         .on_interaction(Arc::new(|url, code| {
             eprintln!("Approve at: {url}?code={code}");
         }))
@@ -146,7 +148,7 @@ fn client() -> aauth_reqwest::ClientWithMiddleware {
         builder = builder.person_server_url(ps);
     }
 
-    ClientBuilder::new(reqwest::Client::new())
+    ClientBuilder::new(http)
         .with(AgentMiddleware::new(builder.build()))
         .build()
 }

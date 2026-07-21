@@ -139,22 +139,74 @@ pub fn verify_auth_token_binding(auth: &AuthClaims, resource_url: &str) -> Resul
     Ok(())
 }
 
+/// MUST claim checks for an auth token returned from token exchange
+/// (`#auth-token-response-verification` steps 2–6), without JWT signature verification.
+fn verify_client_auth_token_claims(
+    auth: &AuthClaims,
+    resource_url: &str,
+    resource_token_aud: &str,
+    agent_sub: &str,
+    agent_jkt: &str,
+) -> Result<()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    if auth.exp < now - CLOCK_SKEW {
+        return Err(VerifyError::Expired {
+            typ: JwtTyp::Auth,
+        }
+        .into());
+    }
+
+    // Step 2: iss matches the resource token's aud.
+    if normalize_server_url(&auth.iss) != normalize_server_url(resource_token_aud) {
+        return Err(VerifyError::IssMismatch.into());
+    }
+
+    // Step 3: aud matches the resource the agent intends to access.
+    verify_auth_token_binding(auth, resource_url)?;
+
+    // Step 4: cnf.jwk matches the agent's signing key.
+    let cnf_thumbprint = jwk_thumbprint(&auth.cnf.jwk)?;
+    if cnf_thumbprint != agent_jkt {
+        return Err(VerifyError::KeyBindingFailed.into());
+    }
+
+    // Step 5: agent matches the agent's own identifier.
+    if auth.agent != agent_sub {
+        return Err(VerifyError::AgentMismatch.into());
+    }
+
+    // Step 6: if act is present, act.agent must be a non-empty AAuth agent id.
+    if let Some(act) = &auth.act {
+        if act.agent.is_empty() || !act.agent.starts_with("aauth:") {
+            return Err(VerifyError::token(
+                JwtTyp::Auth.verify_error_code(),
+                "act.agent must be a non-empty aauth: agent identifier",
+            )
+            .into());
+        }
+    }
+
+    Ok(())
+}
+
 /// Verify an auth token returned from token exchange before caching.
+///
+/// Always applies MUST claim checks. When `verify_signature` is `true` (spec SHOULD),
+/// also verifies the JWT signature via the issuer JWKS.
 pub async fn verify_client_auth_token<F: MetadataFetcher>(
     jwt: &str,
     resource_url: &str,
+    resource_token_aud: &str,
     agent_sub: &str,
     agent_jkt: &str,
     fetcher: F,
+    verify_signature: bool,
 ) -> Result<AuthClaims> {
-    let verified = verify_token(VerifyTokenOptions {
-        jwt: jwt.to_string(),
-        http_signature_thumbprint: agent_jkt.to_string(),
-        fetcher,
-    })
-    .await?;
-
-    let auth = match verified {
+    let parsed = ParsedToken::parse(jwt)?;
+    let auth = match parsed {
         ParsedToken::Auth(c) => c,
         _ => {
             return Err(VerifyError::Invalid {
@@ -165,12 +217,28 @@ pub async fn verify_client_auth_token<F: MetadataFetcher>(
         }
     };
 
-    verify_auth_token_binding(&auth, resource_url)?;
-    if auth.agent != agent_sub {
-        return Err(VerifyError::AgentMismatch.into());
-    }
+    verify_client_auth_token_claims(
+        &auth,
+        resource_url,
+        resource_token_aud,
+        agent_sub,
+        agent_jkt,
+    )?;
 
-    Ok(auth)
+    if verify_signature {
+        let decoding_key =
+            fetch_decoding_key(&auth.iss, &auth.dwk, &fetcher, jwt).await?;
+        match ParsedToken::verify_with_key(jwt, &decoding_key)? {
+            ParsedToken::Auth(c) => Ok(c),
+            _ => Err(VerifyError::Invalid {
+                typ: JwtTyp::Auth,
+                reason: VerifyReason::ExpectedAuth,
+            }
+            .into()),
+        }
+    } else {
+        Ok(auth)
+    }
 }
 
 /// Verify a resource token from a `401` challenge before token exchange.

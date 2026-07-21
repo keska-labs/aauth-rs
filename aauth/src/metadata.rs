@@ -31,6 +31,24 @@ impl<T: MetadataFetcher + Sync> MetadataFetcher for &T {
     }
 }
 
+/// Placeholder [`MetadataFetcher`] used as the default type parameter when none is configured.
+///
+/// Methods error if called. Use for identity-only agents that never receive a resource-token
+/// challenge, or replace via [`.metadata_fetcher(...)`](crate::agent::auth::AgentOptionsBuilder::metadata_fetcher)
+/// before any RS exchange flow.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AbsentMetadataFetcher;
+
+impl MetadataFetcher for AbsentMetadataFetcher {
+    async fn resolve_jwks_uri(&self, _iss: &str, _dwk: &str) -> Result<String> {
+        Err(MetadataError::UnknownJwksUri("AbsentMetadataFetcher".into()).into())
+    }
+
+    async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet> {
+        Err(MetadataError::UnknownJwksUri(jwks_uri.to_string()).into())
+    }
+}
+
 /// Fixed JWKS for tests and examples without HTTP metadata discovery.
 #[derive(Clone)]
 pub struct StaticMetadataFetcher {

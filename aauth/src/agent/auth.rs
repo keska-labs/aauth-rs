@@ -4,10 +4,11 @@ use std::time::{Duration, Instant};
 
 use http::{HeaderMap, StatusCode};
 
+use crate::agent::keys::KeyMaterialProvider;
 use crate::error::Result;
 use crate::http_util::header_value;
-#[cfg(feature = "resource-verify")]
-use crate::metadata::DynMetadataFetcher;
+use crate::metadata::AbsentMetadataFetcher;
+use crate::metadata::MetadataFetcher;
 use crate::protocol::AAuthChallenge;
 use crate::protocol::{AAUTH_ACCESS, AAUTH_REQUIREMENT, Capability, Mission, PersonServerMetadata};
 
@@ -60,8 +61,12 @@ pub struct AgentAuth {
 
 /// Configuration for an AAuth agent client (signing, token exchange, deferred flows).
 #[derive(Clone)]
-pub struct AgentOptions {
-    pub(crate) provider: Arc<super::keys::DynKeyMaterialProvider<'static>>,
+pub struct AgentOptions<P, F = AbsentMetadataFetcher>
+where
+    P: KeyMaterialProvider + Clone,
+    F: MetadataFetcher + Clone,
+{
+    pub(crate) provider: P,
     pub(crate) person_server_url: Option<String>,
     pub(crate) person_server_metadata: Option<PersonServerMetadata>,
     pub(crate) opaque_token: Option<String>,
@@ -79,16 +84,21 @@ pub struct AgentOptions {
     pub(crate) on_clarification: Option<ClarificationCallback>,
     /// Max seconds to poll a pending URL before failing (default 300).
     pub(crate) max_poll_duration_secs: Option<u64>,
-    /// When set (requires `resource-verify`; enable via `aauth-reqwest`'s `verify` feature),
-    /// resource and auth tokens are verified before use.
-    #[cfg(feature = "resource-verify")]
-    pub(crate) metadata_fetcher: Option<Arc<DynMetadataFetcher<'static>>>,
+    /// JWKS / well-known discovery for verifying resource challenges and auth tokens.
+    pub(crate) metadata_fetcher: F,
+    /// When `true` (default), verify the auth token JWT signature via the issuer JWKS
+    /// (spec SHOULD). Resource-challenge verification and auth-token claim binding always run.
+    pub(crate) verify_auth_signature: bool,
 }
 
 /// Builder for [`AgentOptions`]. Only `provider` is required.
 #[derive(Clone)]
-pub struct AgentOptionsBuilder {
-    provider: Arc<super::keys::DynKeyMaterialProvider<'static>>,
+pub struct AgentOptionsBuilder<P, F = AbsentMetadataFetcher>
+where
+    P: KeyMaterialProvider + Clone,
+    F: MetadataFetcher + Clone,
+{
+    provider: P,
     person_server_url: Option<String>,
     person_server_metadata: Option<PersonServerMetadata>,
     opaque_token: Option<String>,
@@ -105,18 +115,25 @@ pub struct AgentOptionsBuilder {
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<ClarificationCallback>,
     max_poll_duration_secs: Option<u64>,
-    #[cfg(feature = "resource-verify")]
-    metadata_fetcher: Option<Arc<DynMetadataFetcher<'static>>>,
+    metadata_fetcher: F,
+    verify_auth_signature: bool,
 }
 
-impl AgentOptions {
-    pub fn builder(
-        provider: Arc<super::keys::DynKeyMaterialProvider<'static>>,
-    ) -> AgentOptionsBuilder {
+impl<P> AgentOptions<P, AbsentMetadataFetcher>
+where
+    P: KeyMaterialProvider + Clone,
+{
+    pub fn builder(provider: P) -> AgentOptionsBuilder<P, AbsentMetadataFetcher> {
         AgentOptionsBuilder::new(provider)
     }
+}
 
-    pub fn provider(&self) -> &Arc<super::keys::DynKeyMaterialProvider<'static>> {
+impl<P, F> AgentOptions<P, F>
+where
+    P: KeyMaterialProvider + Clone,
+    F: MetadataFetcher + Clone,
+{
+    pub fn provider(&self) -> &P {
         &self.provider
     }
 
@@ -184,14 +201,20 @@ impl AgentOptions {
         self.max_poll_duration_secs
     }
 
-    #[cfg(feature = "resource-verify")]
-    pub fn metadata_fetcher(&self) -> Option<&Arc<DynMetadataFetcher<'static>>> {
-        self.metadata_fetcher.as_ref()
+    pub fn metadata_fetcher(&self) -> &F {
+        &self.metadata_fetcher
+    }
+
+    pub fn verify_auth_signature(&self) -> bool {
+        self.verify_auth_signature
     }
 }
 
-impl AgentOptionsBuilder {
-    pub fn new(provider: Arc<super::keys::DynKeyMaterialProvider<'static>>) -> Self {
+impl<P> AgentOptionsBuilder<P, AbsentMetadataFetcher>
+where
+    P: KeyMaterialProvider + Clone,
+{
+    pub fn new(provider: P) -> Self {
         Self {
             provider,
             person_server_url: None,
@@ -210,11 +233,17 @@ impl AgentOptionsBuilder {
             on_interaction: None,
             on_clarification: None,
             max_poll_duration_secs: None,
-            #[cfg(feature = "resource-verify")]
-            metadata_fetcher: None,
+            metadata_fetcher: AbsentMetadataFetcher,
+            verify_auth_signature: true,
         }
     }
+}
 
+impl<P, F> AgentOptionsBuilder<P, F>
+where
+    P: KeyMaterialProvider + Clone,
+    F: MetadataFetcher + Clone,
+{
     pub fn person_server_url(mut self, url: impl Into<String>) -> Self {
         self.person_server_url = Some(url.into());
         self
@@ -298,13 +327,45 @@ impl AgentOptionsBuilder {
         self
     }
 
-    #[cfg(feature = "resource-verify")]
-    pub fn metadata_fetcher(mut self, fetcher: Arc<DynMetadataFetcher<'static>>) -> Self {
-        self.metadata_fetcher = Some(fetcher);
+    /// Enable or disable auth-token JWT signature verification (spec SHOULD; default `true`).
+    /// Resource-challenge verification and auth-token claim checks always run.
+    pub fn verify_auth_signature(mut self, enabled: bool) -> Self {
+        self.verify_auth_signature = enabled;
         self
     }
 
-    pub fn build(self) -> AgentOptions {
+    /// Set the metadata fetcher, changing the builder's `F` type parameter.
+    pub fn metadata_fetcher<F2: MetadataFetcher + Clone>(
+        self,
+        fetcher: F2,
+    ) -> AgentOptionsBuilder<P, F2> {
+        AgentOptionsBuilder {
+            provider: self.provider,
+            person_server_url: self.person_server_url,
+            person_server_metadata: self.person_server_metadata,
+            opaque_token: self.opaque_token,
+            capabilities: self.capabilities,
+            mission: self.mission,
+            justification: self.justification,
+            login_hint: self.login_hint,
+            tenant: self.tenant,
+            domain_hint: self.domain_hint,
+            prompt: self.prompt,
+            on_metadata: self.on_metadata,
+            on_auth_token: self.on_auth_token,
+            on_opaque_token: self.on_opaque_token,
+            on_interaction: self.on_interaction,
+            on_clarification: self.on_clarification,
+            max_poll_duration_secs: self.max_poll_duration_secs,
+            metadata_fetcher: fetcher,
+            verify_auth_signature: self.verify_auth_signature,
+        }
+    }
+
+    pub fn build(self) -> AgentOptions<P, F>
+    where
+        F: Clone,
+    {
         AgentOptions {
             provider: self.provider,
             person_server_url: self.person_server_url,
@@ -323,14 +384,18 @@ impl AgentOptionsBuilder {
             on_interaction: self.on_interaction,
             on_clarification: self.on_clarification,
             max_poll_duration_secs: self.max_poll_duration_secs,
-            #[cfg(feature = "resource-verify")]
             metadata_fetcher: self.metadata_fetcher,
+            verify_auth_signature: self.verify_auth_signature,
         }
     }
 }
 
 impl AgentAuth {
-    pub fn from_options(options: &AgentOptions) -> Self {
+    pub fn from_options<P, F>(options: &AgentOptions<P, F>) -> Self
+    where
+        P: KeyMaterialProvider + Clone,
+        F: MetadataFetcher + Clone,
+    {
         Self {
             token_cache: HashMap::new(),
             opaque_cache: HashMap::new(),

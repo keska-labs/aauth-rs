@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::sync::Mutex;
 
 use aauth::AgentAuthError;
@@ -7,8 +6,8 @@ use aauth::KeyMaterialProvider;
 use aauth::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
 use aauth::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use aauth::jwt::{ParsedToken, jwk_thumbprint};
+use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge};
-#[cfg(feature = "verify")]
 use aauth::resource_verify::{verify_client_auth_token, verify_resource_challenge};
 use http::Extensions;
 use http::header::LOCATION;
@@ -22,16 +21,24 @@ use crate::send::SignedSend;
 use crate::signed::SigningOptions;
 use crate::token_exchange::{TokenExchangeOptions, exchange_token_with};
 
-pub struct AgentMiddleware {
-    options: AgentOptions,
+pub struct AgentMiddleware<P, F = aauth::AbsentMetadataFetcher>
+where
+    P: KeyMaterialProvider + Clone,
+    F: MetadataFetcher + Clone,
+{
+    options: AgentOptions<P, F>,
     injector: Mutex<AgentAuth>,
-    signing: SigningMiddleware,
+    signing: SigningMiddleware<P>,
 }
 
-impl AgentMiddleware {
-    pub fn new(options: AgentOptions) -> Self {
+impl<P, F> AgentMiddleware<P, F>
+where
+    P: KeyMaterialProvider + Clone,
+    F: MetadataFetcher + Clone,
+{
+    pub fn new(options: AgentOptions<P, F>) -> Self {
         let signing = SigningMiddleware::new(
-            Arc::clone(options.provider()),
+            options.provider().clone(),
             SigningOptions {
                 capabilities: options.capabilities().cloned(),
                 mission: options.mission().cloned(),
@@ -43,7 +50,13 @@ impl AgentMiddleware {
             options,
         }
     }
+}
 
+impl<P, F> AgentMiddleware<P, F>
+where
+    P: KeyMaterialProvider + Clone + Send + Sync,
+    F: MetadataFetcher + Clone + Send + Sync,
+{
     async fn send_wrapped(
         &self,
         req: Request,
@@ -68,13 +81,21 @@ impl AgentMiddleware {
     }
 }
 
-struct AgentSend<'a> {
-    middleware: &'a AgentMiddleware,
+struct AgentSend<'a, P, F>
+where
+    P: KeyMaterialProvider + Clone,
+    F: MetadataFetcher + Clone,
+{
+    middleware: &'a AgentMiddleware<P, F>,
     extensions: &'a mut Extensions,
     next: Next<'a>,
 }
 
-impl SignedSend for AgentSend<'_> {
+impl<P, F> SignedSend for AgentSend<'_, P, F>
+where
+    P: KeyMaterialProvider + Clone + Send + Sync,
+    F: MetadataFetcher + Clone + Send + Sync,
+{
     async fn send(&mut self, req: Request) -> Result<Response> {
         self.middleware
             .send_agent_signed(req, self.extensions, self.next.clone())
@@ -83,7 +104,11 @@ impl SignedSend for AgentSend<'_> {
 }
 
 #[async_trait::async_trait]
-impl Middleware for AgentMiddleware {
+impl<P, F> Middleware for AgentMiddleware<P, F>
+where
+    P: KeyMaterialProvider + Clone + Send + Sync + 'static,
+    F: MetadataFetcher + Clone + Send + Sync + 'static,
+{
     async fn handle(
         &self,
         req: Request,
@@ -96,7 +121,11 @@ impl Middleware for AgentMiddleware {
     }
 }
 
-impl AgentMiddleware {
+impl<P, F> AgentMiddleware<P, F>
+where
+    P: KeyMaterialProvider + Clone + Send + Sync + 'static,
+    F: MetadataFetcher + Clone + Send + Sync + 'static,
+{
     async fn handle_inner(
         &self,
         req: Request,
@@ -175,17 +204,14 @@ impl AgentMiddleware {
                     };
                     let agent_jkt = jwk_thumbprint(&material.signing_jwk.public_jwk())?;
 
-                    #[cfg(feature = "verify")]
-                    if let Some(fetcher) = self.options.metadata_fetcher() {
-                        verify_resource_challenge(
-                            &resource_token,
-                            &origin,
-                            &agent_sub,
-                            &agent_jkt,
-                            fetcher.as_ref(),
-                        )
-                        .await?;
-                    }
+                    let resource_claims = verify_resource_challenge(
+                        &resource_token,
+                        &origin,
+                        &agent_sub,
+                        &agent_jkt,
+                        self.options.metadata_fetcher(),
+                    )
+                    .await?;
 
                     let person_server_url =
                         resolve_person_server_url(self.options.person_server_url(), agent_jwt)?;
@@ -206,17 +232,16 @@ impl AgentMiddleware {
                     )
                     .await?;
 
-                    #[cfg(feature = "verify")]
-                    if let Some(fetcher) = self.options.metadata_fetcher() {
-                        verify_client_auth_token(
-                            &result.auth_token,
-                            &origin,
-                            &agent_sub,
-                            &agent_jkt,
-                            fetcher.as_ref(),
-                        )
-                        .await?;
-                    }
+                    verify_client_auth_token(
+                        &result.auth_token,
+                        &origin,
+                        &resource_claims.aud,
+                        &agent_sub,
+                        &agent_jkt,
+                        self.options.metadata_fetcher(),
+                        self.options.verify_auth_signature(),
+                    )
+                    .await?;
 
                     {
                         let mut injector = self.injector.lock().unwrap();

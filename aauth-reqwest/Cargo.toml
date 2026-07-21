@@ -13,8 +13,7 @@ keywords = ["aauth", "oauth", "authentication", "reqwest", "http-signatures"]
 categories = ["authentication", "web-programming", "asynchronous"]
 
 [features]
-default = ["verify"]
-verify = ["aauth/resource-verify"]
+default = []
 
 [dependencies]
 aauth = { workspace = true, default-features = false, features = ["agent"] }

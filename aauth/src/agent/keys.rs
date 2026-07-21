@@ -76,8 +76,8 @@ impl TestKeys {
     pub fn key_provider(
         &self,
         agent_jwt: impl Into<String>,
-    ) -> Arc<DynKeyMaterialProvider<'static>> {
-        StaticKeyMaterialProvider::from_test_keys(self, agent_jwt).into_arc()
+    ) -> Arc<StaticKeyMaterialProvider> {
+        Arc::new(StaticKeyMaterialProvider::from_test_keys(self, agent_jwt))
     }
 }
 
@@ -99,8 +99,8 @@ impl StaticKeyMaterialProvider {
         })
     }
 
-    pub fn into_arc(self) -> Arc<DynKeyMaterialProvider<'static>> {
-        DynKeyMaterialProvider::new_arc(self)
+    pub fn into_arc(self) -> Arc<Self> {
+        Arc::new(self)
     }
 }
 
