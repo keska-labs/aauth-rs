@@ -58,67 +58,23 @@ impl FromStr for JwtTyp {
     }
 }
 
-/// Public JWK used in JWKS and JWT `cnf.jwk` claims.
+/// Public JWK used in JWKS and JWT `cnf.jwk` claims (`OKP`/Ed25519 or `EC`/P-256).
 ///
-/// Supports Ed25519 (`kty=OKP`, `crv=Ed25519`) and P-256 (`kty=EC`, `crv=P-256`).
+/// Re-exported from [`httpsig_key`] so HTTP Signature Keys and AAuth JWTs share one type.
 ///
 /// Direction: Any -> Any GET `{jwks_uri}`; embedded in JWT `cnf.jwk` claims.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#jwks-discovery-and-caching-jwks-discovery`
-#[serde_with::apply(
-    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
-)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OkpJwk {
-    /// Key type (`OKP` or `EC`).
-    pub kty: String,
-    /// Curve name (`Ed25519` or `P-256`).
-    pub crv: String,
-    /// Base64url-encoded public key coordinate (`x`).
-    pub x: String,
-    /// Base64url-encoded public key coordinate (`y`). Required for `kty=EC`.
-    pub y: Option<String>,
-    /// Key identifier, matched against the JWT header `kid` during verification.
-    pub kid: Option<String>,
-}
+pub use httpsig_key::PublicJwk;
 
-/// Private JWK used locally for HTTP request signing.
+/// Private signing JWK (`OKP`/Ed25519 or `EC`/P-256).
 ///
-/// Supports Ed25519 (`kty=OKP`) and P-256 ES256 (`kty=EC`).
+/// Re-exported from [`httpsig_key`].
 ///
 /// Direction: local signing material; public half published via GET `{jwks_uri}`.
 ///
 /// Spec: `draft-hardt-oauth-aauth-protocol.md#keying-material`
-#[serde_with::apply(
-    Option => #[serde(default, skip_serializing_if = "Option::is_none")],
-)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OkpSigningJwk {
-    /// Key type (`OKP` or `EC`).
-    pub kty: String,
-    /// Curve name (`Ed25519` or `P-256`).
-    pub crv: String,
-    /// Base64url-encoded public key coordinate (`x`).
-    pub x: String,
-    /// Base64url-encoded public key coordinate (`y`). Required for `kty=EC`.
-    pub y: Option<String>,
-    /// Base64url-encoded private key coordinate.
-    pub d: String,
-    /// Key identifier published in JWKS and referenced by JWT header `kid`.
-    pub kid: Option<String>,
-}
-
-impl OkpSigningJwk {
-    pub fn public_jwk(&self) -> OkpJwk {
-        OkpJwk {
-            kty: self.kty.clone(),
-            crv: self.crv.clone(),
-            x: self.x.clone(),
-            y: self.y.clone(),
-            kid: self.kid.clone(),
-        }
-    }
-}
+pub use httpsig_key::SigningJwk;
 
 /// RFC 7800 confirmation claim binding a token to a public key.
 ///
@@ -128,7 +84,7 @@ impl OkpSigningJwk {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CnfClaim {
     /// Agent public key. MUST match the key used to sign the HTTP request.
-    pub jwk: OkpJwk,
+    pub jwk: PublicJwk,
 }
 
 /// RFC 8693-style delegation chain node in an auth token.

@@ -52,8 +52,8 @@ pub enum JwtError {
     #[error("unsupported JWK kty: {0}")]
     UnsupportedKty(String),
 
-    #[error("JWK must be an object")]
-    JwkNotObject,
+    #[error("JWK thumbprint failed: {0}")]
+    Thumbprint(String),
 
     #[error("JWK canonicalize failed")]
     Canonicalize(#[source] serde_json::Error),

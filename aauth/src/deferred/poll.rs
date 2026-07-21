@@ -5,7 +5,7 @@ use http::header::{CONTENT_TYPE, RETRY_AFTER};
 use tokio::time::sleep;
 
 use crate::error::{DeferredError, Result};
-use crate::jwt::OkpSigningJwk;
+use crate::jwt::SigningJwk;
 use crate::protocol::{
     AAuthErrorCode, AAuthProtocolError, ClarificationResponse, PREFER, TokenResponseBody,
 };
@@ -20,7 +20,7 @@ const DEFAULT_PREFER_WAIT: u64 = 45;
 /// Signs outbound HTTP requests to pending URLs (e.g. Person Server → Access Server).
 pub trait OutboundSignatureProvider: Send + Sync {
     fn signature_jwt(&self) -> String;
-    fn signing_jwk(&self) -> &OkpSigningJwk;
+    fn signing_jwk(&self) -> &SigningJwk;
 }
 
 #[derive(Debug, Clone)]

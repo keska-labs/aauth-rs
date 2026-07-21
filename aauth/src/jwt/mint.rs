@@ -3,7 +3,8 @@
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use uuid::Uuid;
 
-use crate::jwt::{AuthClaims, CnfClaim, OkpJwk};
+use crate::error::{JwtError, Result};
+use crate::jwt::{AuthClaims, CnfClaim, PublicJwk};
 use crate::protocol::JwtTyp;
 
 pub(crate) struct AuthJwtMintParams<'a> {
@@ -13,12 +14,12 @@ pub(crate) struct AuthJwtMintParams<'a> {
     pub iss: &'a str,
     pub aud: &'a str,
     pub agent: &'a str,
-    pub agent_jwk: OkpJwk,
+    pub agent_jwk: PublicJwk,
     pub sub: Option<&'a str>,
     pub scope: Option<&'a str>,
 }
 
-pub(crate) fn encode_auth_jwt(params: AuthJwtMintParams<'_>) -> String {
+pub(crate) fn encode_auth_jwt(params: AuthJwtMintParams<'_>) -> Result<String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -46,5 +47,7 @@ pub(crate) fn encode_auth_jwt(params: AuthJwtMintParams<'_>) -> String {
     header.typ = Some(JwtTyp::Auth.as_str().into());
     header.kid = params.kid.map(str::to_string);
 
-    encode(&header, &claims, params.encoding_key).expect("sign auth jwt")
+    encode(&header, &claims, params.encoding_key)
+        .map_err(JwtError::Decode)
+        .map_err(Into::into)
 }

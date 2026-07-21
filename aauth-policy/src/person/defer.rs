@@ -34,12 +34,15 @@ impl<P, S, M> PolicyPersonTokenService<P, S, M> {
     {
         match decision {
             PersonTokenDecision::Grant(grant) => {
-                let body = self.config.mint_person_auth(
-                    &self.minter,
-                    &grant.sub,
-                    grant.scope.as_deref(),
-                    ctx.agent_claims.identifier(),
-                );
+                let body = self
+                    .config
+                    .mint_person_auth(
+                        &self.minter,
+                        &grant.sub,
+                        grant.scope.as_deref(),
+                        &ctx.agent_claims,
+                    )
+                    .map_err(PersonTokenServiceError::from)?;
                 Ok(PersonTokenFlowOutcome::granted(body))
             }
             PersonTokenDecision::Federate => match self
@@ -89,12 +92,15 @@ impl<P, S, M> PolicyPersonTokenService<P, S, M> {
     {
         match decision {
             PersonTokenDecision::Grant(grant) => {
-                let body = self.config.mint_person_auth(
-                    &self.minter,
-                    &grant.sub,
-                    grant.scope.as_deref(),
-                    ctx.agent_claims.identifier(),
-                );
+                let body = self
+                    .config
+                    .mint_person_auth(
+                        &self.minter,
+                        &grant.sub,
+                        grant.scope.as_deref(),
+                        &ctx.agent_claims,
+                    )
+                    .map_err(PersonTokenServiceError::from)?;
                 self.pending
                     .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
                     .await

@@ -33,8 +33,8 @@ pub use interaction::{
     InteractionQuestionResponse, InteractionRequest, InteractionType, MissionStatusError,
 };
 pub use jwt::{
-    ActClaim, AgentClaims, AuthClaims, CnfClaim, JwtTyp, OkpJwk, OkpSigningJwk, ResourceClaims,
-    ResourceInteractionClaim,
+    ActClaim, AgentClaims, AuthClaims, CnfClaim, JwtTyp, PublicJwk, ResourceClaims,
+    ResourceInteractionClaim, SigningJwk,
 };
 pub use metadata::{
     AccessServerMetadata, AgentProviderMetadata, JwksDocument, PersonServerMetadata,

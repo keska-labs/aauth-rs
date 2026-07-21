@@ -3,8 +3,8 @@ mod support;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use aauth::KeyMaterialProvider;
+use aauth::ParsedToken;
 use aauth::PendingOutcome;
-use aauth::VerifiedToken;
 use aauth::protocol::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
 use aauth::{DeferCreated, DeferRequirement, VerifyTokenOptions, verify_token};
 use aauth_policy::{InMemoryPersonPendingStore, PendingStore};
@@ -85,7 +85,7 @@ async fn verify_token_agent_jwt() {
     .unwrap();
 
     match result {
-        VerifiedToken::Agent(agent) => {
+        ParsedToken::Agent(agent) => {
             assert_eq!(agent.iss, AGENT_URL);
             assert_eq!(agent.dwk, "aauth-agent.json");
             assert_eq!(agent.sub, AGENT_ID);
@@ -116,7 +116,7 @@ async fn verify_token_auth_jwt() {
     .unwrap();
 
     match result {
-        VerifiedToken::Auth(auth) => {
+        ParsedToken::Auth(auth) => {
             assert_eq!(auth.iss, PERSON_SERVER_URL);
             assert_eq!(auth.dwk, "aauth-person.json");
             assert_eq!(auth.agent, AGENT_ID);

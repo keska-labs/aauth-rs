@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response};
 use crate::error::{DeferredError, MetadataError, Result, VerifyError, VerifyReason};
-use crate::jwt::VerifiedToken;
+use crate::jwt::ParsedToken;
 use crate::metadata::MetadataFetcher;
 use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::mint_person_server_signature_jwt;
@@ -32,7 +32,16 @@ impl PersonServerConfig {
         agent_token: &str,
     ) -> Result<FederationOutcome> {
         let client = &self.http_client;
-        let claims = crate::jwt::decode_resource_token_unverified(resource_token)?;
+        let claims = match ParsedToken::parse(resource_token)? {
+            ParsedToken::Resource(c) => c,
+            _ => {
+                return Err(VerifyError::Invalid {
+                    typ: JwtTyp::Resource,
+                    reason: VerifyReason::WrongTyp,
+                }
+                .into());
+            }
+        };
         let access_server_url = claims.aud.trim_end_matches('/').to_string();
         let metadata_url = format!("{access_server_url}/.well-known/aauth-access.json");
         let metadata_resp =
@@ -154,8 +163,8 @@ pub async fn verify_federated_auth_token(
     agent_token: &str,
     fetcher: Arc<dyn MetadataFetcher>,
 ) -> Result<()> {
-    let agent = match VerifiedToken::decode_unverified(agent_token)? {
-        VerifiedToken::Agent(c) => c,
+    let agent = match ParsedToken::parse(agent_token)? {
+        ParsedToken::Agent(c) => c,
         _ => {
             return Err(VerifyError::Invalid {
                 typ: JwtTyp::Agent,
@@ -175,7 +184,7 @@ pub async fn verify_federated_auth_token(
     .await?;
 
     let auth = match verified {
-        VerifiedToken::Auth(c) => c,
+        ParsedToken::Auth(c) => c,
         _ => {
             return Err(VerifyError::Invalid {
                 typ: JwtTyp::Auth,

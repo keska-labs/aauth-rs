@@ -1,12 +1,12 @@
-use crate::error::{Result, VerifyError, VerifyReason};
-use crate::protocol::JwtTyp;
+use crate::error::{Result, VerifyError};
 
 pub use crate::protocol::{
-    ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
-    ResourceInteractionClaim,
+    ActClaim, AgentClaims, AuthClaims, CnfClaim, PublicJwk, ResourceClaims,
+    ResourceInteractionClaim, SigningJwk,
 };
 
-use super::decode::{decode_unverified, decode_verified, verified_validation_for_jwt};
+use super::decode::{decode_unverified, decode_verified, jwt_header, verified_validation};
+use crate::protocol::JwtTyp;
 
 impl AuthClaims {
     pub fn validate(&self) -> Result<()> {
@@ -21,19 +21,21 @@ impl AuthClaims {
     }
 }
 
-/// Verified AAuth JWT, tagged by header `typ`.
+/// Parsed AAuth JWT claims, tagged by header `typ` (signature not necessarily verified).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VerifiedToken {
+pub enum ParsedToken {
     Agent(AgentClaims),
     Auth(AuthClaims),
+    Resource(ResourceClaims),
 }
 
-impl VerifiedToken {
-    pub fn decode_unverified(jwt: &str) -> Result<Self> {
-        let typ = JwtTyp::from_jwt(jwt)?;
-        let error_code = typ.verify_error_code();
+impl ParsedToken {
+    /// Decode claims from a compact JWT without verifying the signature.
+    pub fn parse(jwt: &str) -> Result<Self> {
+        let header = jwt_header(jwt)?;
+        let error_code = header.typ.verify_error_code();
 
-        match typ {
+        match header.typ {
             JwtTyp::Agent => decode_unverified::<AgentClaims>(jwt)
                 .map(|data| Self::Agent(data.claims))
                 .map_err(|e| decode_err(error_code, e)),
@@ -44,20 +46,19 @@ impl VerifiedToken {
                 claims.validate()?;
                 Ok(Self::Auth(claims))
             }
-            JwtTyp::Resource => Err(VerifyError::Invalid {
-                typ,
-                reason: VerifyReason::UnsupportedTyp,
-            }
-            .into()),
+            JwtTyp::Resource => decode_unverified::<ResourceClaims>(jwt)
+                .map(|data| Self::Resource(data.claims))
+                .map_err(|e| decode_err(error_code, e)),
         }
     }
 
-    pub fn decode_verified(jwt: &str, key: &jsonwebtoken::DecodingKey) -> Result<Self> {
-        let typ = JwtTyp::from_jwt(jwt)?;
-        let error_code = typ.verify_error_code();
-        let validation = verified_validation_for_jwt(jwt)?;
+    /// Verify the JWT signature with `key` and return typed claims.
+    pub fn verify_with_key(jwt: &str, key: &jsonwebtoken::DecodingKey) -> Result<Self> {
+        let header = jwt_header(jwt)?;
+        let error_code = header.typ.verify_error_code();
+        let validation = verified_validation(header.alg);
 
-        match typ {
+        match header.typ {
             JwtTyp::Agent => decode_verified::<AgentClaims>(jwt, key, &validation)
                 .map(|data| Self::Agent(data.claims))
                 .map_err(|e| decode_err(error_code, e)),
@@ -68,11 +69,9 @@ impl VerifiedToken {
                 claims.validate()?;
                 Ok(Self::Auth(claims))
             }
-            JwtTyp::Resource => Err(VerifyError::Invalid {
-                typ,
-                reason: VerifyReason::UnsupportedTyp,
-            }
-            .into()),
+            JwtTyp::Resource => decode_verified::<ResourceClaims>(jwt, key, &validation)
+                .map(|data| Self::Resource(data.claims))
+                .map_err(|e| decode_err(error_code, e)),
         }
     }
 
@@ -80,6 +79,7 @@ impl VerifiedToken {
         match self {
             Self::Agent(c) => &c.iss,
             Self::Auth(c) => &c.iss,
+            Self::Resource(c) => &c.iss,
         }
     }
 
@@ -87,6 +87,7 @@ impl VerifiedToken {
         match self {
             Self::Agent(c) => &c.dwk,
             Self::Auth(c) => &c.dwk,
+            Self::Resource(c) => &c.dwk,
         }
     }
 
@@ -94,13 +95,15 @@ impl VerifiedToken {
         match self {
             Self::Agent(c) => c.exp,
             Self::Auth(c) => c.exp,
+            Self::Resource(c) => c.exp as i64,
         }
     }
 
-    pub fn cnf_jwk(&self) -> &crate::protocol::OkpJwk {
+    pub fn cnf_jwk(&self) -> Option<&PublicJwk> {
         match self {
-            Self::Agent(c) => &c.cnf.jwk,
-            Self::Auth(c) => &c.cnf.jwk,
+            Self::Agent(c) => Some(&c.cnf.jwk),
+            Self::Auth(c) => Some(&c.cnf.jwk),
+            Self::Resource(_) => None,
         }
     }
 
@@ -108,30 +111,37 @@ impl VerifiedToken {
         match self {
             Self::Agent(_) => "agent",
             Self::Auth(_) => "auth",
+            Self::Resource(_) => "resource",
         }
     }
 
     pub fn agent_identifier(&self) -> Option<&str> {
         match self {
             Self::Agent(c) => Some(c.identifier()),
-            Self::Auth(_) => None,
+            Self::Auth(_) | Self::Resource(_) => None,
         }
     }
-}
 
-/// Decode a resource token payload without signature verification.
-pub fn decode_resource_token_unverified(jwt: &str) -> Result<ResourceClaims> {
-    let typ = JwtTyp::from_jwt(jwt)?;
-    if typ != JwtTyp::Resource {
-        return Err(VerifyError::Invalid {
-            typ,
-            reason: VerifyReason::WrongTyp,
+    pub fn as_agent(&self) -> Option<&AgentClaims> {
+        match self {
+            Self::Agent(c) => Some(c),
+            _ => None,
         }
-        .into());
     }
-    decode_unverified::<ResourceClaims>(jwt)
-        .map(|data| data.claims)
-        .map_err(|e| decode_err(typ.verify_error_code(), e))
+
+    pub fn as_auth(&self) -> Option<&AuthClaims> {
+        match self {
+            Self::Auth(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    pub fn as_resource(&self) -> Option<&ResourceClaims> {
+        match self {
+            Self::Resource(c) => Some(c),
+            _ => None,
+        }
+    }
 }
 
 fn decode_err(code: &str, err: crate::error::AAuthError) -> crate::error::AAuthError {

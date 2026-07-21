@@ -8,7 +8,7 @@ mod support;
 
 use std::sync::Arc;
 
-use aauth::VerifiedToken;
+use aauth::ParsedToken;
 use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AgentOkResponse, JwksDocument, ResourceServerMetadata};
 use aauth::{NoResourceAccessService, ResourceAccessMode, TestKeys};
@@ -93,13 +93,17 @@ async fn main() -> anyhow::Result<()> {
 /// Runs only after `ResourceAuthLayer` has verified the signature and token.
 async fn api_data(token: VerifiedAAuthToken) -> Json<serde_json::Value> {
     match token.0 {
-        VerifiedToken::Agent(agent) => Json(serde_json::json!({
+        ParsedToken::Agent(agent) => Json(serde_json::json!({
             "status": "ok",
             "agent": agent.identifier().to_string(),
         })),
-        VerifiedToken::Auth(auth) => Json(serde_json::json!({
+        ParsedToken::Auth(auth) => Json(serde_json::json!({
             "status": "ok",
             "user": auth.sub,
+        })),
+        ParsedToken::Resource(_) => Json(serde_json::json!({
+            "status": "error",
+            "error": "unexpected_resource_token",
         })),
     }
 }

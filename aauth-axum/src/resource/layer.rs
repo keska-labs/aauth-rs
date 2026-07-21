@@ -12,7 +12,7 @@ use tower::{Layer, Service};
 use aauth::ResourceAccessContext;
 use aauth::ResourceAccessMode;
 use aauth::ResourceAccessService;
-use aauth::jwt::VerifiedToken;
+use aauth::jwt::ParsedToken;
 use aauth::metadata::MetadataFetcher;
 use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge};
 use aauth::resource::keys::ResourceTokenSigner;
@@ -151,10 +151,9 @@ where
                 if let Some(opaque_token) = extract_aauth_access(req.headers()) {
                     let agent_id = agent_sub_from_jwt(&verified_sig.jwt);
                     if service.validate_opaque(&opaque_token, &agent_id) {
-                        if let Ok(VerifiedToken::Agent(agent)) =
-                            VerifiedToken::decode_unverified(&verified_sig.jwt)
+                        if let Ok(ParsedToken::Agent(agent)) = ParsedToken::parse(&verified_sig.jwt)
                         {
-                            req.extensions_mut().insert(VerifiedToken::Agent(agent));
+                            req.extensions_mut().insert(ParsedToken::Agent(agent));
                             return inner.call(req).await;
                         }
                     }
@@ -173,7 +172,7 @@ where
                 Err(e) => return Ok(unauthorized_err(e)),
             };
 
-            if let VerifiedToken::Auth(ref auth) = verified {
+            if let ParsedToken::Auth(ref auth) = verified {
                 if let Err(e) = verify_auth_token_binding(auth, &resource_url) {
                     return Ok(unauthorized_err(e));
                 }
@@ -190,7 +189,7 @@ where
                         access_server_url,
                         person_server_fallback,
                     },
-                    VerifiedToken::Agent(agent),
+                    ParsedToken::Agent(agent),
                 ) => {
                     let audience = match resolve_resource_token_audience(
                         agent,
@@ -243,7 +242,7 @@ where
                     req.extensions_mut().insert(verified);
                     inner.call(req).await
                 }
-                (ResourceAccessMode::ResourceManaged { service }, VerifiedToken::Agent(agent)) => {
+                (ResourceAccessMode::ResourceManaged { service }, ParsedToken::Agent(agent)) => {
                     let ctx = ResourceAccessContext {
                         resource_url: resource_url.clone(),
                         agent_claims: agent.clone(),
@@ -255,9 +254,12 @@ where
                         Err(e) => Ok(crate::InternalServiceError::from(e).into_response()),
                     }
                 }
-                (ResourceAccessMode::ResourceManaged { .. }, VerifiedToken::Auth(_)) => {
+                (ResourceAccessMode::ResourceManaged { .. }, ParsedToken::Auth(_)) => {
                     req.extensions_mut().insert(verified);
                     inner.call(req).await
+                }
+                (ResourceAccessMode::ResourceManaged { .. }, ParsedToken::Resource(_)) => {
+                    Ok(unauthorized_message("unexpected resource token"))
                 }
             }
         })
@@ -265,7 +267,7 @@ where
 }
 
 fn agent_sub_from_jwt(jwt: &str) -> String {
-    VerifiedToken::decode_unverified(jwt)
+    ParsedToken::parse(jwt)
         .ok()
         .and_then(|t| t.agent_identifier().map(str::to_string))
         .unwrap_or_default()

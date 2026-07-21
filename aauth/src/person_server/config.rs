@@ -20,7 +20,7 @@ pub struct PersonServerConfig {
 }
 
 impl PersonServerConfig {
-    pub fn person_server_signing_jwk(&self) -> crate::jwt::OkpSigningJwk {
+    pub fn person_server_signing_jwk(&self) -> crate::jwt::SigningJwk {
         self.keys.person_server.signing_jwk()
     }
 }

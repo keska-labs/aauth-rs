@@ -38,7 +38,7 @@ pub fn resolve_resource_token_audience(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jwt::{AgentClaims, CnfClaim, OkpJwk};
+    use crate::jwt::{AgentClaims, CnfClaim, PublicJwk};
 
     fn agent(ps: Option<&str>) -> AgentClaims {
         AgentClaims {
@@ -47,7 +47,7 @@ mod tests {
             sub: "aauth:test@example.com".into(),
             jti: "jti".into(),
             cnf: CnfClaim {
-                jwk: OkpJwk {
+                jwk: PublicJwk {
                     kty: "OKP".into(),
                     crv: "Ed25519".into(),
                     x: "x".into(),

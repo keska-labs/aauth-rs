@@ -66,11 +66,10 @@ pub use error::{
 };
 pub use interaction_code::{canonicalize_code, generate_code};
 pub use jwt::{
-    ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
-    ResourceInteractionClaim, VerifiedToken, decode_resource_token_unverified, jwk_set_from_okp,
-    jwk_thumbprint,
+    ActClaim, AgentClaims, AuthClaims, CnfClaim, ParsedToken, PublicJwk, ResourceClaims,
+    ResourceInteractionClaim, SigningJwk, jwk_set_from_public, jwk_thumbprint,
 };
-pub use keys::{Ed25519KeyPair, OkpSigningKey, TestKeys};
+pub use keys::{Ed25519KeyPair, SigningKey, TestKeys};
 pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
 
 // Common protocol prelude used across roles (not the full governance surface).

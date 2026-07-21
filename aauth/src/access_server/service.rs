@@ -2,7 +2,7 @@ use crate::access_server::config::AccessServerConfig;
 use crate::access_server::token_context::AccessTokenContext;
 use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, PendingInput};
 use crate::error::{AAuthError, VerifyError, VerifyReason};
-use crate::jwt::{VerifiedToken, decode_resource_token_unverified};
+use crate::jwt::ParsedToken;
 use crate::protocol::JwtTyp;
 
 #[async_trait::async_trait]
@@ -28,9 +28,9 @@ impl AccessTokenContext {
         config: &AccessServerConfig,
         request: &crate::protocol::AccessTokenExchangeRequest,
     ) -> Result<Self, AAuthError> {
-        let agent = match VerifiedToken::decode_unverified(&request.agent_token)? {
-            VerifiedToken::Agent(c) => c,
-            VerifiedToken::Auth(_) => {
+        let agent = match ParsedToken::parse(&request.agent_token)? {
+            ParsedToken::Agent(c) => c,
+            ParsedToken::Auth(_) | ParsedToken::Resource(_) => {
                 return Err(VerifyError::Invalid {
                     typ: JwtTyp::Auth,
                     reason: VerifyReason::WrongTyp,
@@ -38,7 +38,16 @@ impl AccessTokenContext {
                 .into());
             }
         };
-        let resource_claims = decode_resource_token_unverified(&request.resource_token)?;
+        let resource_claims = match ParsedToken::parse(&request.resource_token)? {
+            ParsedToken::Resource(c) => c,
+            _ => {
+                return Err(VerifyError::Invalid {
+                    typ: JwtTyp::Resource,
+                    reason: VerifyReason::WrongTyp,
+                }
+                .into());
+            }
+        };
 
         Ok(Self {
             access_server_url: config.access_server_url.clone(),

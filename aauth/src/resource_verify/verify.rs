@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use jsonwebtoken::{DecodingKey, decode_header};
+use jsonwebtoken::DecodingKey;
 
-use crate::error::{JwtError, Result, VerifyError, VerifyReason};
+use crate::error::{Result, VerifyError, VerifyReason};
 use crate::http_util::normalize_server_url;
-use crate::jwt::{
-    AuthClaims, ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint,
-};
+use crate::jwt::{AuthClaims, ParsedToken, ResourceClaims, jwk_thumbprint, jwt_header};
 use crate::metadata::MetadataFetcher;
 use crate::protocol::JwtTyp;
 
@@ -25,38 +23,38 @@ pub struct VerifyResourceTokenOptions {
     pub fetcher: Arc<dyn MetadataFetcher>,
 }
 
-pub async fn verify_token(options: VerifyTokenOptions) -> Result<VerifiedToken> {
-    let typ = JwtTyp::from_jwt(&options.jwt)?;
-    match typ {
-        JwtTyp::Agent | JwtTyp::Auth => {}
-        JwtTyp::Resource => {
+pub async fn verify_token(options: VerifyTokenOptions) -> Result<ParsedToken> {
+    let parsed = ParsedToken::parse(&options.jwt)?;
+    let typ = match &parsed {
+        ParsedToken::Agent(_) => JwtTyp::Agent,
+        ParsedToken::Auth(_) => JwtTyp::Auth,
+        ParsedToken::Resource(_) => {
             return Err(VerifyError::Invalid {
-                typ,
+                typ: JwtTyp::Resource,
                 reason: VerifyReason::UnsupportedTyp,
             }
             .into());
         }
-    }
-
-    let claims = VerifiedToken::decode_unverified(&options.jwt)?;
+    };
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
-    if claims.exp() < now - CLOCK_SKEW {
+    if parsed.exp() < now - CLOCK_SKEW {
         return Err(VerifyError::Expired { typ }.into());
     }
 
-    let cnf_thumbprint = jwk_thumbprint(claims.cnf_jwk())?;
+    let cnf_jwk = parsed.cnf_jwk().ok_or(VerifyError::KeyBindingFailed)?;
+    let cnf_thumbprint = jwk_thumbprint(cnf_jwk)?;
     if cnf_thumbprint != options.http_signature_thumbprint {
         return Err(VerifyError::KeyBindingFailed.into());
     }
 
     let decoding_key =
-        fetch_decoding_key(claims.iss(), claims.dwk(), &options.fetcher, &options.jwt).await?;
+        fetch_decoding_key(parsed.iss(), parsed.dwk(), &options.fetcher, &options.jwt).await?;
 
-    VerifiedToken::decode_verified(&options.jwt, &decoding_key).map_err(|e| match e {
+    ParsedToken::verify_with_key(&options.jwt, &decoding_key).map_err(|e| match e {
         crate::error::AAuthError::Verify(v) => v.into(),
         crate::error::AAuthError::Jwt(j) => VerifyError::Jwt(j).into(),
         other => VerifyError::token(
@@ -68,7 +66,24 @@ pub async fn verify_token(options: VerifyTokenOptions) -> Result<VerifiedToken> 
 }
 
 pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Result<ResourceClaims> {
-    let claims = decode_resource_token_unverified(&options.jwt)?;
+    let parsed = ParsedToken::parse(&options.jwt)?;
+    let claims = match parsed {
+        ParsedToken::Resource(c) => c,
+        ParsedToken::Agent(_) => {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Resource,
+                reason: VerifyReason::WrongTyp,
+            }
+            .into());
+        }
+        ParsedToken::Auth(_) => {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Resource,
+                reason: VerifyReason::WrongTyp,
+            }
+            .into());
+        }
+    };
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -104,19 +119,14 @@ pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Resul
     let decoding_key =
         fetch_decoding_key(&claims.iss, &claims.dwk, &options.fetcher, &options.jwt).await?;
 
-    jsonwebtoken::decode::<ResourceClaims>(
-        &options.jwt,
-        &decoding_key,
-        &crate::jwt::verified_validation_for_jwt(&options.jwt)?,
-    )
-    .map(|data| data.claims)
-    .map_err(|e| {
-        VerifyError::token(
+    match ParsedToken::verify_with_key(&options.jwt, &decoding_key)? {
+        ParsedToken::Resource(c) => Ok(c),
+        _ => Err(VerifyError::token(
             JwtTyp::Resource.verify_error_code(),
-            format!("Resource token signature verification failed: {e}"),
+            "Resource token signature verification failed: unexpected typ",
         )
-        .into()
-    })
+        .into()),
+    }
 }
 
 /// Verify auth token `aud` binding for resource access.
@@ -143,7 +153,7 @@ pub async fn verify_client_auth_token(
     .await?;
 
     let auth = match verified {
-        VerifiedToken::Auth(c) => c,
+        ParsedToken::Auth(c) => c,
         _ => {
             return Err(VerifyError::Invalid {
                 typ: JwtTyp::Auth,
@@ -193,7 +203,7 @@ async fn fetch_decoding_key(
     let jwks_uri = fetcher.resolve_jwks_uri(iss, dwk).await?;
     let jwks = fetcher.fetch_jwks(&jwks_uri).await?;
 
-    let header = decode_header(jwt).map_err(JwtError::Decode)?;
+    let header = jwt_header(jwt)?;
     let kid = header.kid.ok_or(VerifyError::MissingKid)?;
 
     let jwk = jwks
@@ -201,6 +211,6 @@ async fn fetch_decoding_key(
         .ok_or_else(|| VerifyError::UnknownKid(kid.clone()))?;
 
     DecodingKey::from_jwk(jwk)
-        .map_err(JwtError::Decode)
+        .map_err(crate::error::JwtError::Decode)
         .map_err(Into::into)
 }

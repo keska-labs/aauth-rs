@@ -33,6 +33,8 @@ where
     Policy(#[from] PolicyError),
     #[error(transparent)]
     Orchestration(#[from] PersonOrchestrationError),
+    #[error(transparent)]
+    Aauth(#[from] aauth::AAuthError),
 }
 
 #[derive(Clone)]

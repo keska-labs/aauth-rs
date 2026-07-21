@@ -3,7 +3,7 @@
 //! Wire schemes: `draft-hardt-httpbis-signature-key-05.txt` §3.
 //! AAuth agent presentation typically uses `scheme=jwt` (`#keying-material`).
 
-use super::jwt::OkpSigningJwk;
+use super::jwt::SigningJwk;
 
 /// `Signature-Key` header value using `scheme=jwt`.
 ///
@@ -53,6 +53,6 @@ pub enum SignatureKey {
 /// `draft-hardt-oauth-aauth-protocol.md#keying-material`
 #[derive(Debug, Clone)]
 pub struct KeyMaterial {
-    pub signing_jwk: OkpSigningJwk,
+    pub signing_jwk: SigningJwk,
     pub signature_key: SignatureKey,
 }

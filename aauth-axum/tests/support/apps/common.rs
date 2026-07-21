@@ -1,7 +1,7 @@
 //! Shared protected API + resource discovery handlers for test app definers.
 
+use aauth::ParsedToken;
 use aauth::TestKeys;
-use aauth::VerifiedToken;
 use aauth::protocol::{AgentOkResponse, AuthOkResponse, JwksDocument, ResourceServerMetadata};
 use aauth_axum::VerifiedAAuthToken;
 use axum::Json;
@@ -26,20 +26,24 @@ impl ResourceDiscoveryState {
 
 pub async fn api_data(token: VerifiedAAuthToken) -> Json<serde_json::Value> {
     match token.0 {
-        VerifiedToken::Auth(auth) => Json(
+        ParsedToken::Auth(auth) => Json(
             serde_json::to_value(AuthOkResponse {
                 status: "ok".into(),
                 user: auth.sub,
             })
             .expect("serialize"),
         ),
-        VerifiedToken::Agent(agent) => Json(
+        ParsedToken::Agent(agent) => Json(
             serde_json::to_value(AgentOkResponse {
                 status: "ok".into(),
                 agent: agent.identifier().to_string(),
             })
             .expect("serialize"),
         ),
+        ParsedToken::Resource(_) => Json(serde_json::json!({
+            "status": "error",
+            "error": "unexpected_resource_token",
+        })),
     }
 }
 

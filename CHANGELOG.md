@@ -26,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `person_router`, `access_router`, and `resource_router` in `aauth-axum` to mount canonical role routes (`merge` / `nest` into an app whose state implements `FromRef` to the matching `*ServerState`).
 - Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
 - `@aauth/fetch` CLI interop tests (`fetch_person_server`, `fetch_federated_hosted_ps`) for hybrid local axum + hosted whoami / Person Server (ignored; need bootstrap + `AAUTH_E2E_PUBLIC_BASE`).
-- JWT verification picks `Validation` algorithms from the token header (`EdDSA` or `ES256`); jsonwebtoken 10 rejects mixed algorithm families. Enables Secure Enclave / `@aauth/bootstrap` agent tokens.
 - Spec-complete governance wire types: `MissionProposalRequest`, `PermissionRequest`/`PermissionResponse`, `InteractionRequest`, `AuditRequest`, and related payloads.
 - `AuthorizationRequest`, `ResourceTokenResponse`, `AuthorizationGrantedResponse`, and resource authorization response bodies in `protocol::authorization`.
 - `AgentProviderMetadata` (replaces loose `MetadataDocument`) with typed agent-provider metadata fields from the spec.
@@ -42,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Reuse `httpsig-key` JWK types: `OkpJwk` / `OkpSigningJwk` → `PublicJwk` / `SigningJwk` (re-exported); `jwk_thumbprint` delegates to `httpsig-key`; `jwk_set_from_okp` → `jwk_set_from_public`.
+- Rename `VerifiedToken` → `ParsedToken` (now includes `Resource`); `decode_unverified` / `decode_verified` → `parse` / `verify_with_key`; remove `decode_resource_token_unverified`.
+- Rename `OkpSigningKey` → `SigningKey`; `TestKeys` party key `kid`s default to JWK thumbprint.
+- `PersonAuthJwtMinter` / `AccessAuthJwtMinter` take `agent_jwk: &PublicJwk` and return `Result`; `PersonServerConfig::mint_person_auth` takes `&AgentClaims` so auth JWT `cnf` matches the real agent key.
+- JWT verification picks `Validation` algorithms from the token header (`EdDSA` or `ES256`); jsonwebtoken 10 rejects mixed algorithm families. Enables Secure Enclave / `@aauth/bootstrap` agent tokens.
 - `aauth-axum` examples build real axum apps in-file (`identity_resource_app`, `person_server_app`, … returning a `Router` served from `main`) with separate listeners per party; identity-based uses `ResourceAccessMode::IdentityBased`. Tests use one-hop app definers under `tests/support/apps/` instead of `TestScenario` / `spawn_test_server`.
 - `aauth` HTTP Message Signature sign/verify uses workspace crate `httpsig-key` (RFC 9421 via `httpsig`).
 - `aauth-reqwest` signing: `RequestSigningExt` on `reqwest::Request` (`.sign` / `.sign_with_auth_token`), `SigningOptions::apply_to`; removed free `sign_request` / `SignRequest` on `KeyMaterial` / free `sign_and_run` shim.
@@ -57,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `InMemoryPendingStore::Error` is `std::convert::Infallible` (the in-memory store never returns `Err`).
 - Role service traits (`PersonTokenService`, `AccessTokenService`, `ResourceAccessService`) are the primary integration API in `aauth`; policy + pending-store orchestration lives in `aauth-policy`.
 - Service input contexts (`PersonTokenContext`, `AccessTokenContext`, `ResourceAccessContext`) moved to role modules in `aauth`.
-- `mint_person_auth` takes `sub` / `scope` primitives instead of `AuthGrant`.
+- `mint_person_auth` takes `&AgentClaims` (uses `cnf.jwk`) plus `sub` / `scope` instead of `AuthGrant`.
 - HTTP signature verification rebuilds the signature base in `Signature-Input` component order and includes covered headers such as `content-type` (interop with `@hellocoop/httpsig`). Incoming `Signature` values accept standard base64 in addition to URL-safe. `@method` in the signature base uses uppercase.
 - `sign_request` includes `content-type` in covered components for POST requests when that header is present.
 - JWT claim payload structs (`AgentClaims`, `AuthClaims`, `ResourceClaims`, …) moved from `jwt::claims` to `protocol::jwt`; `jwt` retains decode/verify only.

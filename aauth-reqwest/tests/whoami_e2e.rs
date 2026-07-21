@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use aauth::{KeyMaterial, OkpSigningJwk, SignatureKey, SignatureKeyJwt, StaticKeyMaterialProvider};
+use aauth::{KeyMaterial, SignatureKey, SignatureKeyJwt, SigningJwk, StaticKeyMaterialProvider};
 use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder};
 use serde::Deserialize;
 use serde_json::Value;
@@ -101,8 +101,8 @@ fn provider_from_bootstrap() -> Arc<dyn aauth::KeyMaterialProvider> {
         "bootstrap token signatureKey.type must be jwt"
     );
 
-    let signing_jwk: OkpSigningJwk = serde_json::from_value(token.signing_key.clone())
-        .unwrap_or_else(|e| {
+    let signing_jwk: SigningJwk =
+        serde_json::from_value(token.signing_key.clone()).unwrap_or_else(|e| {
             panic!(
                 "bootstrap signingKey is not a supported signing JWK ({e}). Got: {}",
                 token.signing_key

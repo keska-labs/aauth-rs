@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::error::{Result, VerifyError, VerifyReason};
-use crate::jwt::VerifiedToken;
+use crate::jwt::{AgentClaims, ParsedToken};
 use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::PersonAuthJwtMinter;
 use crate::person_server::token_context::PersonTokenContext;
@@ -16,9 +16,9 @@ impl PersonServerConfig {
         resource_token: &str,
         exchange_request: TokenExchangeRequest,
     ) -> Result<PersonTokenContext> {
-        let agent = match VerifiedToken::decode_unverified(agent_jwt)? {
-            VerifiedToken::Agent(c) => c,
-            VerifiedToken::Auth(_) => {
+        let agent = match ParsedToken::parse(agent_jwt)? {
+            ParsedToken::Agent(c) => c,
+            ParsedToken::Auth(_) | ParsedToken::Resource(_) => {
                 return Err(VerifyError::Invalid {
                     typ: JwtTyp::Auth,
                     reason: VerifyReason::WrongTyp,
@@ -49,18 +49,19 @@ impl PersonServerConfig {
         minter: &M,
         sub: &str,
         scope: Option<&str>,
-        agent_sub: &str,
-    ) -> TokenResponseBody {
+        agent: &AgentClaims,
+    ) -> Result<TokenResponseBody> {
         let auth_jwt = minter.mint_person_auth_jwt(
             &self.person_server_url,
             &self.resource_url,
-            agent_sub,
+            agent.identifier(),
+            &agent.cnf.jwk,
             Some(sub),
             scope,
-        );
-        TokenResponseBody {
+        )?;
+        Ok(TokenResponseBody {
             auth_token: auth_jwt,
             expires_in: 3600,
-        }
+        })
     }
 }

@@ -1,4 +1,5 @@
-use crate::jwt::{AuthJwtMintParams, encode_auth_jwt};
+use crate::error::Result;
+use crate::jwt::{AuthJwtMintParams, PublicJwk, encode_auth_jwt};
 use crate::keys::TestKeys;
 
 pub trait PersonAuthJwtMinter: Send + Sync {
@@ -7,9 +8,10 @@ pub trait PersonAuthJwtMinter: Send + Sync {
         iss: &str,
         aud: &str,
         agent: &str,
+        agent_jwk: &PublicJwk,
         sub: Option<&str>,
         scope: Option<&str>,
-    ) -> String;
+    ) -> Result<String>;
 }
 
 #[derive(Clone)]
@@ -29,9 +31,10 @@ impl PersonAuthJwtMinter for TestPersonAuthJwtMinter {
         iss: &str,
         aud: &str,
         agent: &str,
+        agent_jwk: &PublicJwk,
         sub: Option<&str>,
         scope: Option<&str>,
-    ) -> String {
+    ) -> Result<String> {
         encode_auth_jwt(AuthJwtMintParams {
             encoding_key: &self.keys.person_server.encoding_key(),
             kid: self.keys.person_server.kid(),
@@ -39,7 +42,7 @@ impl PersonAuthJwtMinter for TestPersonAuthJwtMinter {
             iss,
             aud,
             agent,
-            agent_jwk: self.keys.agent_ephemeral.public_jwk(),
+            agent_jwk: agent_jwk.clone(),
             sub,
             scope,
         })
@@ -64,9 +67,11 @@ impl TestKeys {
             iss,
             aud,
             agent,
+            &self.agent_ephemeral.public_jwk(),
             sub,
             scope,
         )
+        .expect("mint person auth jwt")
     }
 }
 

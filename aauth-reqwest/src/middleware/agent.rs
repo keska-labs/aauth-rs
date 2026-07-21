@@ -5,7 +5,7 @@ use aauth::AgentAuthError;
 use aauth::DeferredError;
 use aauth::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
 use aauth::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
-use aauth::jwt::{VerifiedToken, jwk_thumbprint};
+use aauth::jwt::{ParsedToken, jwk_thumbprint};
 use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge};
 #[cfg(feature = "verify")]
 use aauth::resource_verify::{verify_client_auth_token, verify_resource_challenge};
@@ -167,8 +167,8 @@ impl AgentMiddleware {
                 AgentAuthStep::ExchangeToken { resource_token } => {
                     let material = self.options.provider().key_material().await?;
                     let agent_jwt = agent_jwt_from_signature_key(&material.signature_key)?;
-                    let agent_sub = match VerifiedToken::decode_unverified(agent_jwt)? {
-                        VerifiedToken::Agent(agent) => agent.identifier().to_string(),
+                    let agent_sub = match ParsedToken::parse(agent_jwt)? {
+                        ParsedToken::Agent(agent) => agent.identifier().to_string(),
                         _ => {
                             return Err(AgentAuthError::ExpectedAgentJwt.into());
                         }

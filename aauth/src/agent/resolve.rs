@@ -25,9 +25,9 @@ pub fn agent_jwt_from_signature_key(signature_key: &SignatureKey) -> Result<&str
 }
 
 fn decode_agent_claims_unverified(jwt: &str) -> Result<AgentClaims> {
-    use crate::jwt::VerifiedToken;
-    match VerifiedToken::decode_unverified(jwt)? {
-        VerifiedToken::Agent(claims) => Ok(claims),
-        VerifiedToken::Auth(_) => Err(AgentAuthError::ExpectedAgentJwt.into()),
+    use crate::jwt::ParsedToken;
+    match ParsedToken::parse(jwt)? {
+        ParsedToken::Agent(claims) => Ok(claims),
+        _ => Err(AgentAuthError::ExpectedAgentJwt.into()),
     }
 }

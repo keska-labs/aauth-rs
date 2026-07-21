@@ -25,7 +25,6 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sfv 0.15.0",
- "sha2 0.11.0",
  "thiserror",
  "tokio",
  "url",

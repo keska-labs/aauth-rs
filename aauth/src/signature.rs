@@ -8,12 +8,11 @@
 use http::HeaderMap;
 use http::header::AUTHORIZATION;
 use httpsig_key::protocol::{
-    SignatureKey as HttpsigSignatureKey, SignatureKeyJwt as HttpsigSignatureKeyJwt, SigningJwk,
-    SigningMaterial,
+    SignatureKey as HttpsigSignatureKey, SignatureKeyJwt as HttpsigSignatureKeyJwt, SigningMaterial,
 };
 use httpsig_key::{SignOptions, VerifyOptions, sign as httpsig_sign, verify as httpsig_verify};
 
-use crate::jwt::OkpSigningJwk;
+use crate::jwt::SigningJwk;
 use crate::protocol::{KeyMaterial, SignatureKey};
 
 pub use crate::error::SignatureError;
@@ -47,19 +46,6 @@ impl Default for SignatureVerifyOptions {
     }
 }
 
-impl From<&OkpSigningJwk> for SigningJwk {
-    fn from(jwk: &OkpSigningJwk) -> Self {
-        Self {
-            kty: jwk.kty.clone(),
-            crv: jwk.crv.clone(),
-            x: jwk.x.clone(),
-            y: jwk.y.clone(),
-            d: jwk.d.clone(),
-            kid: jwk.kid.clone(),
-        }
-    }
-}
-
 fn signing_material(material: &KeyMaterial) -> Result<SigningMaterial> {
     let jwt = match &material.signature_key {
         SignatureKey::Jwt(j) => j.jwt.clone(),
@@ -67,7 +53,7 @@ fn signing_material(material: &KeyMaterial) -> Result<SigningMaterial> {
         SignatureKey::Hwk(_) => return Err(SignatureError::HwkUnsupported),
     };
     Ok(SigningMaterial {
-        signing_jwk: (&material.signing_jwk).into(),
+        signing_jwk: material.signing_jwk.clone(),
         signature_key: HttpsigSignatureKey::Jwt(HttpsigSignatureKeyJwt { jwt }),
     })
 }
@@ -173,7 +159,7 @@ pub fn apply_outbound_signature(
     authority: &str,
     path: &str,
     signature_key_jwt: &str,
-    signing_jwk: &OkpSigningJwk,
+    signing_jwk: &SigningJwk,
     authorization: Option<&str>,
 ) -> Result<()> {
     let material = KeyMaterial {

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use aauth::ParsedToken;
 use aauth::PendingOutcome;
-use aauth::VerifiedToken;
 use aauth::error::Result;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::protocol::{
@@ -184,7 +184,7 @@ impl MockServerState {
         };
 
         match verified {
-            VerifiedToken::Auth(auth) => {
+            ParsedToken::Auth(auth) => {
                 let body = AuthOkResponse {
                     status: "ok".into(),
                     user: auth.sub,
@@ -198,7 +198,7 @@ impl MockServerState {
                         .expect("valid http response"),
                 ))
             }
-            VerifiedToken::Agent(agent) if self.require_auth_token => {
+            ParsedToken::Agent(agent) if self.require_auth_token => {
                 let signer = self.keys.resource_token_signer();
                 let audience =
                     resolve_resource_token_audience(&agent, None, Some(&self.person_server_url))
@@ -231,7 +231,7 @@ impl MockServerState {
                         .expect("valid http response"),
                 ))
             }
-            VerifiedToken::Agent(agent) => {
+            ParsedToken::Agent(agent) => {
                 let body = AgentOkResponse {
                     status: "ok".into(),
                     agent: agent.identifier().to_string(),
@@ -245,6 +245,13 @@ impl MockServerState {
                         .expect("valid http response"),
                 ))
             }
+            ParsedToken::Resource(_) => Ok(Response::from(
+                http::Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .url(Url::parse(url).expect("valid url"))
+                    .body(b"unexpected resource token".to_vec())
+                    .expect("valid http response"),
+            )),
         }
     }
 
@@ -312,22 +319,23 @@ impl MockServerState {
                         ps: Some(self.person_server_url.clone()),
                         parent_agent: None,
                     },
-                    resource_claims: aauth::jwt::decode_resource_token_unverified(
-                        &exchange.resource_token,
-                    )
-                    .unwrap_or_else(|_| aauth::jwt::ResourceClaims {
-                        iss: self.resource_url.clone(),
-                        dwk: "aauth-resource.json".into(),
-                        aud: self.person_server_url.clone(),
-                        jti: "mock".into(),
-                        agent: AGENT_ID.into(),
-                        agent_jkt: String::new(),
-                        iat: 0,
-                        exp: u64::MAX,
-                        scope: None,
-                        mission: None,
-                        interaction: None,
-                    }),
+                    resource_claims: match aauth::jwt::ParsedToken::parse(&exchange.resource_token)
+                    {
+                        Ok(aauth::jwt::ParsedToken::Resource(c)) => c,
+                        _ => aauth::jwt::ResourceClaims {
+                            iss: self.resource_url.clone(),
+                            dwk: "aauth-resource.json".into(),
+                            aud: self.person_server_url.clone(),
+                            jti: "mock".into(),
+                            agent: AGENT_ID.into(),
+                            agent_jkt: String::new(),
+                            iat: 0,
+                            exp: u64::MAX,
+                            scope: None,
+                            mission: None,
+                            interaction: None,
+                        },
+                    },
                     exchange_request: exchange,
                     agent_token: String::new(),
                     federation: None,

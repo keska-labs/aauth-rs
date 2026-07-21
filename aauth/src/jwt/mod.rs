@@ -4,20 +4,14 @@ mod decode;
 mod mint;
 
 pub use claims::{
-    ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,
-    ResourceInteractionClaim, VerifiedToken, decode_resource_token_unverified,
+    ActClaim, AgentClaims, AuthClaims, CnfClaim, ParsedToken, PublicJwk, ResourceClaims,
+    ResourceInteractionClaim, SigningJwk,
 };
-pub use decode::{
-    decode_unverified, decode_verified, verified_validation, verified_validation_for_jwt,
-};
+pub use decode::{JwtHeaderParts, jwt_header, verified_validation, verified_validation_for_jwt};
 #[cfg(any(feature = "person-server", feature = "access-server"))]
 pub(crate) use mint::{AuthJwtMintParams, encode_auth_jwt};
 
-use std::collections::BTreeMap;
-
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use jsonwebtoken::{decode_header, jwk::JwkSet};
-use sha2::{Digest, Sha256};
+use jsonwebtoken::jwk::JwkSet;
 
 use crate::error::{JwtError, Result};
 use crate::protocol::JwtTyp;
@@ -25,44 +19,21 @@ use crate::protocol::JwtTyp;
 impl JwtTyp {
     /// Reads and parses the JWT `typ` header.
     pub fn from_jwt(jwt: &str) -> Result<Self> {
-        let header = decode_header(jwt).map_err(JwtError::Decode)?;
-        let typ = header.typ.ok_or(JwtError::MissingTyp)?;
-        typ.parse().map_err(|_| JwtError::UnknownTyp(typ).into())
+        Ok(jwt_header(jwt)?.typ)
     }
 }
 
-pub fn jwk_thumbprint(jwk: &OkpJwk) -> Result<String> {
-    let canonical = canonical_jwk_for_thumbprint(jwk)?;
-    let digest = Sha256::digest(canonical.as_bytes());
-    Ok(URL_SAFE_NO_PAD.encode(digest))
-}
-
-fn canonical_jwk_for_thumbprint(jwk: &OkpJwk) -> Result<String> {
-    let kty = jwk.kty.as_str();
-
-    let required: Vec<&str> = match kty {
-        "OKP" => vec!["crv", "kty", "x"],
-        "EC" => vec!["crv", "kty", "x", "y"],
-        "RSA" => vec!["e", "kty", "n"],
-        _ => return Err(JwtError::UnsupportedKty(kty.to_string()).into()),
-    };
-
-    let value = serde_json::to_value(jwk).map_err(JwtError::Canonicalize)?;
-    let obj = value.as_object().ok_or(JwtError::JwkNotObject)?;
-
-    let mut members = BTreeMap::new();
-    for key in required {
-        if let Some(member) = obj.get(key) {
-            members.insert(key, member.clone());
+/// RFC 7638 JWK thumbprint (delegates to [`httpsig_key::jwk_thumbprint`]).
+pub fn jwk_thumbprint(jwk: &PublicJwk) -> Result<String> {
+    httpsig_key::jwk_thumbprint(jwk).map_err(|e| match e {
+        httpsig_key::Error::UnsupportedSigningJwk { kty, .. } => {
+            JwtError::UnsupportedKty(kty).into()
         }
-    }
-
-    serde_json::to_string(&members)
-        .map_err(JwtError::Canonicalize)
-        .map_err(Into::into)
+        other => JwtError::Thumbprint(other.to_string()).into(),
+    })
 }
 
-pub fn jwk_set_from_okp(keys: &[OkpJwk]) -> Result<JwkSet> {
+pub fn jwk_set_from_public(keys: &[PublicJwk]) -> Result<JwkSet> {
     let mut jwt_keys = Vec::with_capacity(keys.len());
     for key in keys {
         let jwk: jsonwebtoken::jwk::Jwk =
@@ -80,7 +51,7 @@ mod tests {
 
     #[test]
     fn thumbprint_is_stable() {
-        let jwk = OkpJwk {
+        let jwk = PublicJwk {
             kty: "OKP".into(),
             crv: "Ed25519".into(),
             x: "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo".into(),

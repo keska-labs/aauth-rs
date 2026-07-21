@@ -5,16 +5,37 @@ use jsonwebtoken::{
 use serde::de::DeserializeOwned;
 
 use crate::error::{JwtError, Result};
+use crate::protocol::JwtTyp;
 
 const CLOCK_SKEW: u64 = 60;
 
-pub fn decode_unverified<T: DeserializeOwned>(jwt: &str) -> Result<TokenData<T>> {
+/// Parsed JWT header fields used for AAuth verify.
+#[derive(Debug, Clone)]
+pub struct JwtHeaderParts {
+    pub typ: JwtTyp,
+    pub alg: Algorithm,
+    pub kid: Option<String>,
+}
+
+/// Read `typ`, `alg`, and `kid` from a compact JWT.
+pub fn jwt_header(jwt: &str) -> Result<JwtHeaderParts> {
+    let header = decode_header(jwt).map_err(JwtError::Decode)?;
+    let typ_str = header.typ.ok_or(JwtError::MissingTyp)?;
+    let typ = typ_str.parse().map_err(|_| JwtError::UnknownTyp(typ_str))?;
+    Ok(JwtHeaderParts {
+        typ,
+        alg: header.alg,
+        kid: header.kid,
+    })
+}
+
+pub(crate) fn decode_unverified<T: DeserializeOwned>(jwt: &str) -> Result<TokenData<T>> {
     insecure_decode(jwt)
         .map_err(JwtError::Decode)
         .map_err(Into::into)
 }
 
-pub fn decode_verified<T: DeserializeOwned>(
+pub(crate) fn decode_verified<T: DeserializeOwned>(
     jwt: &str,
     key: &DecodingKey,
     validation: &Validation,
@@ -35,6 +56,5 @@ pub fn verified_validation(alg: Algorithm) -> Validation {
 
 /// Build [`verified_validation`] from the JWT `alg` header.
 pub fn verified_validation_for_jwt(jwt: &str) -> Result<Validation> {
-    let header = decode_header(jwt).map_err(JwtError::Decode)?;
-    Ok(verified_validation(header.alg))
+    Ok(verified_validation(jwt_header(jwt)?.alg))
 }

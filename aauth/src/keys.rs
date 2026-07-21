@@ -1,24 +1,24 @@
-use crate::jwt::{OkpJwk, OkpSigningJwk, jwk_set_from_okp, jwk_thumbprint};
+use crate::jwt::{PublicJwk, SigningJwk, jwk_set_from_public, jwk_thumbprint};
 use crate::metadata::StaticMetadataFetcher;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::pkcs8::EncodePrivateKey;
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use ed25519_dalek::{SigningKey as DalekSigningKey, VerifyingKey};
 use jsonwebtoken::{EncodingKey, jwk::JwkSet};
 use rand::rand_core::UnwrapErr;
 use rand::rngs::SysRng;
 
-pub trait OkpSigningKey: Clone + Send + Sync {
+pub trait SigningKey: Clone + Send + Sync {
     fn thumbprint(&self) -> &str;
     fn kid(&self) -> Option<&str>;
-    fn public_jwk(&self) -> OkpJwk;
-    fn signing_jwk(&self) -> OkpSigningJwk;
+    fn public_jwk(&self) -> PublicJwk;
+    fn signing_jwk(&self) -> SigningJwk;
     fn encoding_key(&self) -> EncodingKey;
     fn jwk_set(&self) -> JwkSet;
 }
 
 #[derive(Clone)]
 pub struct Ed25519KeyPair {
-    signing_key: SigningKey,
+    signing_key: DalekSigningKey,
     verifying_key: VerifyingKey,
     kid: Option<String>,
     thumbprint: String,
@@ -26,27 +26,36 @@ pub struct Ed25519KeyPair {
 
 impl Ed25519KeyPair {
     pub fn generate() -> Self {
-        let signing_key = SigningKey::generate(&mut UnwrapErr(SysRng));
+        Self::generate_inner(None)
+    }
+
+    /// Generate a keypair whose JWKS `kid` is the JWK thumbprint.
+    pub fn generate_with_thumbprint_kid() -> Self {
+        let signing_key = DalekSigningKey::generate(&mut UnwrapErr(SysRng));
         let verifying_key = signing_key.verifying_key();
         let public_jwk = Self::public_jwk_for(&verifying_key, None);
         let thumbprint = jwk_thumbprint(&public_jwk).expect("thumbprint");
         Self {
             signing_key,
             verifying_key,
-            kid: None,
+            kid: Some(thumbprint.clone()),
             thumbprint,
         }
     }
 
     pub fn generate_with_kid(kid: &str) -> Self {
-        let signing_key = SigningKey::generate(&mut UnwrapErr(SysRng));
+        Self::generate_inner(Some(kid.to_string()))
+    }
+
+    fn generate_inner(kid: Option<String>) -> Self {
+        let signing_key = DalekSigningKey::generate(&mut UnwrapErr(SysRng));
         let verifying_key = signing_key.verifying_key();
-        let public_jwk = Self::public_jwk_for(&verifying_key, Some(kid));
+        let public_jwk = Self::public_jwk_for(&verifying_key, kid.as_deref());
         let thumbprint = jwk_thumbprint(&public_jwk).expect("thumbprint");
         Self {
             signing_key,
             verifying_key,
-            kid: Some(kid.to_string()),
+            kid,
             thumbprint,
         }
     }
@@ -59,12 +68,12 @@ impl Ed25519KeyPair {
         self.kid.as_deref()
     }
 
-    pub fn public_jwk(&self) -> OkpJwk {
+    pub fn public_jwk(&self) -> PublicJwk {
         Self::public_jwk_for(&self.verifying_key, self.kid.as_deref())
     }
 
-    pub fn signing_jwk(&self) -> OkpSigningJwk {
-        OkpSigningJwk {
+    pub fn signing_jwk(&self) -> SigningJwk {
+        SigningJwk {
             kty: "OKP".into(),
             crv: "Ed25519".into(),
             x: URL_SAFE_NO_PAD.encode(self.verifying_key.as_bytes()),
@@ -80,11 +89,11 @@ impl Ed25519KeyPair {
     }
 
     pub fn jwk_set(&self) -> JwkSet {
-        jwk_set_from_okp(&[self.public_jwk()]).expect("valid jwk set")
+        jwk_set_from_public(&[self.public_jwk()]).expect("valid jwk set")
     }
 
-    fn public_jwk_for(key: &VerifyingKey, kid: Option<&str>) -> OkpJwk {
-        OkpJwk {
+    fn public_jwk_for(key: &VerifyingKey, kid: Option<&str>) -> PublicJwk {
+        PublicJwk {
             kty: "OKP".into(),
             crv: "Ed25519".into(),
             x: URL_SAFE_NO_PAD.encode(key.as_bytes()),
@@ -94,7 +103,7 @@ impl Ed25519KeyPair {
     }
 }
 
-impl OkpSigningKey for Ed25519KeyPair {
+impl SigningKey for Ed25519KeyPair {
     fn thumbprint(&self) -> &str {
         Ed25519KeyPair::thumbprint(self)
     }
@@ -103,11 +112,11 @@ impl OkpSigningKey for Ed25519KeyPair {
         Ed25519KeyPair::kid(self)
     }
 
-    fn public_jwk(&self) -> OkpJwk {
+    fn public_jwk(&self) -> PublicJwk {
         Ed25519KeyPair::public_jwk(self)
     }
 
-    fn signing_jwk(&self) -> OkpSigningJwk {
+    fn signing_jwk(&self) -> SigningJwk {
         Ed25519KeyPair::signing_jwk(self)
     }
 
@@ -131,13 +140,12 @@ pub struct TestKeys {
 
 impl TestKeys {
     pub fn generate() -> Self {
-        let id = uuid::Uuid::new_v4().simple().to_string();
         Self {
-            agent_root: Ed25519KeyPair::generate_with_kid(&format!("agent-root-{id}")),
+            agent_root: Ed25519KeyPair::generate_with_thumbprint_kid(),
             agent_ephemeral: Ed25519KeyPair::generate(),
-            person_server: Ed25519KeyPair::generate_with_kid(&format!("auth-{id}")),
-            access_server: Ed25519KeyPair::generate_with_kid(&format!("access-{id}")),
-            resource: Ed25519KeyPair::generate_with_kid(&format!("resource-{id}")),
+            person_server: Ed25519KeyPair::generate_with_thumbprint_kid(),
+            access_server: Ed25519KeyPair::generate_with_thumbprint_kid(),
+            resource: Ed25519KeyPair::generate_with_thumbprint_kid(),
         }
     }
 

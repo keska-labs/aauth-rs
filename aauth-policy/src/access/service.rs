@@ -30,6 +30,8 @@ where
     PendingStore(E),
     #[error(transparent)]
     Policy(#[from] PolicyError),
+    #[error(transparent)]
+    Aauth(#[from] aauth::AAuthError),
 }
 
 #[derive(Clone)]
@@ -64,7 +66,7 @@ impl<P, S, M> PolicyAccessTokenService<P, S, M> {
     {
         match decision {
             AccessTokenDecision::Grant(grant) => {
-                let body = self.mint_access_auth(grant, ctx);
+                let body = self.mint_access_auth(grant, ctx)?;
                 Ok(AuthTokenFlowOutcome::granted(body))
             }
             AccessTokenDecision::Deny(err) => Ok(AuthTokenFlowOutcome::denied(err)),
@@ -87,7 +89,7 @@ impl<P, S, M> PolicyAccessTokenService<P, S, M> {
     {
         match decision {
             AccessTokenDecision::Grant(grant) => {
-                let body = self.mint_access_auth(grant, ctx);
+                let body = self.mint_access_auth(grant, ctx)?;
                 self.pending
                     .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
                     .await
@@ -181,7 +183,11 @@ impl<P, S, M> PolicyAccessTokenService<P, S, M> {
         }))
     }
 
-    fn mint_access_auth(&self, grant: AuthGrant, ctx: &AccessTokenContext) -> TokenResponseBody
+    fn mint_access_auth(
+        &self,
+        grant: AuthGrant,
+        ctx: &AccessTokenContext,
+    ) -> Result<TokenResponseBody, aauth::AAuthError>
     where
         M: AccessAuthJwtMinter,
     {
@@ -189,16 +195,17 @@ impl<P, S, M> PolicyAccessTokenService<P, S, M> {
             &self.config.access_server_url,
             &self.config.resource_url,
             ctx.agent_claims.identifier(),
+            &ctx.agent_claims.cnf.jwk,
             Some(&grant.sub),
             grant
                 .scope
                 .as_deref()
                 .or(ctx.resource_claims.scope.as_deref()),
-        );
-        TokenResponseBody {
+        )?;
+        Ok(TokenResponseBody {
             auth_token: auth_jwt,
             expires_in: 3600,
-        }
+        })
     }
 }
 
