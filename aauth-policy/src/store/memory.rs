@@ -54,7 +54,7 @@ impl<R> PendingStore<R> for InMemoryPendingStore<R>
 where
     R: PendingStorable,
 {
-    type Error = std::io::Error;
+    type Error = std::convert::Infallible;
 
     async fn create(&self, record: R) -> Result<String, Self::Error> {
         let id = record.pending_id().to_string();

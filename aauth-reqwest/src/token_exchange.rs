@@ -1,8 +1,9 @@
 use std::future::Future;
 use std::sync::Arc;
 
+use aauth::DeferredError;
+use aauth::MetadataError;
 use aauth::agent::auth::{AgentOptions, ClarificationCallback, InteractionCallback};
-use aauth::error::{AAuthError, Result};
 use aauth::protocol::parse_aauth_requirement;
 use aauth::protocol::{
     AAuthChallenge, AAuthProtocolError, Capability, PersonServerMetadata, TokenExchangeRequest,
@@ -12,6 +13,7 @@ use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 
 use crate::deferred::{AgentDeferredOptions, poll_deferred_with};
+use crate::error::Result;
 use crate::send::SignedSend;
 
 const PREFER_WAIT: u64 = 45;
@@ -280,8 +282,7 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
         device: None,
     };
 
-    let token_body =
-        serde_json::to_string(&body).map_err(|e| AAuthError::Message(e.to_string()))?;
+    let token_body = serde_json::to_string(&body).map_err(DeferredError::Serialize)?;
 
     let http_req = HttpRequest::builder()
         .method(Method::POST)
@@ -299,7 +300,7 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             .headers()
             .get("location")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AAuthError::Message("202 response missing Location header".into()))?
+            .ok_or(DeferredError::MissingLocation)?
             .to_string();
 
         let mut deferred =
@@ -326,44 +327,71 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
         let result = poll_deferred_with(deferred.build(), send).await?;
 
         if result.response.status().is_success() {
-            let parsed: TokenResponseBody = result
+            let url = result.response.url().to_string();
+            let bytes = result
                 .response
-                .json()
+                .bytes()
                 .await
-                .map_err(|e| AAuthError::Message(e.to_string()))?;
+                .map_err(|e| MetadataError::Request {
+                    url: url.clone(),
+                    source: Box::new(e),
+                })?;
+            let parsed: TokenResponseBody =
+                serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode {
+                    url,
+                    source: e,
+                })?;
             return Ok(TokenExchangeResult {
                 auth_token: parsed.auth_token,
                 expires_in: parsed.expires_in,
             });
         }
 
-        return Err(AAuthError::Message(
-            TokenExchangeError {
-                status: result.response.status().as_u16(),
-                aauth_error: result.error,
-            }
-            .to_string(),
-        ));
+        return Err(TokenExchangeError {
+            status: result.response.status().as_u16(),
+            aauth_error: result.error,
+        }
+        .into());
     }
 
     if response.status().is_success() {
-        let parsed: TokenResponseBody = response
-            .json()
-            .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        let url = response.url().to_string();
+        let bytes = response.bytes().await.map_err(|e| MetadataError::Request {
+            url: url.clone(),
+            source: Box::new(e),
+        })?;
+        let parsed: TokenResponseBody =
+            serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode {
+                url,
+                source: e,
+            })?;
         return Ok(TokenExchangeResult {
             auth_token: parsed.auth_token,
             expires_in: parsed.expires_in,
         });
     }
 
-    Err(AAuthError::Message(
-        TokenExchangeError {
-            status: response.status().as_u16(),
-            aauth_error: None,
-        }
-        .to_string(),
-    ))
+    let status = response.status().as_u16();
+    let aauth_error = parse_protocol_error(response).await;
+    Err(TokenExchangeError {
+        status,
+        aauth_error,
+    }
+    .into())
+}
+
+async fn parse_protocol_error(response: Response) -> Option<AAuthProtocolError> {
+    if !headers_contain_json(response.headers()) {
+        return None;
+    }
+    response.json().await.ok()
+}
+
+fn headers_contain_json(headers: &http::HeaderMap) -> bool {
+    headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.contains("application/json"))
 }
 
 async fn fetch_metadata<S: SignedSend>(
@@ -384,17 +412,23 @@ async fn fetch_metadata<S: SignedSend>(
         .await?;
 
     if !response.status().is_success() {
-        return Err(AAuthError::Message(format!(
-            "Failed to fetch person server metadata: {}",
-            response.status()
-        )));
+        return Err(MetadataError::HttpStatus {
+            url: metadata_url,
+            status: response.status().as_u16(),
+        }
+        .into());
     }
 
-    let metadata: PersonServerMetadata = response
-        .json()
-        .await
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
-    metadata.validate().map_err(AAuthError::Message)?;
+    let bytes = response.bytes().await.map_err(|e| MetadataError::Request {
+        url: metadata_url.clone(),
+        source: Box::new(e),
+    })?;
+    let metadata: PersonServerMetadata =
+        serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode {
+            url: metadata_url,
+            source: e,
+        })?;
+    metadata.validate()?;
     Ok(metadata)
 }
 

@@ -3,6 +3,8 @@
 use jsonwebtoken::jwk::JwkSet;
 use serde::{Deserialize, Serialize};
 
+use crate::error::MetadataError;
+
 /// Person Server metadata (`GET /.well-known/aauth-person.json`).
 ///
 /// Direction: Any -> PS GET `/.well-known/aauth-person.json`.
@@ -37,9 +39,9 @@ pub struct PersonServerMetadata {
 }
 
 impl PersonServerMetadata {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), MetadataError> {
         if self.token_endpoint.is_empty() {
-            return Err("Person server metadata missing token_endpoint".into());
+            return Err(MetadataError::MissingTokenEndpoint);
         }
         Ok(())
     }
@@ -69,9 +71,9 @@ pub struct AccessServerMetadata {
 }
 
 impl AccessServerMetadata {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), MetadataError> {
         if self.token_endpoint.is_empty() {
-            return Err("Access server metadata missing token_endpoint".into());
+            return Err(MetadataError::MissingTokenEndpoint);
         }
         Ok(())
     }

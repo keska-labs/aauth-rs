@@ -27,7 +27,9 @@ impl<T> From<T> for AauthResponse<T> {
 pub struct InternalServiceError;
 
 impl<E: std::error::Error> From<E> for InternalServiceError {
-    fn from(_: E) -> Self {
+    fn from(e: E) -> Self {
+        // Keep typed source visible for operators; wire body stays opaque `server_error`.
+        eprintln!("aauth internal service error: {e:#}");
         Self
     }
 }
@@ -98,7 +100,7 @@ impl IntoResponse for AauthResponse<DeferCreated> {
     fn into_response(self) -> Response {
         let body = match PendingBody::for_created(&self.0.requirement) {
             Ok(b) => b,
-            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+            Err(_) => return InternalServiceError.into_response(),
         };
         let mut headers = HeaderMap::new();
         insert_defer_created_headers(&mut headers, &self.0.location, &self.0.requirement);
@@ -110,7 +112,7 @@ impl IntoResponse for AauthResponse<DeferWaiting> {
     fn into_response(self) -> Response {
         let body = match PendingBody::for_waiting(&self.0.requirement, self.0.status) {
             Ok(b) => b,
-            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+            Err(_) => return InternalServiceError.into_response(),
         };
         let mut headers = HeaderMap::new();
         insert_poll_headers(&mut headers, &self.0.requirement);

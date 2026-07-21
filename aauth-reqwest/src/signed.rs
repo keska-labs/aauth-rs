@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aauth::error::{AAuthError, Result};
+use aauth::SignatureError;
 use aauth::protocol::{Capability, KeyMaterial, Mission, SignatureKey};
 use aauth::protocol::{SignatureKeyJwt, build_capabilities_header, build_mission_header};
 use aauth::signature::{build_signature_base_with_extras, signing_key_from_jwk};
@@ -8,6 +8,8 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::Signer;
 use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use reqwest::Request;
+
+use crate::error::Result;
 
 #[derive(Debug, Clone, Default)]
 pub struct SigningOptions {
@@ -45,16 +47,14 @@ pub fn sign_request(request: &mut Request, material: &KeyMaterial) -> Result<()>
         SignatureKey::Jwt(j) => &j.jwt,
         SignatureKey::JktJwt(j) => &j.jwt,
         SignatureKey::Hwk(_) => {
-            return Err(AAuthError::Message(
-                "hwk signature key not supported for AAuth requests".into(),
-            ));
+            return Err(SignatureError::HwkUnsupported.into());
         }
     };
     let signature_key = format!("sig=jwt;jwt=\"{token}\"");
 
     request.headers_mut().insert(
         HeaderName::from_static("signature-key"),
-        HeaderValue::from_str(&signature_key).map_err(|e| AAuthError::Message(e.to_string()))?,
+        HeaderValue::from_str(&signature_key).map_err(SignatureError::InvalidHeaderValue)?,
     );
 
     let signing_key = signing_key_from_jwk(&material.signing_jwk)?;
@@ -109,12 +109,12 @@ pub fn sign_request(request: &mut Request, material: &KeyMaterial) -> Result<()>
 
     request.headers_mut().insert(
         HeaderName::from_static("signature-input"),
-        HeaderValue::from_str(&signature_input).map_err(|e| AAuthError::Message(e.to_string()))?,
+        HeaderValue::from_str(&signature_input).map_err(SignatureError::InvalidHeaderValue)?,
     );
     request.headers_mut().insert(
         HeaderName::from_static("signature"),
         HeaderValue::from_str(&format!("sig=:{signature}:"))
-            .map_err(|e| AAuthError::Message(e.to_string()))?,
+            .map_err(SignatureError::InvalidHeaderValue)?,
     );
 
     Ok(())

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `IntoAauthProtocol` to map domain errors to HTTP status + `AAuthProtocolError`.
+- Typed domain errors under `AAuthError`: `JwtError`, `MetadataError`, `VerifyError`, `DeferredError`, `HeaderError`, `AgentAuthError`, `ResourceTokenError` (catch-all `Message` / stringly `TokenError` removed).
+- `AgentError` in `aauth-reqwest` for typed agent transport failures (`Auth`, `Exchange`, `Deferred`, `Signature`, `Jwt`, `Metadata`, `Aauth`, `BodyNotCloneable`).
+- `SignatureError` for HTTP Message Signature build/parse/verify failures (defined with the error umbrella, re-exported as `aauth::signature::SignatureError`).
+- `PersonOrchestrationError` for person-server policy orchestration failures (interaction URL validation, missing resource interaction claim, pending body build).
 - Workspace crate `aauth-policy`: high-level `PersonTokenPolicy` / `AccessTokenPolicy` / `ResourceConsentPolicy`, `PendingStore` + in-memory stores, and `Policy*Service` implementations of the `aauth` role service traits.
 - `NoResourceAccessService` marker for `ResourceAccessMode` variants that do not use a consent service.
 - Optional `aauth-axum` feature `policy` for `PersonServerState::from_policy` / `AccessServerState::from_policy` via `aauth-policy`.
@@ -33,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Remodeled `AAuthError` as a transparent umbrella over domain errors (`JwtError`, `SignatureError`, `MetadataError`, `VerifyError`, `DeferredError`, `HeaderError`, `AgentAuthError`, `ResourceTokenError`); removed catch-all `Message` / stringly `HttpError` / `TokenError`.
+- `ResourceTokenSigner` / `create_resource_token` return `ResourceTokenError` instead of `String`; metadata `validate()` returns `MetadataError`.
+- `aauth-reqwest` public APIs (`exchange_token`, `poll_deferred`, `sign_request`, …) return `Result<T, AgentError>` instead of `aauth::Result`; token exchange failures propagate `TokenExchangeError` without stringifying.
+- Signature helpers (`verify_request_signature`, `apply_outbound_signature`, `signing_key_from_jwk`, parsers) return `Result<T, SignatureError>` instead of `AAuthError`.
+- `PersonTokenServiceError`, `AccessTokenServiceError`, and `ResourceAccessServiceError` are generic over the pending-store error type (`*ServiceError<E>`); store failures keep their typed source instead of `String`.
+- `InMemoryPendingStore::Error` is `std::convert::Infallible` (the in-memory store never returns `Err`).
 - Role service traits (`PersonTokenService`, `AccessTokenService`, `ResourceAccessService`) are the primary integration API in `aauth`; policy + pending-store orchestration lives in `aauth-policy`.
 - Service input contexts (`PersonTokenContext`, `AccessTokenContext`, `ResourceAccessContext`) moved to role modules in `aauth`.
 - `mint_person_auth` takes `sub` / `scope` primitives instead of `AuthGrant`.

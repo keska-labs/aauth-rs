@@ -4,12 +4,12 @@ use http::HeaderMap;
 use url::Url;
 
 use crate::deferred::{DeferRequirement, ParsedDeferred, parse_deferred_response};
-use crate::error::{AAuthError, Result};
+use crate::error::{DeferredError, MetadataError, Result, VerifyError, VerifyReason};
 use crate::jwt::VerifiedToken;
 use crate::metadata::MetadataFetcher;
 use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::mint_person_server_signature_jwt;
-use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
+use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody, JwtTyp};
 use crate::resource_verify::{VerifyTokenOptions, verify_token};
 use crate::signature::apply_outbound_signature;
 
@@ -36,20 +36,26 @@ pub async fn federate_to_access_server(
         .get(&metadata_url)
         .send()
         .await
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
+        .map_err(|e| MetadataError::Request {
+            url: metadata_url.clone(),
+            source: Box::new(e),
+        })?;
 
     if !metadata_resp.status().is_success() {
-        return Err(AAuthError::Message(format!(
-            "Failed to fetch access server metadata: {}",
-            metadata_resp.status()
-        )));
+        return Err(MetadataError::HttpStatus {
+            url: metadata_url.clone(),
+            status: metadata_resp.status().as_u16(),
+        }
+        .into());
     }
 
-    let metadata: AccessServerMetadata = metadata_resp
-        .json()
-        .await
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
-    metadata.validate().map_err(AAuthError::Message)?;
+    let metadata: AccessServerMetadata = metadata_resp.json().await.map_err(|e| {
+        MetadataError::Request {
+            url: metadata_url,
+            source: Box::new(e),
+        }
+    })?;
+    metadata.validate()?;
 
     let body = AccessTokenExchangeRequest {
         resource_token: resource_token.to_string(),
@@ -59,7 +65,7 @@ pub async fn federate_to_access_server(
     };
 
     let (authority, path) = url_authority_path(&metadata.token_endpoint)?;
-    let body_json = serde_json::to_string(&body).map_err(|e| AAuthError::Message(e.to_string()))?;
+    let body_json = serde_json::to_string(&body).map_err(DeferredError::Serialize)?;
     let mut headers = HeaderMap::new();
     headers.insert(
         http::HeaderName::from_static("content-type"),
@@ -80,17 +86,15 @@ pub async fn federate_to_access_server(
         request = request.header(name, value);
     }
 
-    let response = request
-        .send()
-        .await
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
+    let response = request.send().await.map_err(|e| MetadataError::Request {
+        url: metadata.token_endpoint.clone(),
+        source: Box::new(e),
+    })?;
 
     let status = response.status().as_u16();
 
     if status == 402 {
-        return Err(AAuthError::Message(
-            "Access server payment required (402 stub — settlement not implemented)".into(),
-        ));
+        return Err(DeferredError::PaymentNotRequirement.into());
     }
 
     if status == 202 {
@@ -98,7 +102,10 @@ pub async fn federate_to_access_server(
         let body_bytes = response
             .bytes()
             .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+            .map_err(|e| MetadataError::Request {
+                url: metadata.token_endpoint.clone(),
+                source: Box::new(e),
+            })?;
         let ParsedDeferred {
             location,
             requirement,
@@ -111,16 +118,19 @@ pub async fn federate_to_access_server(
     }
 
     if !response.status().is_success() {
-        return Err(AAuthError::Message(format!(
-            "Access server token exchange failed: {}",
-            response.status()
-        )));
+        return Err(MetadataError::HttpStatus {
+            url: metadata.token_endpoint.clone(),
+            status,
+        }
+        .into());
     }
 
-    let token_body: TokenResponseBody = response
-        .json()
-        .await
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
+    let token_body: TokenResponseBody = response.json().await.map_err(|e| {
+        MetadataError::Request {
+            url: metadata.token_endpoint,
+            source: Box::new(e),
+        }
+    })?;
 
     verify_federated_auth_token(
         &token_body.auth_token,
@@ -143,7 +153,13 @@ pub async fn verify_federated_auth_token(
 ) -> Result<()> {
     let agent = match VerifiedToken::decode_unverified(agent_token)? {
         VerifiedToken::Agent(c) => c,
-        _ => return Err(AAuthError::Message("expected agent token".into())),
+        _ => {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Agent,
+                reason: VerifyReason::WrongTyp,
+            }
+            .into());
+        }
     };
 
     let agent_jkt = crate::jwt::jwk_thumbprint(&agent.cnf.jwk)?;
@@ -157,27 +173,33 @@ pub async fn verify_federated_auth_token(
 
     let auth = match verified {
         VerifiedToken::Auth(c) => c,
-        _ => return Err(AAuthError::Message("expected auth token from AS".into())),
+        _ => {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Auth,
+                reason: VerifyReason::ExpectedAuth,
+            }
+            .into());
+        }
     };
 
     if auth.iss.trim_end_matches('/') != expected_iss.trim_end_matches('/') {
-        return Err(AAuthError::Message("auth token iss mismatch".into()));
+        return Err(VerifyError::IssMismatch.into());
     }
     if auth.aud.trim_end_matches('/') != expected_aud.trim_end_matches('/') {
-        return Err(AAuthError::Message("auth token aud mismatch".into()));
+        return Err(VerifyError::AudMismatch.into());
     }
     if auth.agent != agent.identifier() {
-        return Err(AAuthError::Message("auth token agent mismatch".into()));
+        return Err(VerifyError::AgentMismatch.into());
     }
 
     Ok(())
 }
 
 fn url_authority_path(url: &str) -> Result<(String, String)> {
-    let parsed = Url::parse(url).map_err(|e| AAuthError::Message(e.to_string()))?;
+    let parsed = Url::parse(url).map_err(DeferredError::InvalidUrl)?;
     let authority = parsed
         .host_str()
-        .ok_or_else(|| AAuthError::Message("token endpoint missing host".into()))?
+        .ok_or(DeferredError::MissingHost)?
         .to_string();
     let authority = match parsed.port() {
         Some(port) => format!("{authority}:{port}"),

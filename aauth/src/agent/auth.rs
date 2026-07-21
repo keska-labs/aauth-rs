@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use http::{HeaderMap, StatusCode};
 
-use crate::error::{AAuthError, Result};
+use crate::error::Result;
 #[cfg(feature = "resource-verify")]
 use crate::metadata::MetadataFetcher;
 use crate::protocol::parse_aauth_requirement;
@@ -344,7 +344,7 @@ impl AgentAuth {
 
     pub fn resource_origin(url: &str) -> Result<String> {
         Ok(url::Url::parse(url)
-            .map_err(|e| AAuthError::Message(e.to_string()))?
+            .map_err(crate::error::AgentAuthError::InvalidOrigin)?
             .origin()
             .ascii_serialization())
     }

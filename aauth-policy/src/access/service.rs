@@ -9,7 +9,6 @@ use aauth::PendingOutcome;
 use aauth::PendingSnapshot;
 use aauth::access_server::config::AccessServerConfig;
 use aauth::access_server::keys::AccessAuthJwtMinter;
-use aauth::error::AAuthError;
 use aauth::generate_pending_id;
 use aauth::pending_location;
 use aauth::protocol::TokenResponseBody;
@@ -21,13 +20,16 @@ use crate::PolicyError;
 use crate::store::{AccessPendingContext, AccessPendingRecord, PendingStore, poll_auth_pending};
 
 #[derive(Debug, thiserror::Error)]
-pub enum AccessTokenServiceError {
-    #[error("pending store: {0}")]
-    PendingStore(String),
-    #[error("policy: {0}")]
+pub enum AccessTokenServiceError<E>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    /// Store persistence failure. Not `#[from]` to avoid coherence conflicts when
+    /// `E` could unify with `PolicyError`.
+    #[error(transparent)]
+    PendingStore(E),
+    #[error(transparent)]
     Policy(#[from] PolicyError),
-    #[error("orchestration: {0}")]
-    Orchestration(#[from] AAuthError),
 }
 
 #[derive(Clone)]
@@ -56,7 +58,7 @@ where
     S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter + Clone,
 {
-    type Error = AccessTokenServiceError;
+    type Error = AccessTokenServiceError<S::Error>;
 
     async fn exchange_token(
         &self,
@@ -69,7 +71,7 @@ where
     async fn poll_pending(&self, pending_id: &str) -> Result<AuthTokenPollOutcome, Self::Error> {
         poll_auth_pending(&self.pending, pending_id)
             .await
-            .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))
+            .map_err(AccessTokenServiceError::PendingStore)
     }
 
     async fn resume_pending(
@@ -77,12 +79,7 @@ where
         pending_id: &str,
         input: PendingInput,
     ) -> Result<AuthTokenFlowOutcome, Self::Error> {
-        let Some(record) = self
-            .pending
-            .load(pending_id)
-            .await
-            .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?
-        else {
+        let Some(record) = self.pending.load(pending_id).await.map_err(AccessTokenServiceError::PendingStore)? else {
             return Ok(AuthTokenFlowOutcome::Gone);
         };
 
@@ -113,7 +110,7 @@ async fn apply_access_decision<P, S, M>(
     service: &PolicyAccessTokenService<P, S, M>,
     ctx: &AccessTokenContext,
     decision: AccessTokenDecision,
-) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError>
+) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError<S::Error>>
 where
     P: AccessTokenPolicy,
     S: PendingStore<AccessPendingRecord>,
@@ -136,7 +133,7 @@ async fn apply_access_pending_decision<P, S, M>(
     ctx: &AccessTokenContext,
     pending_id: &str,
     decision: AccessTokenDecision,
-) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError>
+) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError<S::Error>>
 where
     P: AccessTokenPolicy,
     S: PendingStore<AccessPendingRecord>,
@@ -149,7 +146,7 @@ where
                 .pending
                 .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
                 .await
-                .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?;
+                .map_err(AccessTokenServiceError::PendingStore)?;
             Ok(AuthTokenFlowOutcome::granted(body))
         }
         AccessTokenDecision::Deny(err) => {
@@ -157,7 +154,7 @@ where
                 .pending
                 .complete(pending_id, PendingOutcome::Error(err.clone()))
                 .await
-                .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?;
+                .map_err(AccessTokenServiceError::PendingStore)?;
             Ok(AuthTokenFlowOutcome::denied(err))
         }
         AccessTokenDecision::Defer(requirement) => {
@@ -170,26 +167,17 @@ async fn update_access_pending_defer<P, S, M>(
     service: &PolicyAccessTokenService<P, S, M>,
     pending_id: &str,
     requirement: DeferRequirement,
-) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError>
+) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError<S::Error>>
 where
     P: AccessTokenPolicy,
     S: PendingStore<AccessPendingRecord>,
     M: AccessAuthJwtMinter + Clone,
 {
-    let Some(mut record) = service
-        .pending
-        .load(pending_id)
-        .await
-        .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?
-    else {
+    let Some(mut record) = service.pending.load(pending_id).await.map_err(AccessTokenServiceError::PendingStore)? else {
         return Ok(AuthTokenFlowOutcome::Gone);
     };
     record.snapshot = PendingSnapshot::waiting(requirement.clone());
-    service
-        .pending
-        .save(pending_id, record)
-        .await
-        .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?;
+    service.pending.save(pending_id, record).await.map_err(AccessTokenServiceError::PendingStore)?;
 
     let location = pending_location(
         &service.config.pending_base_url,
@@ -206,7 +194,7 @@ async fn create_deferred_access_response<P, S, M>(
     service: &PolicyAccessTokenService<P, S, M>,
     ctx: &AccessTokenContext,
     requirement: DeferRequirement,
-) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError>
+) -> Result<AuthTokenFlowOutcome, AccessTokenServiceError<S::Error>>
 where
     P: AccessTokenPolicy,
     S: PendingStore<AccessPendingRecord>,
@@ -233,11 +221,7 @@ where
         service.config.pending_ttl_secs,
     );
 
-    service
-        .pending
-        .create(record)
-        .await
-        .map_err(|e| AccessTokenServiceError::PendingStore(e.to_string()))?;
+    service.pending.create(record).await.map_err(AccessTokenServiceError::PendingStore)?;
 
     Ok(AuthTokenFlowOutcome::deferred(DeferCreated {
         location,

@@ -149,7 +149,7 @@ impl KeyMaterialProvider for MyProvider {
 }
 
 #[tokio::main]
-async fn main() -> aauth::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(AgentMiddleware::new(
             AgentOptions::builder(Arc::new(MyProvider))
@@ -161,8 +161,7 @@ async fn main() -> aauth::Result<()> {
     let response = client
         .get("https://resource.example/api")
         .send()
-        .await
-        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
+        .await?;
 
     println!("status: {}", response.status());
     Ok(())

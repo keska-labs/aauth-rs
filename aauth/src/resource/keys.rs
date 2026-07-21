@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use jsonwebtoken::{Header, encode};
 
+use crate::error::ResourceTokenError;
 use crate::jwt::ResourceClaims;
 use crate::keys::{Ed25519KeyPair, TestKeys};
 
@@ -10,7 +11,7 @@ pub trait ResourceTokenSigner: Send + Sync {
         &self,
         header: Header,
         claims: ResourceClaims,
-    ) -> Result<String, String>;
+    ) -> Result<String, ResourceTokenError>;
 }
 
 pub struct Ed25519ResourceTokenSigner {
@@ -29,11 +30,11 @@ impl ResourceTokenSigner for Ed25519ResourceTokenSigner {
         &self,
         mut header: Header,
         claims: ResourceClaims,
-    ) -> Result<String, String> {
+    ) -> Result<String, ResourceTokenError> {
         if header.kid.is_none() {
             header.kid = self.key.kid().map(str::to_string);
         }
-        encode(&header, &claims, &self.key.encoding_key()).map_err(|e| e.to_string())
+        encode(&header, &claims, &self.key.encoding_key()).map_err(ResourceTokenError::Encode)
     }
 }
 

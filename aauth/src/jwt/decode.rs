@@ -8,7 +8,9 @@ use crate::error::{JwtError, Result};
 const CLOCK_SKEW: u64 = 60;
 
 pub fn decode_unverified<T: DeserializeOwned>(jwt: &str) -> Result<TokenData<T>> {
-    insecure_decode(jwt).map_err(|e| JwtError::Decode(e.to_string()).into())
+    insecure_decode(jwt)
+        .map_err(JwtError::Decode)
+        .map_err(Into::into)
 }
 
 pub fn decode_verified<T: DeserializeOwned>(
@@ -16,7 +18,9 @@ pub fn decode_verified<T: DeserializeOwned>(
     key: &DecodingKey,
     validation: &Validation,
 ) -> Result<TokenData<T>> {
-    decode(jwt, key, validation).map_err(|e| JwtError::Decode(e.to_string()).into())
+    decode(jwt, key, validation)
+        .map_err(JwtError::Decode)
+        .map_err(Into::into)
 }
 
 pub fn verified_validation() -> Validation {

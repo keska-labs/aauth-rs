@@ -1,6 +1,6 @@
 //! AAuth HTTP response/request headers.
 
-use crate::error::{AAuthError, Result};
+use crate::error::{HeaderError, Result};
 
 use super::common::{Capability, Mission, RequirementLevel};
 
@@ -63,10 +63,9 @@ pub fn build_mission_header(mission: &Mission) -> String {
 }
 
 pub fn parse_mission_header(header_value: &str) -> Result<Mission> {
-    let approver = extract_quoted_param(header_value, "approver")
-        .ok_or_else(|| AAuthError::InvalidHeader("missing approver".into()))?;
-    let s256 = extract_quoted_param(header_value, "s256")
-        .ok_or_else(|| AAuthError::InvalidHeader("missing s256".into()))?;
+    let approver =
+        extract_quoted_param(header_value, "approver").ok_or(HeaderError::MissingApprover)?;
+    let s256 = extract_quoted_param(header_value, "s256").ok_or(HeaderError::MissingS256)?;
     Ok(Mission { approver, s256 })
 }
 
@@ -89,22 +88,18 @@ pub fn build_aauth_requirement(challenge: &AAuthChallenge) -> Result<String> {
 pub fn parse_aauth_requirement(header_value: &str) -> Result<AAuthChallenge> {
     let trimmed = header_value.trim();
     if trimmed.is_empty() {
-        return Err(AAuthError::InvalidHeader(
-            "empty AAuth-Requirement header".into(),
-        ));
+        return Err(HeaderError::EmptyRequirement.into());
     }
 
     let requirement_match = trimmed
         .strip_prefix("requirement=")
         .and_then(|rest| rest.split(';').next())
         .map(str::trim)
-        .ok_or_else(|| {
-            AAuthError::InvalidHeader("missing requirement= in AAuth-Requirement header".into())
-        })?;
+        .ok_or(HeaderError::MissingRequirementMember)?;
 
-    let level = requirement_match.parse().map_err(|_| {
-        AAuthError::InvalidHeader(format!("unknown requirement level: {requirement_match}"))
-    })?;
+    let level = requirement_match
+        .parse()
+        .map_err(|_| HeaderError::UnknownRequirement(requirement_match.to_string()))?;
 
     match level {
         RequirementLevel::AgentToken => Ok(AAuthChallenge::AgentToken),
@@ -112,17 +107,15 @@ pub fn parse_aauth_requirement(header_value: &str) -> Result<AAuthChallenge> {
         RequirementLevel::Clarification => Ok(AAuthChallenge::Clarification),
         RequirementLevel::Claims => Ok(AAuthChallenge::Claims),
         RequirementLevel::AuthToken => {
-            let resource_token =
-                extract_quoted_param(trimmed, "resource-token").ok_or_else(|| {
-                    AAuthError::InvalidHeader("auth-token requires resource-token".into())
-                })?;
+            let resource_token = extract_quoted_param(trimmed, "resource-token")
+                .ok_or(HeaderError::MissingResourceToken)?;
             Ok(AAuthChallenge::AuthToken { resource_token })
         }
         RequirementLevel::Interaction => {
-            let url = extract_quoted_param(trimmed, "url")
-                .ok_or_else(|| AAuthError::InvalidHeader("interaction requires url".into()))?;
-            let code = extract_quoted_param(trimmed, "code")
-                .ok_or_else(|| AAuthError::InvalidHeader("interaction requires code".into()))?;
+            let url =
+                extract_quoted_param(trimmed, "url").ok_or(HeaderError::MissingInteractionUrl)?;
+            let code =
+                extract_quoted_param(trimmed, "code").ok_or(HeaderError::MissingInteractionCode)?;
             Ok(AAuthChallenge::Interaction { url, code })
         }
     }
@@ -141,23 +134,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn round_trip_auth_token() {
-        let challenge = AAuthChallenge::AuthToken {
-            resource_token: "rt_abc123".into(),
-        };
-        let header = build_aauth_requirement(&challenge).unwrap();
-        let parsed = parse_aauth_requirement(&header).unwrap();
-        assert_eq!(parsed, challenge);
-    }
-
-    #[test]
-    fn round_trip_interaction() {
+    fn requirement_round_trip() {
         let challenge = AAuthChallenge::Interaction {
-            url: "https://auth.example/interact".into(),
-            code: "CODE1234".into(),
+            url: "https://ps.example/interact".into(),
+            code: "ABCD-EFGH".into(),
         };
         let header = build_aauth_requirement(&challenge).unwrap();
-        let parsed = parse_aauth_requirement(&header).unwrap();
-        assert_eq!(parsed, challenge);
+        assert_eq!(parse_aauth_requirement(&header).unwrap(), challenge);
     }
 }

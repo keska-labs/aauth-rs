@@ -2,7 +2,6 @@ use aauth::AuthTokenPollOutcome;
 use aauth::PendingInput;
 use aauth::PersonTokenContext;
 use aauth::PersonTokenService;
-use aauth::error::AAuthError;
 use aauth::interaction_code::canonicalize_code;
 use aauth::person_server::config::PersonServerConfig;
 use aauth::person_server::keys::PersonAuthJwtMinter;
@@ -10,6 +9,7 @@ use aauth::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOut
 use aauth::protocol::PendingStatus;
 use aauth::{PendingOutcome, PendingSnapshot};
 
+use crate::PersonOrchestrationError;
 use crate::PolicyError;
 use crate::store::{PendingStore, PersonPendingContext, PersonPendingRecord, poll_auth_pending};
 
@@ -21,13 +21,18 @@ mod policy;
 pub use policy::PersonTokenPolicy;
 
 #[derive(Debug, thiserror::Error)]
-pub enum PersonTokenServiceError {
-    #[error("pending store: {0}")]
-    PendingStore(String),
-    #[error("policy: {0}")]
+pub enum PersonTokenServiceError<E>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    /// Store persistence failure. Not `#[from]` to avoid coherence conflicts when
+    /// `E` could unify with `PolicyError` / `PersonOrchestrationError`.
+    #[error(transparent)]
+    PendingStore(E),
+    #[error(transparent)]
     Policy(#[from] PolicyError),
-    #[error("orchestration: {0}")]
-    Orchestration(#[from] AAuthError),
+    #[error(transparent)]
+    Orchestration(#[from] PersonOrchestrationError),
 }
 
 #[derive(Clone)]
@@ -56,7 +61,7 @@ where
     S: PendingStore<PersonPendingRecord>,
     M: PersonAuthJwtMinter + Clone,
 {
-    type Error = PersonTokenServiceError;
+    type Error = PersonTokenServiceError<S::Error>;
 
     async fn exchange_token(
         &self,
@@ -73,7 +78,7 @@ where
     async fn poll_pending(&self, pending_id: &str) -> Result<AuthTokenPollOutcome, Self::Error> {
         poll_auth_pending(&self.pending, pending_id)
             .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))
+            .map_err(PersonTokenServiceError::PendingStore)
     }
 
     async fn resume_pending(
@@ -81,12 +86,7 @@ where
         pending_id: &str,
         input: PendingInput,
     ) -> Result<PersonTokenFlowOutcome, Self::Error> {
-        let Some(record) = self
-            .pending
-            .load(pending_id)
-            .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?
-        else {
+        let Some(record) = self.pending.load(pending_id).await.map_err(PersonTokenServiceError::PendingStore)? else {
             return Ok(PersonTokenFlowOutcome::Gone);
         };
 
@@ -139,7 +139,7 @@ where
                     && !r.context.interaction_code_consumed
             })
             .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?
+            .map_err(PersonTokenServiceError::PendingStore)?
         else {
             return Ok(PersonInteractionOutcome::InvalidCode);
         };
@@ -153,10 +153,7 @@ where
         if let PendingSnapshot::Waiting { status, .. } = &mut record.snapshot {
             *status = PendingStatus::Interacting;
         }
-        self.pending
-            .save(&pending_id, record.clone())
-            .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+        self.pending.save(&pending_id, record.clone()).await.map_err(PersonTokenServiceError::PendingStore)?;
 
         if let Some(resource_ix) = record.context.resource_interaction.clone() {
             interaction::validate_interaction_url(&resource_ix.url)?;
@@ -177,7 +174,7 @@ where
         };
         let body =
             aauth::protocol::PendingBody::for_waiting(&requirement, PendingStatus::Interacting)
-                .map_err(PersonTokenServiceError::Orchestration)?;
+                .map_err(PersonOrchestrationError::PendingBody)?;
         Ok(PersonInteractionOutcome::Pending(body))
     }
 
@@ -186,12 +183,7 @@ where
         pending_id: &str,
         callback_error: Option<&str>,
     ) -> Result<PersonTokenFlowOutcome, Self::Error> {
-        let Some(record) = self
-            .pending
-            .load(pending_id)
-            .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?
-        else {
+        let Some(record) = self.pending.load(pending_id).await.map_err(PersonTokenServiceError::PendingStore)? else {
             return Ok(PersonTokenFlowOutcome::Gone);
         };
 
@@ -205,7 +197,7 @@ where
             self.pending
                 .complete(pending_id, PendingOutcome::Error(polling_err.clone()))
                 .await
-                .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+                .map_err(PersonTokenServiceError::PendingStore)?;
             return Ok(PersonTokenFlowOutcome::denied(polling_err));
         }
 

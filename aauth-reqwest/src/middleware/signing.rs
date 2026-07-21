@@ -2,12 +2,11 @@ use std::sync::Arc;
 
 use aauth::KeyMaterialProvider;
 use aauth::agent::auth::AgentAuthAttempt;
-use aauth::error::{AAuthError, Result};
-use anyhow::anyhow;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
+use crate::error::{AgentError, Result, from_middleware_error};
 use crate::signed::{
     SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,
     sign_request_with_auth_token,
@@ -37,23 +36,25 @@ impl SigningMiddleware {
             .provider
             .key_material()
             .await
-            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
+            .map_err(|e| {
+                reqwest_middleware::Error::Middleware(anyhow::Error::from(AgentError::from(e)))
+            })?;
 
         apply_capability_mission(&mut req, &self.options);
 
         match &attempt {
             AgentAuthAttempt::AuthToken(token) => {
                 sign_request_with_auth_token(&mut req, &material, token)
-                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
+                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
             AgentAuthAttempt::OpaqueToken(token) => {
                 apply_opaque_token(&mut req, token);
                 sign_request(&mut req, &material)
-                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
+                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
             AgentAuthAttempt::AgentSigned => {
                 sign_request(&mut req, &material)
-                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))?;
+                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
         }
 
@@ -89,5 +90,5 @@ pub(crate) async fn sign_and_run(
     signing
         .sign_and_run(req, attempt, extensions, next)
         .await
-        .map_err(|e| AAuthError::Message(e.to_string()))
+        .map_err(from_middleware_error)
 }

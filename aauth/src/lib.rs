@@ -62,7 +62,10 @@ pub use agent::keys::{
 pub use agent::resolve::{
     agent_jwt_from_signature_key, person_server_from_agent_jwt, resolve_person_server_url,
 };
-pub use error::{AAuthError, Result, TokenError};
+pub use error::{
+    AAuthError, AgentAuthError, DeferredError, HeaderError, IntoAauthProtocol, JwtError,
+    MetadataError, ResourceTokenError, Result, SignatureError, VerifyError, VerifyReason,
+};
 pub use interaction_code::{canonicalize_code, generate_code};
 pub use jwt::{
     ActClaim, AgentClaims, AuthClaims, CnfClaim, OkpJwk, OkpSigningJwk, ResourceClaims,

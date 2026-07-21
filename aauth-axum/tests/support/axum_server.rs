@@ -432,10 +432,7 @@ impl MetadataFetcher for TriMetadataFetcher {
             "aauth-person.json" => self.person.resolve_jwks_uri(iss, dwk).await,
             "aauth-access.json" => self.access.resolve_jwks_uri(iss, dwk).await,
             "aauth-resource.json" => self.resource.resolve_jwks_uri(iss, dwk).await,
-            _ => Err(aauth::AAuthError::Token {
-                code: "metadata_fetch_failed".into(),
-                message: format!("unknown dwk: {dwk}"),
-            }),
+            _ => Err(aauth::MetadataError::UnknownJwksUri(format!("unknown dwk: {dwk}")).into()),
         }
     }
 
@@ -449,10 +446,7 @@ impl MetadataFetcher for TriMetadataFetcher {
         } else if jwks_uri == self.resource_jwks_uri {
             self.resource.fetch_jwks(jwks_uri).await
         } else {
-            Err(aauth::AAuthError::Token {
-                code: "metadata_fetch_failed".into(),
-                message: format!("unknown JWKS URI: {jwks_uri}"),
-            })
+            Err(aauth::MetadataError::UnknownJwksUri(jwks_uri.to_string()).into())
         }
     }
 }

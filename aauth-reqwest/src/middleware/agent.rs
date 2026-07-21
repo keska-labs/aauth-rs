@@ -1,20 +1,21 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use aauth::AgentAuthError;
+use aauth::DeferredError;
 use aauth::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
 use aauth::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
-use aauth::error::{AAuthError, Result};
 use aauth::jwt::{VerifiedToken, jwk_thumbprint};
 use aauth::protocol::AAuthChallenge;
 use aauth::protocol::parse_aauth_requirement;
 #[cfg(feature = "verify")]
 use aauth::resource_verify::{verify_client_auth_token, verify_resource_challenge};
-use anyhow::anyhow;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
 use crate::deferred::{AgentDeferredOptions, poll_deferred_with};
+use crate::error::{AgentError, Result};
 use crate::middleware::signing::{SigningMiddleware, sign_and_run};
 use crate::send::SignedSend;
 use crate::signed::SigningOptions;
@@ -88,7 +89,7 @@ impl Middleware for AgentMiddleware {
     ) -> MiddlewareResult<Response> {
         self.handle_inner(req, extensions, next)
             .await
-            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow!(e.to_string())))
+            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))
     }
 }
 
@@ -111,9 +112,7 @@ impl AgentMiddleware {
                 injector.next_attempt(&origin)
             };
 
-            let req_clone = req
-                .try_clone()
-                .ok_or_else(|| AAuthError::Message("request body is not cloneable".into()))?;
+            let req_clone = req.try_clone().ok_or(AgentError::BodyNotCloneable)?;
 
             let resp = self
                 .send_wrapped(req_clone, attempt.clone(), extensions, next.clone())
@@ -168,9 +167,7 @@ impl AgentMiddleware {
                     let agent_sub = match VerifiedToken::decode_unverified(agent_jwt)? {
                         VerifiedToken::Agent(agent) => agent.identifier().to_string(),
                         _ => {
-                            return Err(AAuthError::Message(
-                                "token exchange requires agent token".into(),
-                            ));
+                            return Err(AgentAuthError::ExpectedAgentJwt.into());
                         }
                     };
                     let agent_jkt = jwk_thumbprint(&material.signing_jwk.public_jwk())?;
@@ -240,7 +237,7 @@ fn location_header(resp: &Response) -> Result<String> {
         .get("location")
         .and_then(|v| v.to_str().ok())
         .map(str::to_string)
-        .ok_or_else(|| AAuthError::Message("202 response missing Location header".into()))
+        .ok_or_else(|| DeferredError::MissingLocation.into())
 }
 
 fn interaction_from_response(resp: &Response) -> (Option<String>, Option<String>) {

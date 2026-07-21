@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use aauth::error::{AAuthError, Result};
+use aauth::MetadataError;
+use aauth::error::Result;
 use aauth::metadata::MetadataFetcher;
 use aauth::protocol::AgentProviderMetadata;
 use async_trait::async_trait;
@@ -90,32 +91,35 @@ impl CachedMetadataFetcher {
 
         self.cache.record_fetch(metadata_url);
 
-        let response = self
-            .client
-            .get(metadata_url)
-            .send()
-            .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        let response = self.client.get(metadata_url).send().await.map_err(|e| {
+            MetadataError::Request {
+                url: metadata_url.to_string(),
+                source: Box::new(e),
+            }
+        })?;
 
         if !response.status().is_success() {
-            return Err(AAuthError::Token {
-                code: "metadata_fetch_failed".into(),
-                message: format!(
-                    "Failed to fetch metadata from {metadata_url}: {}",
-                    response.status()
-                ),
-            });
+            return Err(MetadataError::HttpStatus {
+                url: metadata_url.to_string(),
+                status: response.status().as_u16(),
+            }
+            .into());
         }
 
-        let metadata: AgentProviderMetadata = response
-            .json()
-            .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        let bytes = response.bytes().await.map_err(|e| MetadataError::Request {
+            url: metadata_url.to_string(),
+            source: Box::new(e),
+        })?;
+        let metadata: AgentProviderMetadata =
+            serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode {
+                url: metadata_url.to_string(),
+                source: e,
+            })?;
         if metadata.jwks_uri.is_empty() {
-            return Err(AAuthError::Token {
-                code: "metadata_fetch_failed".into(),
-                message: format!("No jwks_uri in metadata from {metadata_url}"),
-            });
+            return Err(MetadataError::MissingJwksUri {
+                url: metadata_url.to_string(),
+            }
+            .into());
         }
 
         self.cache.metadata.lock().unwrap().insert(
@@ -148,34 +152,36 @@ impl MetadataFetcher for CachedMetadataFetcher {
             if let Some(cached) = self.cache.jwks.lock().unwrap().get(jwks_uri) {
                 return Ok(cached.clone());
             }
-            return Err(AAuthError::Token {
-                code: "metadata_fetch_failed".into(),
-                message: format!("JWKS fetch rate limited for {jwks_uri}"),
-            });
+            return Err(MetadataError::RateLimited {
+                jwks_uri: jwks_uri.to_string(),
+            }
+            .into());
         }
         self.cache.record_fetch(jwks_uri);
 
-        let response = self
-            .client
-            .get(jwks_uri)
-            .send()
-            .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        let response = self.client.get(jwks_uri).send().await.map_err(|e| {
+            MetadataError::Request {
+                url: jwks_uri.to_string(),
+                source: Box::new(e),
+            }
+        })?;
 
         if !response.status().is_success() {
-            return Err(AAuthError::Token {
-                code: "invalid_agent_token".into(),
-                message: format!(
-                    "Failed to fetch JWKS from {jwks_uri}: {}",
-                    response.status()
-                ),
-            });
+            return Err(MetadataError::HttpStatus {
+                url: jwks_uri.to_string(),
+                status: response.status().as_u16(),
+            }
+            .into());
         }
 
-        let jwks: JwkSet = response
-            .json()
-            .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        let bytes = response.bytes().await.map_err(|e| MetadataError::Request {
+            url: jwks_uri.to_string(),
+            source: Box::new(e),
+        })?;
+        let jwks: JwkSet = serde_json::from_slice(&bytes).map_err(|e| MetadataError::Decode {
+            url: jwks_uri.to_string(),
+            source: e,
+        })?;
         self.cache
             .jwks
             .lock()

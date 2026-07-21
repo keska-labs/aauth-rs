@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use tokio::time::sleep;
 
-use crate::error::{AAuthError, Result};
+use crate::error::{DeferredError, Result};
 use crate::jwt::OkpSigningJwk;
 use crate::protocol::{
     AAuthErrorCode, AAuthProtocolError, ClarificationResponse, TokenResponseBody,
@@ -61,28 +61,28 @@ pub async fn post_pending_input(
             serde_json::to_string(&ClarificationResponse {
                 clarification_response: answer.clone(),
             })
-            .map_err(|e| AAuthError::Message(e.to_string()))?,
+            .map_err(DeferredError::Serialize)?,
             "application/json",
         ),
         PendingInput::ClaimsSubmission(claims) => (
-            serde_json::to_string(claims).map_err(|e| AAuthError::Message(e.to_string()))?,
+            serde_json::to_string(claims).map_err(DeferredError::Serialize)?,
             "application/json",
         ),
         PendingInput::InteractionCompleted | PendingInput::Cancelled => {
             ("{}".into(), "application/json")
         }
         PendingInput::UpdatedToken(updated) => (
-            serde_json::to_string(updated).map_err(|e| AAuthError::Message(e.to_string()))?,
+            serde_json::to_string(updated).map_err(DeferredError::Serialize)?,
             "application/json",
         ),
     };
 
     let mut request = client.post(url).header("content-type", content_type);
     if let Some(signer) = signer {
-        let parsed = url::Url::parse(url).map_err(|e| AAuthError::Message(e.to_string()))?;
+        let parsed = url::Url::parse(url).map_err(DeferredError::InvalidUrl)?;
         let authority = parsed
             .host_str()
-            .ok_or_else(|| AAuthError::Message("pending url missing host".into()))?;
+            .ok_or(DeferredError::MissingHost)?;
         let authority = match parsed.port() {
             Some(port) => format!("{authority}:{port}"),
             None => authority.to_string(),
@@ -104,16 +104,10 @@ pub async fn post_pending_input(
     }
     request = request.body(body);
 
-    let response = request
-        .send()
-        .await
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
+    let response = request.send().await.map_err(DeferredError::Transport)?;
 
     let status = response.status().as_u16();
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| AAuthError::Message(e.to_string()))?;
+    let body = response.bytes().await.map_err(DeferredError::ResponseBody)?;
 
     if status == 200 {
         return parse_auth_token_response(status, &body).map(Some);
@@ -123,9 +117,7 @@ pub async fn post_pending_input(
         return Ok(None);
     }
 
-    Err(AAuthError::Message(format!(
-        "pending POST failed with status {status}"
-    )))
+    Err(DeferredError::PostFailed(status).into())
 }
 
 pub async fn poll_pending_http(
@@ -147,23 +139,18 @@ pub async fn poll_pending_http(
             .header("prefer", format!("wait={prefer_wait}"))
             .send()
             .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+            .map_err(DeferredError::Transport)?;
 
         let status = response.status().as_u16();
         let headers = response_headers_to_http(response.headers());
         let retry_after = parse_retry_after(&headers);
-        let body = response
-            .bytes()
-            .await
-            .map_err(|e| AAuthError::Message(e.to_string()))?;
+        let body = response.bytes().await.map_err(DeferredError::ResponseBody)?;
 
         if status == 200 {
             if let Ok(token) = parse_auth_token_response(status, &body) {
                 return Ok(ServerPollOutcome::AuthToken(token));
             }
-            return Err(AAuthError::Message(
-                "pending poll returned 200 without auth token body".into(),
-            ));
+            return Err(DeferredError::MissingAuthTokenBody.into());
         }
 
         if status == 410 {
@@ -192,14 +179,14 @@ pub async fn poll_pending_http(
             continue;
         }
 
-        return Err(AAuthError::Message(format!(
-            "unexpected pending poll status {status}"
-        )));
+        return Err(DeferredError::UnexpectedStatus {
+            expected: 200,
+            got: status,
+        }
+        .into());
     }
 
-    Err(AAuthError::Message(format!(
-        "pending poll timed out after {max_duration}s"
-    )))
+    Err(DeferredError::TimedOut(max_duration).into())
 }
 
 fn response_headers_to_http(headers: &reqwest::header::HeaderMap) -> HeaderMap {

@@ -32,7 +32,7 @@ pub(super) async fn create_federated_deferred_response<P, S, M>(
     requirement: DeferRequirement,
     federation: FederationPendingState,
     agent_jwt: &str,
-) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError>
+) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError<S::Error>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
@@ -61,21 +61,12 @@ where
     };
 
     if pending_id.is_some() {
-        let Some(mut record) = service
-            .pending
-            .load(&id)
-            .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?
-        else {
+        let Some(mut record) = service.pending.load(&id).await.map_err(PersonTokenServiceError::PendingStore)? else {
             return Ok(PersonTokenFlowOutcome::Gone);
         };
         record.context = person_ctx;
         record.snapshot = PendingSnapshot::waiting(requirement.clone());
-        service
-            .pending
-            .save(&id, record)
-            .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+        service.pending.save(&id, record).await.map_err(PersonTokenServiceError::PendingStore)?;
     } else {
         let record = PersonPendingRecord::new(
             id.clone(),
@@ -83,11 +74,7 @@ where
             PendingSnapshot::waiting(requirement.clone()),
             service.config.pending_ttl_secs,
         );
-        service
-            .pending
-            .create(record)
-            .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+        service.pending.create(record).await.map_err(PersonTokenServiceError::PendingStore)?;
     }
 
     Ok(PersonTokenFlowOutcome::deferred(DeferCreated {
@@ -103,7 +90,7 @@ pub(super) async fn handle_federated_pending_post<P, S, M>(
     agent_token: &str,
     resource_url: &str,
     input: PendingInput,
-) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError>
+) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError<S::Error>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
@@ -116,7 +103,7 @@ where
             .pending
             .complete(pending_id, PendingOutcome::Error(err.clone()))
             .await
-            .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+            .map_err(PersonTokenServiceError::PendingStore)?;
         return Ok(PersonTokenFlowOutcome::denied(err));
     }
 
@@ -174,19 +161,14 @@ where
                 .pending
                 .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
                 .await
-                .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+                .map_err(PersonTokenServiceError::PendingStore)?;
             Ok(PersonTokenFlowOutcome::granted(body))
         }
         ServerPollOutcome::Deferred {
             requirement,
             location_url,
         } => {
-            let Some(mut record) = service
-                .pending
-                .load(pending_id)
-                .await
-                .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?
-            else {
+            let Some(mut record) = service.pending.load(pending_id).await.map_err(PersonTokenServiceError::PendingStore)? else {
                 return Ok(PersonTokenFlowOutcome::Gone);
             };
             record.snapshot = PendingSnapshot::waiting(requirement.clone());
@@ -194,11 +176,7 @@ where
                 access_server_url: federation.access_server_url.clone(),
                 as_pending_url: location_url,
             });
-            service
-                .pending
-                .save(pending_id, record)
-                .await
-                .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+            service.pending.save(pending_id, record).await.map_err(PersonTokenServiceError::PendingStore)?;
             let location = pending_location(
                 &service.config.pending_base_url,
                 &service.config.pending_path,
@@ -214,7 +192,7 @@ where
                 .pending
                 .complete(pending_id, PendingOutcome::Error(err.clone()))
                 .await
-                .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+                .map_err(PersonTokenServiceError::PendingStore)?;
             Ok(PersonTokenFlowOutcome::denied(err))
         }
         ServerPollOutcome::Gone => {

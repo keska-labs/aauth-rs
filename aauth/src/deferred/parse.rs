@@ -1,6 +1,6 @@
 use http::HeaderMap;
 
-use crate::error::{AAuthError, Result};
+use crate::error::{DeferredError, HeaderError, Result};
 use crate::protocol::parse_aauth_requirement;
 use crate::protocol::{ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody};
 use crate::signature::header_value;
@@ -31,18 +31,18 @@ pub fn parse_deferred_response(
     base_url: &str,
 ) -> Result<ParsedDeferred> {
     if status != 202 {
-        return Err(AAuthError::Message(format!(
-            "expected 202 Accepted, got {status}"
-        )));
+        return Err(DeferredError::UnexpectedStatus {
+            expected: 202,
+            got: status,
+        }
+        .into());
     }
 
-    let location = header_value(headers, "location")
-        .ok_or_else(|| AAuthError::Message("202 response missing Location header".into()))?;
+    let location = header_value(headers, "location").ok_or(DeferredError::MissingLocation)?;
     let location = resolve_deferred_location(base_url, location);
 
-    let requirement_header = header_value(headers, "aauth-requirement").ok_or_else(|| {
-        AAuthError::Message("202 response missing AAuth-Requirement header".into())
-    })?;
+    let requirement_header =
+        header_value(headers, "aauth-requirement").ok_or(DeferredError::MissingRequirement)?;
     let challenge = parse_aauth_requirement(requirement_header)?;
 
     let requirement = defer_requirement_from(&challenge, body)?;
@@ -55,11 +55,13 @@ pub fn parse_deferred_response(
 
 pub fn parse_auth_token_response(status: u16, body: &[u8]) -> Result<TokenResponseBody> {
     if status != 200 {
-        return Err(AAuthError::Message(format!(
-            "expected 200 OK for auth token, got {status}"
-        )));
+        return Err(DeferredError::UnexpectedStatus {
+            expected: 200,
+            got: status,
+        }
+        .into());
     }
-    serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))
+    serde_json::from_slice(body).map_err(DeferredError::Body).map_err(Into::into)
 }
 
 fn defer_requirement_from(
@@ -76,7 +78,7 @@ fn defer_requirement_from(
                     options: None,
                 }
             } else {
-                serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))?
+                serde_json::from_slice(body).map_err(DeferredError::Body)?
             };
             Ok(DeferRequirement::Clarification {
                 question: c.clarification,
@@ -90,7 +92,7 @@ fn defer_requirement_from(
                     required_claims: vec![],
                 }
             } else {
-                serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))?
+                serde_json::from_slice(body).map_err(DeferredError::Body)?
             };
             Ok(DeferRequirement::Claims {
                 required_claims: c.required_claims,
@@ -104,9 +106,10 @@ fn defer_requirement_from(
         }
         crate::protocol::AAuthChallenge::Approval => Ok(DeferRequirement::Approval),
         crate::protocol::AAuthChallenge::AgentToken
-        | crate::protocol::AAuthChallenge::AuthToken { .. } => Err(AAuthError::Message(
+        | crate::protocol::AAuthChallenge::AuthToken { .. } => Err(HeaderError::Invalid(
             "agent-token/auth-token requirements are not defer requirements".into(),
-        )),
+        )
+        .into()),
     }
 }
 

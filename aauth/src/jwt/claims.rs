@@ -1,4 +1,4 @@
-use crate::error::{AAuthError, Result, TokenError};
+use crate::error::{Result, VerifyError, VerifyReason};
 use crate::protocol::JwtTyp;
 
 pub use crate::protocol::{
@@ -11,10 +11,11 @@ use super::decode::{decode_unverified, decode_verified, verified_validation};
 impl AuthClaims {
     pub fn validate(&self) -> Result<()> {
         if self.sub.is_none() && self.scope.is_none() {
-            return Err(AAuthError::from(TokenError::new(
+            return Err(VerifyError::token(
                 JwtTyp::Auth.verify_error_code(),
                 "at least one of sub or scope must be present",
-            )));
+            )
+            .into());
         }
         Ok(())
     }
@@ -43,10 +44,11 @@ impl VerifiedToken {
                 claims.validate()?;
                 Ok(Self::Auth(claims))
             }
-            JwtTyp::Resource => Err(AAuthError::from(TokenError::new(
-                typ.verify_error_code(),
-                format!("Unsupported JWT typ for verification: {typ}"),
-            ))),
+            JwtTyp::Resource => Err(VerifyError::Invalid {
+                typ,
+                reason: VerifyReason::UnsupportedTyp,
+            }
+            .into()),
         }
     }
 
@@ -66,10 +68,11 @@ impl VerifiedToken {
                 claims.validate()?;
                 Ok(Self::Auth(claims))
             }
-            JwtTyp::Resource => Err(AAuthError::from(TokenError::new(
-                typ.verify_error_code(),
-                format!("Unsupported JWT typ for verification: {typ}"),
-            ))),
+            JwtTyp::Resource => Err(VerifyError::Invalid {
+                typ,
+                reason: VerifyReason::UnsupportedTyp,
+            }
+            .into()),
         }
     }
 
@@ -120,16 +123,17 @@ impl VerifiedToken {
 pub fn decode_resource_token_unverified(jwt: &str) -> Result<ResourceClaims> {
     let typ = JwtTyp::from_jwt(jwt)?;
     if typ != JwtTyp::Resource {
-        return Err(AAuthError::from(TokenError::new(
-            typ.verify_error_code(),
-            format!("expected resource JWT, got {typ}"),
-        )));
+        return Err(VerifyError::Invalid {
+            typ,
+            reason: VerifyReason::WrongTyp,
+        }
+        .into());
     }
     decode_unverified::<ResourceClaims>(jwt)
         .map(|data| data.claims)
         .map_err(|e| decode_err(typ.verify_error_code(), e))
 }
 
-fn decode_err(code: &str, err: AAuthError) -> AAuthError {
-    AAuthError::from(TokenError::new(code, format!("JWT decode failed: {err}")))
+fn decode_err(code: &str, err: crate::error::AAuthError) -> crate::error::AAuthError {
+    VerifyError::token(code, format!("JWT decode failed: {err}")).into()
 }

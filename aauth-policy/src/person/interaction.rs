@@ -1,18 +1,12 @@
-use aauth::error::AAuthError;
 use aauth::protocol::{AAuthErrorCode, AAuthProtocolError, ResourceInteractionClaim};
 
-use super::PersonTokenServiceError;
+use crate::PersonOrchestrationError;
 
-pub(super) fn validate_interaction_url(url: &str) -> Result<(), PersonTokenServiceError> {
-    let parsed = url::Url::parse(url).map_err(|e| {
-        PersonTokenServiceError::Orchestration(AAuthError::Message(format!(
-            "invalid interaction url: {e}"
-        )))
-    })?;
+pub(super) fn validate_interaction_url(url: &str) -> Result<(), PersonOrchestrationError> {
+    let parsed =
+        url::Url::parse(url).map_err(PersonOrchestrationError::InvalidInteractionUrl)?;
     if parsed.scheme() != "https" {
-        return Err(PersonTokenServiceError::Orchestration(AAuthError::Message(
-            "interaction url must use https".into(),
-        )));
+        return Err(PersonOrchestrationError::InteractionUrlNotHttps);
     }
     Ok(())
 }
@@ -20,12 +14,9 @@ pub(super) fn validate_interaction_url(url: &str) -> Result<(), PersonTokenServi
 pub(super) fn build_resource_interaction_redirect(
     resource_ix: &ResourceInteractionClaim,
     callback_url: &str,
-) -> Result<String, PersonTokenServiceError> {
-    let mut url = url::Url::parse(&resource_ix.url).map_err(|e| {
-        PersonTokenServiceError::Orchestration(AAuthError::Message(format!(
-            "invalid resource interaction url: {e}"
-        )))
-    })?;
+) -> Result<String, PersonOrchestrationError> {
+    let mut url = url::Url::parse(&resource_ix.url)
+        .map_err(PersonOrchestrationError::InvalidInteractionUrl)?;
     url.query_pairs_mut()
         .clear()
         .append_pair("code", &resource_ix.code)

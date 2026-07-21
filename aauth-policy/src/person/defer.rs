@@ -3,7 +3,6 @@ use aauth::DeferRequirement;
 use aauth::PendingOutcome;
 use aauth::PendingSnapshot;
 use aauth::PersonTokenContext;
-use aauth::error::AAuthError;
 use aauth::generate_pending_id;
 use aauth::interaction_code::{canonicalize_code, generate_code};
 use aauth::pending_location;
@@ -12,6 +11,7 @@ use aauth::person_server::federation::{FederationOutcome, federate_to_access_ser
 use aauth::person_server::keys::PersonAuthJwtMinter;
 use aauth::person_server::outcome::PersonTokenFlowOutcome;
 
+use crate::PersonOrchestrationError;
 use crate::PersonTokenDecision;
 use crate::PersonTokenPolicy;
 use crate::store::{
@@ -27,7 +27,7 @@ pub(super) async fn apply_person_decision<P, S, M>(
     ctx: &PersonTokenContext,
     decision: PersonTokenDecision,
     agent_jwt: &str,
-) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError>
+) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError<S::Error>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
@@ -86,7 +86,7 @@ pub(super) async fn apply_person_pending_decision<P, S, M>(
     pending_id: &str,
     decision: PersonTokenDecision,
     agent_jwt: &str,
-) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError>
+) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError<S::Error>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
@@ -105,7 +105,7 @@ where
                 .pending
                 .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
                 .await
-                .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+                .map_err(PersonTokenServiceError::PendingStore)?;
             Ok(PersonTokenFlowOutcome::granted(body))
         }
         PersonTokenDecision::Federate => match federate_to_access_server(
@@ -121,7 +121,7 @@ where
                     .pending
                     .complete(pending_id, PendingOutcome::AuthToken(body.clone()))
                     .await
-                    .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+                    .map_err(PersonTokenServiceError::PendingStore)?;
                 Ok(PersonTokenFlowOutcome::granted(body))
             }
             Ok(FederationOutcome::Deferred {
@@ -149,7 +149,7 @@ where
                 .pending
                 .complete(pending_id, PendingOutcome::Error(err.clone()))
                 .await
-                .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+                .map_err(PersonTokenServiceError::PendingStore)?;
             Ok(PersonTokenFlowOutcome::denied(err))
         }
         PersonTokenDecision::Defer(requirement) => {
@@ -162,26 +162,17 @@ pub(super) async fn update_person_pending_defer<P, S, M>(
     service: &PolicyPersonTokenService<P, S, M>,
     pending_id: &str,
     requirement: DeferRequirement,
-) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError>
+) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError<S::Error>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
     M: PersonAuthJwtMinter + Clone,
 {
-    let Some(mut record) = service
-        .pending
-        .load(pending_id)
-        .await
-        .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?
-    else {
+    let Some(mut record) = service.pending.load(pending_id).await.map_err(PersonTokenServiceError::PendingStore)? else {
         return Ok(PersonTokenFlowOutcome::Gone);
     };
     record.snapshot = PendingSnapshot::waiting(requirement.clone());
-    service
-        .pending
-        .save(pending_id, record)
-        .await
-        .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+    service.pending.save(pending_id, record).await.map_err(PersonTokenServiceError::PendingStore)?;
 
     let location = pending_location(
         &service.config.pending_base_url,
@@ -199,7 +190,7 @@ pub(super) async fn create_deferred_person_response<P, S, M>(
     ctx: &PersonTokenContext,
     requirement: DeferRequirement,
     agent_jwt: &str,
-) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError>
+) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError<S::Error>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
@@ -229,11 +220,7 @@ where
         service.config.pending_ttl_secs,
     );
 
-    service
-        .pending
-        .create(record)
-        .await
-        .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+    service.pending.create(record).await.map_err(PersonTokenServiceError::PendingStore)?;
 
     Ok(PersonTokenFlowOutcome::deferred(DeferCreated {
         location,
@@ -245,17 +232,17 @@ pub(super) async fn create_resource_initiated_deferred_response<P, S, M>(
     service: &PolicyPersonTokenService<P, S, M>,
     ctx: &PersonTokenContext,
     agent_jwt: &str,
-) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError>
+) -> Result<PersonTokenFlowOutcome, PersonTokenServiceError<S::Error>>
 where
     P: PersonTokenPolicy,
     S: PendingStore<PersonPendingRecord>,
     M: PersonAuthJwtMinter + Clone,
 {
-    let resource_ix = ctx.resource_claims.interaction.clone().ok_or_else(|| {
-        PersonTokenServiceError::Orchestration(AAuthError::Message(
-            "resource token missing interaction claim".into(),
-        ))
-    })?;
+    let resource_ix = ctx
+        .resource_claims
+        .interaction
+        .clone()
+        .ok_or(PersonOrchestrationError::MissingResourceInteraction)?;
 
     let ps_code = generate_code();
     let requirement = DeferRequirement::Interaction {
@@ -287,11 +274,7 @@ where
         service.config.pending_ttl_secs,
     );
 
-    service
-        .pending
-        .create(record)
-        .await
-        .map_err(|e| PersonTokenServiceError::PendingStore(e.to_string()))?;
+    service.pending.create(record).await.map_err(PersonTokenServiceError::PendingStore)?;
 
     Ok(PersonTokenFlowOutcome::deferred(DeferCreated {
         location,

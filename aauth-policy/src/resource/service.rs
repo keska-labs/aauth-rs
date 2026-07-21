@@ -7,7 +7,6 @@ use aauth::ResourceAccessContext;
 use aauth::ResourceAccessService;
 use aauth::ResourceConsentFlowOutcome;
 use aauth::ResourcePollOutcome;
-use aauth::error::AAuthError;
 use aauth::generate_pending_id;
 use aauth::pending_location;
 
@@ -21,13 +20,16 @@ use crate::store::{
 use super::opaque::OpaqueAccessStore;
 
 #[derive(Debug, thiserror::Error)]
-pub enum ResourceAccessServiceError {
-    #[error("pending store: {0}")]
-    PendingStore(String),
-    #[error("policy: {0}")]
+pub enum ResourceAccessServiceError<E>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    /// Store persistence failure. Not `#[from]` to avoid coherence conflicts when
+    /// `E` could unify with `PolicyError`.
+    #[error(transparent)]
+    PendingStore(E),
+    #[error(transparent)]
     Policy(#[from] PolicyError),
-    #[error("orchestration: {0}")]
-    Orchestration(#[from] AAuthError),
 }
 
 #[derive(Clone)]
@@ -56,7 +58,7 @@ where
     S: PendingStore<ResourcePendingRecord>,
     O: OpaqueAccessStore + Clone,
 {
-    type Error = ResourceAccessServiceError;
+    type Error = ResourceAccessServiceError<S::Error>;
 
     async fn consent_for_agent(
         &self,
@@ -77,7 +79,7 @@ where
     async fn poll_pending(&self, pending_id: &str) -> Result<ResourcePollOutcome, Self::Error> {
         let outcome = poll_auth_pending(&self.pending, pending_id)
             .await
-            .map_err(|e| ResourceAccessServiceError::PendingStore(e.to_string()))?;
+            .map_err(ResourceAccessServiceError::PendingStore)?;
 
         if matches!(
             &outcome,
@@ -99,7 +101,7 @@ async fn create_deferred_resource_response<P, S, O>(
     service: &PolicyResourceAccessService<P, S, O>,
     ctx: &ResourceAccessContext,
     requirement: &mut DeferRequirement,
-) -> Result<ResourceConsentFlowOutcome, ResourceAccessServiceError>
+) -> Result<ResourceConsentFlowOutcome, ResourceAccessServiceError<S::Error>>
 where
     P: ResourceConsentPolicy,
     S: PendingStore<ResourcePendingRecord>,
@@ -131,11 +133,7 @@ where
         service.config.pending_ttl_secs,
     );
 
-    service
-        .pending
-        .create(record)
-        .await
-        .map_err(|e| ResourceAccessServiceError::PendingStore(e.to_string()))?;
+    service.pending.create(record).await.map_err(ResourceAccessServiceError::PendingStore)?;
 
     Ok(ResourceConsentFlowOutcome::Deferred(DeferCreated {
         location,

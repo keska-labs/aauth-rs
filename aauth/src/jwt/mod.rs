@@ -1,5 +1,6 @@
 mod claims;
 mod decode;
+#[cfg(any(feature = "person-server", feature = "access-server"))]
 mod mint;
 
 pub use claims::{
@@ -7,6 +8,7 @@ pub use claims::{
     ResourceInteractionClaim, VerifiedToken, decode_resource_token_unverified,
 };
 pub use decode::{decode_unverified, decode_verified, verified_validation};
+#[cfg(any(feature = "person-server", feature = "access-server"))]
 pub(crate) use mint::{AuthJwtMintParams, encode_auth_jwt};
 
 use std::collections::BTreeMap;
@@ -21,12 +23,10 @@ use crate::protocol::JwtTyp;
 impl JwtTyp {
     /// Reads and parses the JWT `typ` header.
     pub fn from_jwt(jwt: &str) -> Result<Self> {
-        let header = decode_header(jwt).map_err(|e| JwtError::Decode(e.to_string()))?;
-        let typ = header
-            .typ
-            .ok_or_else(|| JwtError::InvalidTyp("missing typ".into()))?;
+        let header = decode_header(jwt).map_err(JwtError::Decode)?;
+        let typ = header.typ.ok_or(JwtError::MissingTyp)?;
         typ.parse()
-            .map_err(|_| JwtError::InvalidTyp(format!("unknown typ: {typ}")).into())
+            .map_err(|_| JwtError::UnknownTyp(typ).into())
     }
 }
 
@@ -43,13 +43,11 @@ fn canonical_jwk_for_thumbprint(jwk: &OkpJwk) -> Result<String> {
         "OKP" => vec!["crv", "kty", "x"],
         "EC" => vec!["crv", "kty", "x", "y"],
         "RSA" => vec!["e", "kty", "n"],
-        _ => return Err(JwtError::Decode(format!("unsupported kty: {kty}")).into()),
+        _ => return Err(JwtError::UnsupportedKty(kty.to_string()).into()),
     };
 
-    let value = serde_json::to_value(jwk).map_err(|e| JwtError::Decode(e.to_string()))?;
-    let obj = value
-        .as_object()
-        .ok_or_else(|| JwtError::Decode("JWK must be an object".into()))?;
+    let value = serde_json::to_value(jwk).map_err(JwtError::Canonicalize)?;
+    let obj = value.as_object().ok_or(JwtError::JwkNotObject)?;
 
     let mut members = BTreeMap::new();
     for key in required {
@@ -58,16 +56,17 @@ fn canonical_jwk_for_thumbprint(jwk: &OkpJwk) -> Result<String> {
         }
     }
 
-    serde_json::to_string(&members).map_err(|e| JwtError::Decode(e.to_string()).into())
+    serde_json::to_string(&members)
+        .map_err(JwtError::Canonicalize)
+        .map_err(Into::into)
 }
 
 pub fn jwk_set_from_okp(keys: &[OkpJwk]) -> Result<JwkSet> {
     let mut jwt_keys = Vec::with_capacity(keys.len());
     for key in keys {
-        let jwk: jsonwebtoken::jwk::Jwk = serde_json::from_value(
-            serde_json::to_value(key).map_err(|e| JwtError::Decode(e.to_string()))?,
-        )
-        .map_err(|e| JwtError::Decode(e.to_string()))?;
+        let jwk: jsonwebtoken::jwk::Jwk =
+            serde_json::from_value(serde_json::to_value(key).map_err(JwtError::Canonicalize)?)
+                .map_err(JwtError::JwkSet)?;
         jwt_keys.push(jwk);
     }
     Ok(JwkSet { keys: jwt_keys })

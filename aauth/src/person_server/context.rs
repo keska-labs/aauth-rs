@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::error::{AAuthError, Result};
+use crate::error::{Result, VerifyError, VerifyReason};
 use crate::jwt::VerifiedToken;
 use crate::person_server::config::PersonServerConfig;
 use crate::person_server::keys::PersonAuthJwtMinter;
 use crate::person_server::token_context::PersonTokenContext;
-use crate::protocol::{TokenExchangeRequest, TokenResponseBody};
+use crate::protocol::{JwtTyp, TokenExchangeRequest, TokenResponseBody};
 use crate::resource_verify::{VerifyResourceTokenOptions, verify_resource_token};
 
 pub async fn verify_person_token_request(
@@ -17,10 +17,12 @@ pub async fn verify_person_token_request(
 ) -> Result<PersonTokenContext> {
     let agent = match VerifiedToken::decode_unverified(agent_jwt)? {
         VerifiedToken::Agent(c) => c,
-        _ => {
-            return Err(AAuthError::Message(
-                "token exchange requires agent token in Signature-Key".into(),
-            ));
+        VerifiedToken::Auth(_) => {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Auth,
+                reason: VerifyReason::WrongTyp,
+            }
+            .into());
         }
     };
 

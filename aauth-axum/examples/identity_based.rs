@@ -11,7 +11,7 @@ use aauth::protocol::AgentOkResponse;
 use support::{ServerConfig, build_client, spawn_test_server};
 
 #[tokio::main]
-async fn main() -> aauth::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let spawned = spawn_test_server(ServerConfig {
         require_auth_token: false,
         with_auth_routes: false,
@@ -23,14 +23,12 @@ async fn main() -> aauth::Result<()> {
     let response = client
         .get(format!("{}/api/data", spawned.resource_url))
         .send()
-        .await
-        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
+        .await?;
 
     println!("status: {}", response.status());
     let body: AgentOkResponse = response
         .json()
-        .await
-        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
+        .await?;
     println!("agent: {}", body.agent);
 
     Ok(())

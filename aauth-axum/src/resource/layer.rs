@@ -145,7 +145,7 @@ where
                 &sig_options,
             ) {
                 Ok(v) => v,
-                Err(e) => return Ok(unauthorized(e.to_string())),
+                Err(e) => return Ok(unauthorized_err(e)),
             };
 
             if let ResourceAccessMode::ResourceManaged { service } = &mode {
@@ -159,7 +159,7 @@ where
                             return inner.call(req).await;
                         }
                     }
-                    return Ok(unauthorized("invalid opaque access token".into()));
+                    return Ok(unauthorized_message("invalid opaque access token"));
                 }
             }
 
@@ -171,12 +171,12 @@ where
             .await
             {
                 Ok(v) => v,
-                Err(e) => return Ok(unauthorized(e.to_string())),
+                Err(e) => return Ok(unauthorized_err(e)),
             };
 
             if let VerifiedToken::Auth(ref auth) = verified {
                 if let Err(e) = verify_auth_token_binding(auth, &resource_url) {
-                    return Ok(unauthorized(e.to_string()));
+                    return Ok(unauthorized_err(e));
                 }
             }
 
@@ -199,7 +199,9 @@ where
                         person_server_fallback.as_deref(),
                     ) {
                         Ok(aud) => aud,
-                        Err(e) => return Ok(unauthorized(e.to_string())),
+                        Err(e) => {
+                            return Ok(unauthorized_message(e.to_string()));
+                        }
                     };
 
                     let interaction = interaction_provider.as_ref().and_then(|provider| {
@@ -226,14 +228,14 @@ where
                     .await
                     {
                         Ok(token) => token,
-                        Err(e) => return Ok(unauthorized(e)),
+                        Err(e) => return Ok(unauthorized_err(e)),
                     };
 
                     let header = match build_aauth_requirement(&AAuthChallenge::AuthToken {
                         resource_token: resource_token.clone(),
                     }) {
                         Ok(h) => h,
-                        Err(e) => return Ok(unauthorized(e.to_string())),
+                        Err(e) => return Ok(unauthorized_err(e)),
                     };
 
                     Ok(Response::builder()
@@ -255,7 +257,7 @@ where
 
                     match service.consent_for_agent(ctx).await {
                         Ok(outcome) => Ok(AauthResponse(outcome).into_response()),
-                        Err(e) => Ok(unauthorized(e.to_string())),
+                        Err(e) => Ok(crate::InternalServiceError::from(e).into_response()),
                     }
                 }
                 (ResourceAccessMode::ResourceManaged { .. }, VerifiedToken::Auth(_)) => {
@@ -303,9 +305,41 @@ fn request_signature_parts<B>(req: &Request<B>) -> (String, String, String) {
     (method, authority, path)
 }
 
-fn unauthorized(message: String) -> Response<Body> {
+fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
+    let err = err.into();
+    if let Some((status, protocol)) = aauth::IntoAauthProtocol::into_aauth_protocol(err) {
+        let status = StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED);
+        return Response::builder()
+            .status(status)
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&protocol).unwrap_or_default(),
+            ))
+            .expect("valid response");
+    }
     Response::builder()
         .status(StatusCode::UNAUTHORIZED)
-        .body(Body::from(message))
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&aauth::protocol::AAuthProtocolError::with_description(
+                aauth::protocol::AAuthErrorCode::InvalidSignature,
+                "unauthorized",
+            ))
+            .unwrap_or_default(),
+        ))
+        .expect("valid response")
+}
+
+fn unauthorized_message(message: impl Into<String>) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&aauth::protocol::AAuthProtocolError::with_description(
+                aauth::protocol::AAuthErrorCode::InvalidRequest,
+                message.into(),
+            ))
+            .unwrap_or_default(),
+        ))
         .expect("valid response")
 }

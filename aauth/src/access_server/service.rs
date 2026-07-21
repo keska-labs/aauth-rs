@@ -1,8 +1,9 @@
 use crate::access_server::config::AccessServerConfig;
 use crate::access_server::token_context::AccessTokenContext;
 use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, PendingInput};
-use crate::error::AAuthError;
+use crate::error::{AAuthError, VerifyError, VerifyReason};
 use crate::jwt::{VerifiedToken, decode_resource_token_unverified};
+use crate::protocol::JwtTyp;
 
 #[async_trait::async_trait]
 pub trait AccessTokenService: Send + Sync + Clone {
@@ -28,10 +29,12 @@ pub fn build_access_context(
 ) -> Result<AccessTokenContext, AAuthError> {
     let agent = match VerifiedToken::decode_unverified(&request.agent_token)? {
         VerifiedToken::Agent(c) => c,
-        _ => {
-            return Err(AAuthError::Message(
-                "agent_token must be an agent JWT".into(),
-            ));
+        VerifiedToken::Auth(_) => {
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Auth,
+                reason: VerifyReason::WrongTyp,
+            }
+            .into());
         }
     };
     let resource_claims = decode_resource_token_unverified(&request.resource_token)?;

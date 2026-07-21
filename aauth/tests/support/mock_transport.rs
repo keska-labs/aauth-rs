@@ -61,7 +61,7 @@ impl Middleware for MockTransport {
         self.inner
             .handle(req)
             .await
-            .map_err(|e| Error::Middleware(anyhow::anyhow!(e.to_string())))
+            .map_err(|e| Error::Middleware(anyhow::Error::from(e)))
     }
 }
 
@@ -154,7 +154,7 @@ impl MockServerState {
 
     async fn handle_resource(&self, url: &str, req: Request) -> Result<Response> {
         let jwt = extract_signature_jwt(&req)
-            .ok_or_else(|| aauth::AAuthError::Message("Missing signature-key jwt".into()))?;
+            .ok_or(aauth::SignatureError::MissingJwtParam)?;
 
         let fetcher = Arc::new(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
@@ -204,7 +204,7 @@ impl MockServerState {
                 let signer = self.keys.resource_token_signer();
                 let audience =
                     resolve_resource_token_audience(&agent, None, Some(&self.person_server_url))
-                        .map_err(|e| aauth::AAuthError::Message(e.to_string()))?;
+                        .map_err(|_| aauth::VerifyError::NoAudience)?;
 
                 let resource_token = create_resource_token(
                     ResourceTokenOptions {
@@ -219,8 +219,7 @@ impl MockServerState {
                     },
                     &signer,
                 )
-                .await
-                .map_err(|e| aauth::AAuthError::Message(e))?;
+                .await?;
 
                 let header = build_aauth_requirement(&AAuthChallenge::AuthToken {
                     resource_token: resource_token.clone(),
@@ -258,14 +257,17 @@ impl MockServerState {
                 let bytes = body
                     .collect()
                     .await
-                    .map_err(|e| aauth::AAuthError::Message(e.to_string()))?
+                    .map_err(|e| aauth::MetadataError::Request {
+                        url: url.to_string(),
+                        source: Box::new(e),
+                    })?
                     .to_bytes();
                 if bytes.is_empty() {
                     None
                 } else {
                     Some(
                         serde_json::from_slice(&bytes)
-                            .map_err(|e| aauth::AAuthError::Message(e.to_string()))?,
+                            .map_err(aauth::DeferredError::Body)?,
                     )
                 }
             }
@@ -401,12 +403,7 @@ impl MockServerState {
             .unwrap_or_default()
             .to_string();
 
-        let Some(record) = self
-            .pending
-            .load(&id)
-            .await
-            .map_err(|e| aauth::AAuthError::Message(format!("pending load failed: {e}")))?
-        else {
+        let Some(record) = self.pending.load(&id).await.unwrap_or_else(|e| match e {}) else {
             return Ok(Response::from(
                 http::Response::builder()
                     .status(StatusCode::GONE)
@@ -417,10 +414,7 @@ impl MockServerState {
         };
 
         if let PendingSnapshot::Complete(outcome) = &record.snapshot {
-            let _ =
-                self.pending.remove(&id).await.map_err(|e| {
-                    aauth::AAuthError::Message(format!("pending remove failed: {e}"))
-                })?;
+            let _ = self.pending.remove(&id).await.unwrap_or_else(|e| match e {});
             return match outcome {
                 PendingOutcome::AuthToken(value) => Ok(Response::from(
                     http::Response::builder()
@@ -489,10 +483,7 @@ impl MetadataFetcher for DualMetadataFetcher {
             "aauth-agent.json" => self.agent.resolve_jwks_uri(iss, dwk).await,
             "aauth-person.json" => self.person.resolve_jwks_uri(iss, dwk).await,
             "aauth-resource.json" => self.resource.resolve_jwks_uri(iss, dwk).await,
-            _ => Err(aauth::AAuthError::Token {
-                code: "metadata_fetch_failed".into(),
-                message: format!("unknown dwk: {dwk}"),
-            }),
+            _ => Err(aauth::MetadataError::UnknownJwksUri(format!("unknown dwk: {dwk}")).into()),
         }
     }
 

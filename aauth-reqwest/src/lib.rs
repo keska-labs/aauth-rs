@@ -8,6 +8,7 @@
 //! [`AgentOptions`].
 
 mod deferred;
+mod error;
 mod metadata;
 mod middleware;
 mod send;
@@ -21,6 +22,7 @@ pub use aauth::agent::auth::{
 pub use deferred::{
     AgentDeferredOptions, AgentDeferredOptionsBuilder, DeferredResult, poll_deferred,
 };
+pub use error::{AgentError, Result};
 pub use metadata::CachedMetadataFetcher;
 pub use middleware::{AgentMiddleware, ClientBuilder, ClientWithMiddleware};
 pub use signed::{

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::error::AAuthError;
+use crate::error::{AAuthError, DeferredError};
 use crate::protocol::{
     AAuthChallenge, AAuthProtocolError, ClaimsChallenge, ClaimsSubmission, ClarificationChallenge,
     PendingStatus, UpdatedTokenRequest,
@@ -53,9 +53,7 @@ impl crate::protocol::PendingBody {
             DeferRequirement::Interaction { .. } | DeferRequirement::Approval => {
                 Ok(Self::Status(crate::protocol::PendingStatusBody { status }))
             }
-            DeferRequirement::Payment { .. } => Err(AAuthError::Message(
-                "payment defer uses 402, not pending JSON body".into(),
-            )),
+            DeferRequirement::Payment { .. } => Err(DeferredError::PaymentNotPendingBody.into()),
         }
     }
 }
@@ -79,7 +77,7 @@ pub fn parse_pending_post_body(body: &[u8]) -> Result<PendingInput, AAuthError> 
         return Ok(PendingInput::InteractionCompleted);
     }
     let wire: crate::protocol::PendingPostBody =
-        serde_json::from_slice(body).map_err(|e| AAuthError::Message(e.to_string()))?;
+        serde_json::from_slice(body).map_err(DeferredError::Body)?;
     Ok(wire.into())
 }
 
@@ -113,9 +111,7 @@ impl DeferRequirement {
             Self::Clarification { .. } => Ok(AAuthChallenge::Clarification),
             Self::Claims { .. } => Ok(AAuthChallenge::Claims),
             Self::Approval => Ok(AAuthChallenge::Approval),
-            Self::Payment { .. } => Err(crate::error::AAuthError::Message(
-                "payment defer uses 402, not AAuth-Requirement".into(),
-            )),
+            Self::Payment { .. } => Err(DeferredError::PaymentNotRequirement.into()),
         }
     }
 }

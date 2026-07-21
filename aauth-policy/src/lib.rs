@@ -27,7 +27,7 @@ pub mod resource;
 mod policies;
 
 pub use decision::{AccessTokenDecision, AuthGrant, PersonTokenDecision, ResourceConsentDecision};
-pub use error::PolicyError;
+pub use error::{PersonOrchestrationError, PolicyError};
 pub use store::{
     AccessPendingContext, AccessPendingRecord, FederationPendingState, InMemoryAccessPendingStore,
     InMemoryPendingStore, InMemoryPersonPendingStore, InMemoryResourcePendingStore, PendingRecord,

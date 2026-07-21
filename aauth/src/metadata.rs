@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use jsonwebtoken::jwk::JwkSet;
 
-use crate::error::Result;
+use crate::error::{MetadataError, Result};
 
 #[async_trait]
 pub trait MetadataFetcher: Send + Sync {
@@ -35,10 +35,7 @@ impl MetadataFetcher for StaticMetadataFetcher {
         if jwks_uri == self.jwks_uri {
             Ok(self.jwks.clone())
         } else {
-            Err(crate::error::AAuthError::Token {
-                code: "metadata_fetch_failed".into(),
-                message: format!("unknown JWKS URI: {jwks_uri}"),
-            })
+            Err(MetadataError::UnknownJwksUri(jwks_uri.to_string()).into())
         }
     }
 }

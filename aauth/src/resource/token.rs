@@ -2,6 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, Header};
 
+use crate::error::ResourceTokenError;
 use crate::jwt::ResourceClaims;
 use crate::protocol::{JwtTyp, Mission, ResourceInteractionClaim};
 use crate::resource::keys::ResourceTokenSigner;
@@ -21,11 +22,11 @@ pub struct ResourceTokenOptions {
 pub async fn create_resource_token(
     options: ResourceTokenOptions,
     signer: &dyn ResourceTokenSigner,
-) -> Result<String, String> {
+) -> Result<String, ResourceTokenError> {
     let lifetime = options.lifetime.unwrap_or(300);
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
+        .map_err(ResourceTokenError::SystemTime)?
         .as_secs();
 
     let claims = ResourceClaims {

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use jsonwebtoken::{DecodingKey, decode_header};
 
-use crate::error::{AAuthError, Result, TokenError};
+use crate::error::{JwtError, Result, VerifyError, VerifyReason};
 use crate::jwt::{
     AuthClaims, ResourceClaims, VerifiedToken, decode_resource_token_unverified, jwk_thumbprint,
 };
@@ -26,16 +26,16 @@ pub struct VerifyResourceTokenOptions {
 
 pub async fn verify_token(options: VerifyTokenOptions) -> Result<VerifiedToken> {
     let typ = JwtTyp::from_jwt(&options.jwt)?;
-    let error_code = match typ {
-        JwtTyp::Agent | JwtTyp::Auth => typ.verify_error_code(),
+    match typ {
+        JwtTyp::Agent | JwtTyp::Auth => {}
         JwtTyp::Resource => {
-            return Err(TokenError::new(
-                typ.verify_error_code(),
-                format!("Unsupported JWT typ for verification: {typ}"),
-            )
+            return Err(VerifyError::Invalid {
+                typ,
+                reason: VerifyReason::UnsupportedTyp,
+            }
             .into());
         }
-    };
+    }
 
     let claims = VerifiedToken::decode_unverified(&options.jwt)?;
 
@@ -44,42 +44,29 @@ pub async fn verify_token(options: VerifyTokenOptions) -> Result<VerifiedToken> 
         .unwrap()
         .as_secs() as i64;
     if claims.exp() < now - CLOCK_SKEW {
-        return Err(TokenError::new(error_code, "Token has expired").into());
+        return Err(VerifyError::Expired { typ }.into());
     }
 
     let cnf_thumbprint = jwk_thumbprint(claims.cnf_jwk())?;
     if cnf_thumbprint != options.http_signature_thumbprint {
-        return Err(TokenError::new(
-            "key_binding_failed",
-            "cnf.jwk thumbprint does not match HTTP signature key",
-        )
-        .into());
+        return Err(VerifyError::KeyBindingFailed.into());
     }
 
-    let decoding_key = fetch_decoding_key(
-        claims.iss(),
-        claims.dwk(),
-        error_code,
-        &options.fetcher,
-        &options.jwt,
-    )
-    .await?;
+    let decoding_key =
+        fetch_decoding_key(claims.iss(), claims.dwk(), &options.fetcher, &options.jwt).await?;
 
-    VerifiedToken::decode_verified(&options.jwt, &decoding_key).map_err(|e| {
-        if let AAuthError::Token { code, message } = e {
-            TokenError::new(code, message)
-        } else {
-            TokenError::new(
-                error_code,
-                format!("JWT signature verification failed: {e}"),
-            )
-        }
-        .into()
+    VerifiedToken::decode_verified(&options.jwt, &decoding_key).map_err(|e| match e {
+        crate::error::AAuthError::Verify(v) => v.into(),
+        crate::error::AAuthError::Jwt(j) => VerifyError::Jwt(j).into(),
+        other => VerifyError::token(
+            typ.verify_error_code(),
+            format!("JWT signature verification failed: {other}"),
+        )
+        .into(),
     })
 }
 
 pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Result<ResourceClaims> {
-    let error_code = JwtTyp::Resource.verify_error_code();
     let claims = decode_resource_token_unverified(&options.jwt)?;
 
     let now = std::time::SystemTime::now()
@@ -87,33 +74,34 @@ pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Resul
         .unwrap()
         .as_secs() as i64;
     if (claims.exp as i64) < now - CLOCK_SKEW {
-        return Err(TokenError::new(error_code, "Resource token has expired").into());
+        return Err(VerifyError::Expired {
+            typ: JwtTyp::Resource,
+        }
+        .into());
     }
 
     if claims.dwk != "aauth-resource.json" {
-        return Err(TokenError::new(error_code, "invalid resource token dwk").into());
+        return Err(VerifyError::Invalid {
+            typ: JwtTyp::Resource,
+            reason: VerifyReason::InvalidDwk,
+        }
+        .into());
     }
 
     if let Some(expected) = &options.expected_agent {
         if &claims.agent != expected {
-            return Err(TokenError::new(error_code, "resource token agent mismatch").into());
+            return Err(VerifyError::AgentMismatch.into());
         }
     }
 
     if let Some(expected_jkt) = &options.expected_agent_jkt {
         if &claims.agent_jkt != expected_jkt {
-            return Err(TokenError::new(error_code, "resource token agent_jkt mismatch").into());
+            return Err(VerifyError::AgentJktMismatch.into());
         }
     }
 
-    let decoding_key = fetch_decoding_key(
-        &claims.iss,
-        &claims.dwk,
-        error_code,
-        &options.fetcher,
-        &options.jwt,
-    )
-    .await?;
+    let decoding_key =
+        fetch_decoding_key(&claims.iss, &claims.dwk, &options.fetcher, &options.jwt).await?;
 
     jsonwebtoken::decode::<ResourceClaims>(
         &options.jwt,
@@ -122,8 +110,8 @@ pub async fn verify_resource_token(options: VerifyResourceTokenOptions) -> Resul
     )
     .map(|data| data.claims)
     .map_err(|e| {
-        TokenError::new(
-            error_code,
+        VerifyError::token(
+            JwtTyp::Resource.verify_error_code(),
             format!("Resource token signature verification failed: {e}"),
         )
         .into()
@@ -137,9 +125,7 @@ fn normalize_server_url(url: &str) -> String {
 /// Verify auth token `aud` binding for resource access.
 pub fn verify_auth_token_binding(auth: &AuthClaims, resource_url: &str) -> Result<()> {
     if normalize_server_url(&auth.aud) != normalize_server_url(resource_url) {
-        return Err(
-            TokenError::new(JwtTyp::Auth.verify_error_code(), "auth token aud mismatch").into(),
-        );
+        return Err(VerifyError::AudMismatch.into());
     }
     Ok(())
 }
@@ -162,19 +148,17 @@ pub async fn verify_client_auth_token(
     let auth = match verified {
         VerifiedToken::Auth(c) => c,
         _ => {
-            return Err(
-                TokenError::new(JwtTyp::Auth.verify_error_code(), "expected auth token").into(),
-            );
+            return Err(VerifyError::Invalid {
+                typ: JwtTyp::Auth,
+                reason: VerifyReason::ExpectedAuth,
+            }
+            .into());
         }
     };
 
     verify_auth_token_binding(&auth, resource_url)?;
     if auth.agent != agent_sub {
-        return Err(TokenError::new(
-            JwtTyp::Auth.verify_error_code(),
-            "auth token agent mismatch",
-        )
-        .into());
+        return Err(VerifyError::AgentMismatch.into());
     }
 
     Ok(auth)
@@ -197,11 +181,7 @@ pub async fn verify_resource_challenge(
     .await
     .and_then(|claims| {
         if normalize_server_url(&claims.iss) != normalize_server_url(resource_url) {
-            return Err(TokenError::new(
-                JwtTyp::Resource.verify_error_code(),
-                "resource token iss mismatch",
-            )
-            .into());
+            return Err(VerifyError::IssMismatch.into());
         }
         Ok(claims)
     })
@@ -210,33 +190,20 @@ pub async fn verify_resource_challenge(
 async fn fetch_decoding_key(
     iss: &str,
     dwk: &str,
-    error_code: &str,
     fetcher: &Arc<dyn MetadataFetcher>,
     jwt: &str,
 ) -> Result<DecodingKey> {
-    let jwks_uri = fetcher
-        .resolve_jwks_uri(iss, dwk)
-        .await
-        .map_err(|e| match e {
-            AAuthError::Token { code, message } => TokenError::new(code, message),
-            other => TokenError::new("metadata_fetch_failed", other.to_string()),
-        })?;
+    let jwks_uri = fetcher.resolve_jwks_uri(iss, dwk).await?;
+    let jwks = fetcher.fetch_jwks(&jwks_uri).await?;
 
-    let jwks = fetcher.fetch_jwks(&jwks_uri).await.map_err(|e| {
-        TokenError::new(
-            error_code,
-            format!("Failed to fetch JWKS from {jwks_uri}: {e}"),
-        )
-    })?;
-
-    let header = decode_header(jwt).map_err(|e| AAuthError::Message(e.to_string()))?;
-    let kid = header
-        .kid
-        .ok_or_else(|| AAuthError::Message("missing kid".into()))?;
+    let header = decode_header(jwt).map_err(JwtError::Decode)?;
+    let kid = header.kid.ok_or(VerifyError::MissingKid)?;
 
     let jwk = jwks
         .find(&kid)
-        .ok_or_else(|| AAuthError::Message(format!("unknown kid: {kid}")))?;
+        .ok_or_else(|| VerifyError::UnknownKid(kid.clone()))?;
 
-    DecodingKey::from_jwk(jwk).map_err(|e| AAuthError::Message(e.to_string()))
+    DecodingKey::from_jwk(jwk)
+        .map_err(JwtError::Decode)
+        .map_err(Into::into)
 }
