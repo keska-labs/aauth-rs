@@ -6,22 +6,95 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use aauth::TestKeys;
 use aauth::protocol::AuthOkResponse;
 use aauth_reqwest::{ClarificationCallback, InteractionCallback};
 use http::header::CONTENT_TYPE;
 use rstest::rstest;
 
-use support::axum_server::{TestScenario, spawn_test_server};
+use support::agent_issuer::agent_issuer_app;
+use support::apps::{
+    AccessPolicyKind, access_server_app, federated_person_server_app, federated_resource_app,
+};
+use support::client::AgentClientBuilder;
+use support::listen::{Serving, bind_ephemeral, serve};
+use support::metadata::MultiPartyMetadataFetcher;
+
+struct FederatedParties {
+    keys: TestKeys,
+    agent: Serving,
+    person: Serving,
+    access: Serving,
+    resource: Serving,
+    person_pending: aauth_policy::InMemoryPersonPendingStore,
+    fetcher: Arc<dyn aauth::metadata::MetadataFetcher>,
+}
+
+async fn spawn_federated(access_policy: AccessPolicyKind) -> FederatedParties {
+    let keys = TestKeys::generate();
+    let (agent_listener, agent_url) = bind_ephemeral().await;
+    let agent = serve(
+        agent_listener,
+        agent_issuer_app(&keys, &agent_url),
+        agent_url,
+    );
+
+    let (person_listener, person_url) = bind_ephemeral().await;
+    let (access_listener, access_url) = bind_ephemeral().await;
+    let (resource_listener, resource_url) = bind_ephemeral().await;
+
+    let fetcher = MultiPartyMetadataFetcher::builder(&keys, &agent.url, &resource_url)
+        .person_server(&person_url)
+        .access_server(&access_url)
+        .build();
+
+    let person_parts =
+        federated_person_server_app(&keys, &person_url, &resource_url, Arc::clone(&fetcher));
+    let person_pending = person_parts.pending;
+    let access_parts = access_server_app(
+        &keys,
+        &access_url,
+        &person_url,
+        &resource_url,
+        Arc::clone(&fetcher),
+        access_policy,
+    );
+    let person = serve(person_listener, person_parts.app, person_url);
+    let access = serve(access_listener, access_parts.app, access_url);
+    let resource = serve(
+        resource_listener,
+        federated_resource_app(
+            &keys,
+            &resource_url,
+            &person.url,
+            &access.url,
+            Arc::clone(&fetcher),
+        ),
+        resource_url,
+    );
+
+    FederatedParties {
+        keys,
+        agent,
+        person,
+        access,
+        resource,
+        person_pending,
+        fetcher,
+    }
+}
 
 #[rstest]
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn federated_over_http() {
-    let spawned = spawn_test_server(TestScenario::federated()).await;
+    let parties = spawn_federated(AccessPolicyKind::Grant).await;
 
-    let client = spawned.agent().with_spawned_person_server().build();
+    let client = AgentClientBuilder::new(&parties.keys, &parties.agent.url, parties.fetcher)
+        .with_person_server(&parties.person.url)
+        .build();
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", parties.resource.url))
         .send()
         .await
         .expect("request");
@@ -36,7 +109,7 @@ async fn federated_over_http() {
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn federated_as_clarification_deferred_over_http() {
-    let spawned = spawn_test_server(TestScenario::federated_clarification()).await;
+    let parties = spawn_federated(AccessPolicyKind::Clarification).await;
 
     let received_clarification = Arc::new(Mutex::new(None));
     let received_clarification_cb = Arc::clone(&received_clarification);
@@ -49,14 +122,13 @@ async fn federated_as_clarification_deferred_over_http() {
         })
     });
 
-    let client = spawned
-        .agent()
-        .with_spawned_person_server()
+    let client = AgentClientBuilder::new(&parties.keys, &parties.agent.url, parties.fetcher)
+        .with_person_server(&parties.person.url)
         .on_clarification(on_clarification)
         .build();
 
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", parties.resource.url))
         .send()
         .await
         .expect("request");
@@ -74,13 +146,13 @@ async fn federated_as_clarification_deferred_over_http() {
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn federated_as_interaction_deferred_over_http() {
-    let spawned = spawn_test_server(TestScenario::federated_interaction()).await;
+    let parties = spawn_federated(AccessPolicyKind::Interaction).await;
 
     let received = Arc::new(Mutex::new(None));
     let received_cb = Arc::clone(&received);
-    let person_url = spawned.person_server_url.clone();
-    let person_pending_cb = spawned.person_pending.clone();
-    let expected_interaction_url = format!("{}/as/interact", spawned.person_server_url);
+    let person_url = parties.person.url.clone();
+    let person_pending_cb = parties.person_pending.clone();
+    let expected_interaction_url = format!("{}/interact", parties.access.url);
     let posted = Arc::new(AtomicBool::new(false));
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
@@ -116,14 +188,13 @@ async fn federated_as_interaction_deferred_over_http() {
         });
     });
 
-    let client = spawned
-        .agent()
-        .with_spawned_person_server()
+    let client = AgentClientBuilder::new(&parties.keys, &parties.agent.url, parties.fetcher)
+        .with_person_server(&parties.person.url)
         .on_interaction(on_interaction)
         .build();
 
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", parties.resource.url))
         .send()
         .await
         .expect("request");

@@ -1,20 +1,22 @@
-//! Reqwest client setup shared by integration tests and runnable examples.
+//! Reqwest agent client builder for integration tests and examples.
 
 use std::sync::Arc;
 
 use aauth::KeyMaterialProvider;
+use aauth::TestKeys;
+use aauth::metadata::MetadataFetcher;
 use aauth_reqwest::{
     AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
 };
 
-pub use super::AGENT_ID;
-use super::axum_server::SpawnedServer;
+use super::AGENT_ID;
 use super::timeout::TEST_POLL_MAX_SECS;
 
-/// Builder for an `aauth-reqwest` agent client pointed at a [`SpawnedServer`].
-#[allow(dead_code)]
-pub struct AgentClientBuilder<'a> {
-    spawned: &'a SpawnedServer,
+/// Builder for an `aauth-reqwest` agent client.
+pub struct AgentClientBuilder {
+    keys: TestKeys,
+    agent_url: String,
+    metadata_fetcher: Arc<dyn MetadataFetcher>,
     person_server_url: Option<String>,
     agent_ps_claim: Option<String>,
     on_interaction: Option<InteractionCallback>,
@@ -22,11 +24,16 @@ pub struct AgentClientBuilder<'a> {
     provider: Option<Arc<dyn KeyMaterialProvider>>,
 }
 
-#[allow(dead_code)]
-impl<'a> AgentClientBuilder<'a> {
-    pub fn new(spawned: &'a SpawnedServer) -> Self {
+impl AgentClientBuilder {
+    pub fn new(
+        keys: &TestKeys,
+        agent_url: impl Into<String>,
+        metadata_fetcher: Arc<dyn MetadataFetcher>,
+    ) -> Self {
         Self {
-            spawned,
+            keys: keys.clone(),
+            agent_url: agent_url.into(),
+            metadata_fetcher,
             person_server_url: None,
             agent_ps_claim: None,
             on_interaction: None,
@@ -47,9 +54,9 @@ impl<'a> AgentClientBuilder<'a> {
         self
     }
 
-    /// Use the spawned Person Server for both exchange URL and agent `ps` claim.
-    pub fn with_spawned_person_server(self) -> Self {
-        let url = self.spawned.person_server_url.clone();
+    /// Use `url` for both token exchange and the agent JWT `ps` claim.
+    pub fn with_person_server(self, url: impl Into<String>) -> Self {
+        let url = url.into();
         self.person_server(url.clone()).agent_ps_claim(url)
     }
 
@@ -70,17 +77,14 @@ impl<'a> AgentClientBuilder<'a> {
 
     pub fn build(self) -> aauth_reqwest::ClientWithMiddleware {
         let ps = self.agent_ps_claim.as_deref();
-        let agent_jwt = self
-            .spawned
-            .keys
-            .mint_agent_jwt(&self.spawned.agent_url, AGENT_ID, ps);
+        let agent_jwt = self.keys.mint_agent_jwt(&self.agent_url, AGENT_ID, ps);
         let provider = self
             .provider
-            .unwrap_or_else(|| self.spawned.keys.key_provider(agent_jwt));
+            .unwrap_or_else(|| self.keys.key_provider(agent_jwt));
 
         let mut builder = AgentOptions::builder(provider)
             .max_poll_duration_secs(TEST_POLL_MAX_SECS)
-            .metadata_fetcher(Arc::clone(&self.spawned.metadata_fetcher));
+            .metadata_fetcher(self.metadata_fetcher);
         if let Some(url) = self.person_server_url {
             builder = builder.person_server_url(url);
         }
@@ -94,12 +98,5 @@ impl<'a> AgentClientBuilder<'a> {
         ClientBuilder::new(reqwest::Client::new())
             .with(AgentMiddleware::new(builder.build()))
             .build()
-    }
-}
-
-impl SpawnedServer {
-    /// Start building an agent HTTP client for this server.
-    pub fn agent(&self) -> AgentClientBuilder<'_> {
-        AgentClientBuilder::new(self)
     }
 }

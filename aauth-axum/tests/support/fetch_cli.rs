@@ -42,16 +42,6 @@ pub fn bootstrap_available() -> bool {
     aauth_dir().join("config.json").is_file()
 }
 
-/// Rewrite a local `http://127.0.0.1:port/...` URL to use [`public_base_url`].
-pub fn publicize_url(local_url: &str) -> Option<String> {
-    let base = public_base_url()?;
-    let base = base.trim_end_matches('/');
-    let parsed = url::Url::parse(local_url).ok()?;
-    let path = parsed.path();
-    let query = parsed.query().map(|q| format!("?{q}")).unwrap_or_default();
-    Some(format!("{base}{path}{query}"))
-}
-
 /// Options for one `npx @aauth/fetch` invocation.
 #[derive(Debug, Clone, Default)]
 pub struct FetchCliOptions {

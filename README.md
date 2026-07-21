@@ -172,7 +172,7 @@ Key material is injected via `KeyMaterialProvider` (equivalent to the TypeScript
 
 ## Examples
 
-Each example mirrors an access mode from the [AAuth explorer](https://explorer.aauth.dev/):
+Each example mirrors an access mode from the [AAuth explorer](https://explorer.aauth.dev/) and shows how to build the axum app (`ResourceAuthLayer`, routes, role routers) before running a short agent client demo:
 
 ```bash
 # Identity Based — agent JWT alone grants access

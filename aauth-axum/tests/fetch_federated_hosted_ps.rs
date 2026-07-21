@@ -7,7 +7,7 @@
 //! Prerequisites:
 //! - `npx @aauth/bootstrap create <agent-provider-url>`
 //! - `AAUTH_E2E_PUBLIC_BASE` — tunnel fronting the local resource (hosted PS must
-//!   fetch resource JWKS). When set, [`spawn_test_server`] advertises that base.
+//!   fetch resource JWKS).
 //!
 //! Run:
 //! ```bash
@@ -16,10 +16,16 @@
 
 mod support;
 
-use support::axum_server::{TestScenario, spawn_test_server};
+use std::sync::Arc;
+
+use aauth::TestKeys;
+
+use support::apps::hosted_person_managed_resource_app;
 use support::fetch_cli::{
     FetchCliOptions, bootstrap_available, fetch_emit, hosted_person_server_url, public_base_url,
 };
+use support::listen::{bind, serve};
+use support::metadata::MultiPartyMetadataFetcher;
 
 #[tokio::test]
 #[ignore = "hybrid: needs bootstrap + AAUTH_E2E_PUBLIC_BASE + hosted PS consent"]
@@ -34,12 +40,21 @@ async fn fetch_local_resource_via_hosted_person_server() {
     );
 
     let hosted_ps = hosted_person_server_url();
-    let spawned = spawn_test_server(TestScenario::hosted_person_managed(hosted_ps.clone())).await;
-    let resource_url = format!("{}/api/data", spawned.resource_url);
-    let _keep = spawned;
+    let keys = TestKeys::generate();
+    let (listener, resource_url) = bind().await;
+    let fetcher = MultiPartyMetadataFetcher::builder(&keys, &resource_url, &resource_url)
+        .with_http_fallback()
+        .build();
+    let resource = serve(
+        listener,
+        hosted_person_managed_resource_app(&keys, &resource_url, &hosted_ps, Arc::clone(&fetcher)),
+        resource_url,
+    );
+    let resource_api = format!("{}/api/data", resource.url);
+    let _keep = resource;
 
     let emit = fetch_emit(
-        &resource_url,
+        &resource_api,
         FetchCliOptions::new()
             .person_server(hosted_ps)
             .browser()

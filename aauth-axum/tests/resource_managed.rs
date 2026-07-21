@@ -5,21 +5,42 @@ mod support;
 use std::sync::Arc;
 use std::time::Duration;
 
+use aauth::TestKeys;
 use aauth::protocol::AgentOkResponse;
 use aauth_policy::{OpaqueAccessStore, PendingStore};
 use rstest::rstest;
 
 use support::AGENT_ID;
-use support::axum_server::{TestScenario, spawn_test_server};
+use support::agent_issuer::agent_issuer_app;
+use support::apps::{ResourcePolicyKind, resource_managed_app};
+use support::client::AgentClientBuilder;
+use support::listen::{bind_ephemeral, serve};
+use support::metadata::MultiPartyMetadataFetcher;
 
 #[rstest]
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn resource_managed_over_http() {
-    let spawned = spawn_test_server(TestScenario::resource_managed()).await;
+    let keys = TestKeys::generate();
+    let (agent_listener, agent_url) = bind_ephemeral().await;
+    let agent = serve(
+        agent_listener,
+        agent_issuer_app(&keys, &agent_url),
+        agent_url,
+    );
 
-    let resource_pending_cb = spawned.resource_pending.clone();
-    let opaque_store_cb = spawned.opaque_store.clone();
+    let (resource_listener, resource_url) = bind_ephemeral().await;
+    let fetcher = MultiPartyMetadataFetcher::builder(&keys, &agent.url, &resource_url).build();
+    let parts = resource_managed_app(
+        &keys,
+        &resource_url,
+        Arc::clone(&fetcher),
+        ResourcePolicyKind::Interaction,
+    );
+    let resource_pending_cb = parts.pending.clone();
+    let opaque_store_cb = parts.opaque_store.clone();
+    let resource = serve(resource_listener, parts.app, resource_url);
+
     let on_interaction = Arc::new(move |_url: String, _code: String| {
         let pending = resource_pending_cb.clone();
         let opaque = opaque_store_cb.issue(AGENT_ID);
@@ -33,9 +54,11 @@ async fn resource_managed_over_http() {
         });
     });
 
-    let client = spawned.agent().on_interaction(on_interaction).build();
+    let client = AgentClientBuilder::new(&keys, &agent.url, fetcher)
+        .on_interaction(on_interaction)
+        .build();
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", resource.url))
         .send()
         .await
         .expect("request");

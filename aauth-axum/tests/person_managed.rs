@@ -5,6 +5,7 @@ mod support;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use aauth::TestKeys;
 use aauth::protocol::{AAUTH_REQUIREMENT, AuthOkResponse};
 use aauth_policy::PendingStore;
 use aauth_reqwest::{ClarificationCallback, InteractionCallback};
@@ -12,22 +13,84 @@ use http::header::{CONTENT_TYPE, LOCATION};
 use rstest::rstest;
 
 use support::AGENT_ID;
-use support::axum_server::{SpawnedServer, TestScenario, spawn_test_server};
+use support::agent_issuer::agent_issuer_app;
+use support::apps::{PersonPolicyKind, person_managed_resource_app, person_server_app};
+use support::client::AgentClientBuilder;
+use support::listen::{Serving, bind_ephemeral, serve};
+use support::metadata::MultiPartyMetadataFetcher;
+
+struct PersonManagedParties {
+    keys: TestKeys,
+    agent: Serving,
+    person: Serving,
+    resource: Serving,
+    person_pending: aauth_policy::InMemoryPersonPendingStore,
+    fetcher: Arc<dyn aauth::metadata::MetadataFetcher>,
+}
+
+async fn spawn_person_managed(
+    policy: PersonPolicyKind,
+    resource_initiated_interaction: bool,
+) -> PersonManagedParties {
+    let keys = TestKeys::generate();
+    let (agent_listener, agent_url) = bind_ephemeral().await;
+    let agent = serve(
+        agent_listener,
+        agent_issuer_app(&keys, &agent_url),
+        agent_url,
+    );
+
+    let (person_listener, person_url) = bind_ephemeral().await;
+    let (resource_listener, resource_url) = bind_ephemeral().await;
+
+    let fetcher = MultiPartyMetadataFetcher::builder(&keys, &agent.url, &resource_url)
+        .person_server(&person_url)
+        .build();
+
+    let person_parts = person_server_app(
+        &keys,
+        &person_url,
+        &resource_url,
+        Arc::clone(&fetcher),
+        policy,
+    );
+    let person_pending = person_parts.pending;
+    let person = serve(person_listener, person_parts.app, person_url);
+    let resource = serve(
+        resource_listener,
+        person_managed_resource_app(
+            &keys,
+            &resource_url,
+            &person.url,
+            Arc::clone(&fetcher),
+            resource_initiated_interaction,
+        ),
+        resource_url,
+    );
+
+    PersonManagedParties {
+        keys,
+        agent,
+        person,
+        resource,
+        person_pending,
+        fetcher,
+    }
+}
 
 async fn signed_request(
-    spawned: &SpawnedServer,
+    parties: &PersonManagedParties,
     method: reqwest::Method,
     url: &str,
     body: Option<String>,
 ) -> reqwest::Response {
     use aauth_reqwest::RequestSigningExt;
 
-    let agent_jwt = spawned.keys.mint_agent_jwt(
-        &spawned.agent_url,
-        AGENT_ID,
-        Some(&spawned.person_server_url),
-    );
-    let provider = spawned.keys.key_provider(agent_jwt);
+    let agent_jwt =
+        parties
+            .keys
+            .mint_agent_jwt(&parties.agent.url, AGENT_ID, Some(&parties.person.url));
+    let provider = parties.keys.key_provider(agent_jwt);
     let material = provider.key_material().await.expect("key material");
     let client = reqwest::Client::new();
     let mut builder = client.request(method, url);
@@ -43,11 +106,13 @@ async fn signed_request(
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn person_server_managed_over_http() {
-    let spawned = spawn_test_server(TestScenario::person_managed()).await;
+    let parties = spawn_person_managed(PersonPolicyKind::Grant, false).await;
 
-    let client = spawned.agent().with_spawned_person_server().build();
+    let client = AgentClientBuilder::new(&parties.keys, &parties.agent.url, parties.fetcher)
+        .with_person_server(&parties.person.url)
+        .build();
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", parties.resource.url))
         .send()
         .await
         .expect("request");
@@ -62,11 +127,13 @@ async fn person_server_managed_over_http() {
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn person_server_managed_ps_from_agent_claim_over_http() {
-    let spawned = spawn_test_server(TestScenario::person_managed()).await;
+    let parties = spawn_person_managed(PersonPolicyKind::Grant, false).await;
 
-    let client = spawned.agent().with_spawned_person_server().build();
+    let client = AgentClientBuilder::new(&parties.keys, &parties.agent.url, parties.fetcher)
+        .with_person_server(&parties.person.url)
+        .build();
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", parties.resource.url))
         .send()
         .await
         .expect("request");
@@ -80,15 +147,15 @@ async fn person_server_managed_ps_from_agent_claim_over_http() {
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn deferred_interaction_over_http() {
-    let spawned = spawn_test_server(TestScenario::person_managed_interaction()).await;
+    let parties = spawn_person_managed(PersonPolicyKind::Interaction, false).await;
 
-    let interaction_url = format!("{}/interact", spawned.person_server_url);
+    let interaction_url = format!("{}/interact", parties.person.url);
     let received = Arc::new(Mutex::new(None));
     let received_cb = Arc::clone(&received);
-    let person_pending_cb = spawned.person_pending.clone();
-    let keys_cb = spawned.keys.clone();
-    let resource_url = spawned.resource_url.clone();
-    let person_server_url = spawned.person_server_url.clone();
+    let person_pending_cb = parties.person_pending.clone();
+    let keys_cb = parties.keys.clone();
+    let resource_url = parties.resource.url.clone();
+    let person_server_url = parties.person.url.clone();
 
     let on_interaction: InteractionCallback = Arc::new(move |url, code| {
         *received_cb.lock().unwrap() = Some((url.clone(), code.clone()));
@@ -117,14 +184,13 @@ async fn deferred_interaction_over_http() {
         });
     });
 
-    let client = spawned
-        .agent()
-        .with_spawned_person_server()
+    let client = AgentClientBuilder::new(&parties.keys, &parties.agent.url, parties.fetcher)
+        .with_person_server(&parties.person.url)
         .on_interaction(on_interaction)
         .build();
 
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", parties.resource.url))
         .send()
         .await
         .expect("request");
@@ -144,7 +210,7 @@ async fn deferred_interaction_over_http() {
 #[timeout(Duration::from_secs(1))]
 #[tokio::test]
 async fn clarification_deferred_over_http() {
-    let spawned = spawn_test_server(TestScenario::person_managed_clarification()).await;
+    let parties = spawn_person_managed(PersonPolicyKind::Clarification, false).await;
 
     let received_clarification = Arc::new(Mutex::new(None));
     let received_clarification_cb = Arc::clone(&received_clarification);
@@ -157,14 +223,13 @@ async fn clarification_deferred_over_http() {
         })
     });
 
-    let client = spawned
-        .agent()
-        .with_spawned_person_server()
+    let client = AgentClientBuilder::new(&parties.keys, &parties.agent.url, parties.fetcher)
+        .with_person_server(&parties.person.url)
         .on_clarification(on_clarification)
         .build();
 
     let response = client
-        .get(format!("{}/api/data", spawned.resource_url))
+        .get(format!("{}/api/data", parties.resource.url))
         .send()
         .await
         .expect("request");
@@ -182,18 +247,18 @@ async fn clarification_deferred_over_http() {
 #[timeout(Duration::from_secs(2))]
 #[tokio::test]
 async fn resource_initiated_interaction_over_http() {
-    let spawned = spawn_test_server(TestScenario::person_managed_resource_interaction()).await;
+    let parties = spawn_person_managed(PersonPolicyKind::Grant, true).await;
 
-    let ps_interaction_url = format!("{}/interact", spawned.person_server_url);
+    let ps_interaction_url = format!("{}/interact", parties.person.url);
     let http = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("client");
 
     let challenge = signed_request(
-        &spawned,
+        &parties,
         reqwest::Method::GET,
-        &format!("{}/api/data", spawned.resource_url),
+        &format!("{}/api/data", parties.resource.url),
         None,
     )
     .await;
@@ -223,9 +288,9 @@ async fn resource_initiated_interaction_over_http() {
         device: None,
     };
     let exchange = signed_request(
-        &spawned,
+        &parties,
         reqwest::Method::POST,
-        &format!("{}/aauth/token", spawned.person_server_url),
+        &format!("{}/aauth/token", parties.person.url),
         Some(serde_json::to_string(&exchange_body).expect("exchange json")),
     )
     .await;
@@ -271,7 +336,7 @@ async fn resource_initiated_interaction_over_http() {
         .and_then(|v| v.to_str().ok())
         .expect("pending location")
         .to_string();
-    let poll = signed_request(&spawned, reqwest::Method::GET, &pending_url, None).await;
+    let poll = signed_request(&parties, reqwest::Method::GET, &pending_url, None).await;
     assert_eq!(poll.status(), reqwest::StatusCode::OK);
     let token_body: aauth::protocol::TokenResponseBody = poll.json().await.expect("auth token");
     assert!(!token_body.auth_token.is_empty());
@@ -281,16 +346,16 @@ async fn resource_initiated_interaction_over_http() {
 #[timeout(Duration::from_secs(2))]
 #[tokio::test]
 async fn resource_initiated_interaction_callback_denied_over_http() {
-    let spawned = spawn_test_server(TestScenario::person_managed_resource_interaction()).await;
+    let parties = spawn_person_managed(PersonPolicyKind::Grant, true).await;
 
     let http = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("client");
     let challenge = signed_request(
-        &spawned,
+        &parties,
         reqwest::Method::GET,
-        &format!("{}/api/data", spawned.resource_url),
+        &format!("{}/api/data", parties.resource.url),
         None,
     )
     .await;
@@ -319,9 +384,9 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
         device: None,
     };
     let exchange = signed_request(
-        &spawned,
+        &parties,
         reqwest::Method::POST,
-        &format!("{}/aauth/token", spawned.person_server_url),
+        &format!("{}/aauth/token", parties.person.url),
         Some(serde_json::to_string(&exchange_body).expect("exchange json")),
     )
     .await;
@@ -367,6 +432,6 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
         .and_then(|v| v.to_str().ok())
         .expect("pending location")
         .to_string();
-    let poll = signed_request(&spawned, reqwest::Method::GET, &pending_url, None).await;
+    let poll = signed_request(&parties, reqwest::Method::GET, &pending_url, None).await;
     assert_eq!(poll.status(), reqwest::StatusCode::FORBIDDEN);
 }

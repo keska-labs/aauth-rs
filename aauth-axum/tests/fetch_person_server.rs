@@ -2,9 +2,7 @@
 //!
 //! Prerequisites:
 //! - `npx @aauth/bootstrap create <agent-provider-url>`
-//! - `AAUTH_E2E_PUBLIC_BASE` — public URL of a tunnel fronting the local listener
-//!   (hosted whoami must fetch JWKS from the local Person Server). When set,
-//!   [`spawn_test_server`](support::axum_server::spawn_test_server) advertises that base.
+//! - `AAUTH_E2E_PUBLIC_BASE` — public URL of a tunnel fronting the local Person Server
 //!
 //! Run:
 //! ```bash
@@ -13,10 +11,16 @@
 
 mod support;
 
-use support::axum_server::{TestScenario, spawn_test_server};
+use std::sync::Arc;
+
+use aauth::TestKeys;
+
+use support::apps::{PersonPolicyKind, person_server_app};
 use support::fetch_cli::{
     FetchCliOptions, bootstrap_available, fetch_emit, public_base_url, whoami_url,
 };
+use support::listen::{bind, serve};
+use support::metadata::MultiPartyMetadataFetcher;
 
 #[tokio::test]
 #[ignore = "hybrid: needs bootstrap + AAUTH_E2E_PUBLIC_BASE tunnel to local PS"]
@@ -30,9 +34,23 @@ async fn fetch_whoami_via_local_person_server() {
         "set AAUTH_E2E_PUBLIC_BASE to a tunnel URL fronting the local test server"
     );
 
-    let spawned = spawn_test_server(TestScenario::person_managed()).await;
-    let person_server = spawned.person_server_url.clone();
-    let _keep = spawned;
+    let keys = TestKeys::generate();
+    let (listener, person_url) = bind().await;
+    // Agent/resource URLs are unused for whoami; placeholders for the fetcher builder.
+    let fetcher = MultiPartyMetadataFetcher::builder(&keys, &person_url, &person_url)
+        .person_server(&person_url)
+        .with_http_fallback()
+        .build();
+    let parts = person_server_app(
+        &keys,
+        &person_url,
+        &whoami_url(),
+        Arc::clone(&fetcher),
+        PersonPolicyKind::Grant,
+    );
+    let person = serve(listener, parts.app, person_url);
+    let person_server = person.url.clone();
+    let _keep = person;
 
     let emit = fetch_emit(
         &whoami_url(),
