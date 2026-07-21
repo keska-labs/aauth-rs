@@ -14,7 +14,6 @@ pub mod metadata;
 pub mod mission;
 pub mod pending;
 pub mod permission;
-pub mod signature;
 pub mod token68;
 pub mod token_exchange;
 
@@ -30,6 +29,9 @@ pub use headers::{
     AAUTH_MISSION_NAME, AAUTH_REQUIREMENT, AAUTH_REQUIREMENT_NAME, AAuthChallenge, PREFER,
     PREFER_NAME, SIGNATURE, SIGNATURE_ERROR, SIGNATURE_ERROR_NAME, SIGNATURE_INPUT,
     SIGNATURE_INPUT_NAME, SIGNATURE_KEY, SIGNATURE_KEY_NAME, SIGNATURE_NAME,
+};
+pub use httpsig_key::{
+    SignatureKey, SignatureKeyHwk, SignatureKeyJwt, SignatureKeyScheme, SigningMaterial,
 };
 pub use identifiers::{is_valid_agent_identifier, is_valid_server_identifier};
 pub use interaction::{
@@ -50,8 +52,5 @@ pub use pending::{
     UpdatedTokenRequest,
 };
 pub use permission::{PermissionDecision, PermissionRequest, PermissionResponse};
-pub use signature::{
-    KeyMaterial, SignatureKey, SignatureKeyHwk, SignatureKeyJktJwt, SignatureKeyJwt,
-};
 pub use token_exchange::{AccessTokenExchangeRequest, TokenExchangeRequest, TokenResponseBody};
 pub use token68::{is_token68, parse_aauth_access_header, parse_aauth_credential};

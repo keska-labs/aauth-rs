@@ -98,14 +98,13 @@ aauth-axum = { version = "0.0", default-features = false, features = ["resource"
 #![cfg(feature = "resource")]
 use std::sync::Arc;
 
-use aauth::protocol::{KeyMaterial, SignatureKey, SignatureKeyJwt};
+use aauth::protocol::{SignatureKey, SignatureKeyJwt, SigningMaterial};
 use aauth::{NoResourceAccessService, ResourceAccessMode, TestKeys};
 use aauth_axum::{ResourceAuthLayer, VerifiedAAuthToken};
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header::HOST};
 use axum::{Json, Router, routing::get};
-use httpsig_key::{SignOptions, SigningMaterial, sign};
-use std::convert::TryFrom;
+use httpsig_key::{SignOptions, sign};
 use tower::ServiceExt;
 
 #[tokio::main]
@@ -128,7 +127,7 @@ let app = Router::new()
     .route_layer(layer);
 
 let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
-let material = KeyMaterial {
+let signing = SigningMaterial {
     signing_jwk: keys.agent_ephemeral.signing_jwk(),
     signature_key: SignatureKey::Jwt(SignatureKeyJwt { jwt: agent_jwt }),
 };
@@ -137,7 +136,6 @@ let authority = "resource.example";
 let path = "/api/data";
 let mut headers = axum::http::HeaderMap::new();
 headers.insert(HOST, authority.parse().unwrap());
-let signing = SigningMaterial::try_from(&material).unwrap();
 sign(
     &mut headers,
     "GET",

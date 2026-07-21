@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Runnable README doctests for agent, Person/Access/Resource servers, and `httpsig-key` sign/verify (workspace README exercised via `aauth-axum` with `--features full`).
 - `aauth-axum` depends on `tokio` and `reqwest`; feature `full` also enables optional `aauth-reqwest` for workspace README doctests.
 - `aauth-policy` pulls optional `reqwest` with feature `person-server` (for `PersonServerConfig` construction).
-- `TryFrom<&KeyMaterial> for httpsig_key::SigningMaterial` and `From<httpsig_key::Error> for SignatureError` / `AAuthError`.
+- `From<httpsig_key::Error> for SignatureError` / `AAuthError`.
 - `is_valid_server_identifier` / `is_valid_agent_identifier` for HTTPS server identifiers and `aauth:local@domain` agent IDs (loopback HTTP accepted for local tests).
 - `SIGNATURE_ERROR` / `SIGNATURE_ERROR_NAME` header constants; `SignatureErrorHeader` re-exported from `httpsig_key` at the crate root.
 - `SignatureError::signature_error_code` / `is_missing_agent_credential` and `AAuthError::signature_error_header` for `Signature-Error` responses.
@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ResourceServerState::resource_url` for authorize consent context.
 - Agent middleware proactively POSTs `authorization_endpoint` when resource metadata advertises it and no opaque token is cached.
 - Canonical protocol header name constants in `protocol::headers` (`AAUTH_REQUIREMENT` / `_NAME`, `AAUTH_ACCESS`, `AAUTH_CAPABILITIES`, `AAUTH_MISSION`, `SIGNATURE_KEY`, `SIGNATURE_INPUT`, `SIGNATURE`, `PREFER`).
-- `StaticKeyMaterialProvider::new` to wrap arbitrary `KeyMaterial` (e.g. from `@aauth/bootstrap token`).
+- `StaticKeyMaterialProvider::new` to wrap arbitrary `SigningMaterial` (e.g. from `@aauth/bootstrap token`).
 - `IntoAauthProtocol` to map domain errors to HTTP status + `AAuthProtocolError`.
 - Typed domain errors under `AAuthError`: `JwtError`, `MetadataError`, `VerifyError`, `DeferredError`, `HeaderError`, `AgentAuthError`, `ResourceTokenError` (catch-all `Message` / stringly `TokenError` removed).
 - `AgentError` in `aauth-reqwest` for typed agent transport failures (`Auth`, `Exchange`, `Deferred`, `Signature`, `Jwt`, `Metadata`, `Aauth`, `BodyNotCloneable`).
@@ -62,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Call sites sign/verify with `httpsig_key::sign` / `httpsig_key::verify` directly (convert `KeyMaterial` via `TryFrom` into `SigningMaterial`).
+- Call sites sign/verify with `httpsig_key::sign` / `httpsig_key::verify` directly using `SigningMaterial`.
+- `KeyMaterialProvider::key_material` and `StaticKeyMaterialProvider` use `httpsig_key::SigningMaterial` (re-exported from `aauth`); `RequestSigningExt` signs with `&SigningMaterial`.
 - `ResourceAccessMode::IdentityBased` accepts only verified agent JWTs (auth JWTs get `requirement=agent-token`); matches `#overview-identity-access`.
 - `SignatureErrorHeader` serializes SFV Token members (`error=invalid_signature`) per the Signature-Key draft.
 - Async traits use `trait_variant` + `dynosaur`: each crate-owned async trait has a `Local*` base (`Sync`), a Send variant keeping the previous public name, and a public `Dyn*` type (except `PendingStore`, which is generic over `R` and uses in-place `trait_variant::make(Send)` only). Prefer concrete generics for owned config; use `DynTrait::new_arc` only when type erasure is required.
@@ -75,7 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- `aauth::signature` module and façade (`sign_request_headers`, `apply_outbound_signature`, `verify_request_signature` / `verify_request_signature_with_options`, `VerifiedSignature`, `SignatureVerifyOptions`); use `httpsig_key` + `TryFrom<&KeyMaterial>` for signing.
+- `aauth::KeyMaterial` and aauth-local `SignatureKey` / `SignatureKeyJwt` / `SignatureKeyJktJwt` / `SignatureKeyHwk` (`protocol/signature.rs`); use re-exported `httpsig_key::{SigningMaterial, SignatureKey, SignatureKeyJwt, SignatureKeyHwk, SignatureKeyScheme}`.
+- `aauth::signature` module and façade (`sign_request_headers`, `apply_outbound_signature`, `verify_request_signature` / `verify_request_signature_with_options`, `VerifiedSignature`, `SignatureVerifyOptions`); use `httpsig_key` directly.
 - Orphaned unused `aauth` sources under `*/axum/` and `agent/reqwest/` (not part of the module tree; HTTP adapters live in `aauth-axum` / `aauth-reqwest`).
 - `aauth-reqwest` feature `verify` (verification is always compiled with `agent`; use `AgentOptions::verify_auth_signature(false)` only to skip auth-token JWT signature checks).
 - Direct `async-trait` dependency from `aauth` / `aauth-policy` / `aauth-axum` production deps (retained as `aauth` / `aauth-reqwest` **dev**/runtime deps only for foreign `reqwest_middleware::Middleware` impls).

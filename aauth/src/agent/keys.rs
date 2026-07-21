@@ -1,21 +1,22 @@
 use std::sync::Arc;
 
+use httpsig_key::{SignatureKey, SignatureKeyJwt, SigningMaterial};
 use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
 use crate::error::Result;
 use crate::jwt::{AgentClaims, CnfClaim};
 use crate::keys::TestKeys;
-use crate::protocol::{JwtTyp, KeyMaterial, SignatureKey, SignatureKeyJwt};
+use crate::protocol::JwtTyp;
 
 #[trait_variant::make(KeyMaterialProvider: Send)]
 #[dynosaur::dynosaur(pub DynKeyMaterialProvider = dyn(box) KeyMaterialProvider, bridge(dyn))]
 pub trait LocalKeyMaterialProvider: Sync {
-    async fn key_material(&self) -> Result<KeyMaterial>;
+    async fn key_material(&self) -> Result<SigningMaterial>;
 }
 
 impl<T: KeyMaterialProvider + Sync> KeyMaterialProvider for Arc<T> {
-    async fn key_material(&self) -> Result<KeyMaterial> {
+    async fn key_material(&self) -> Result<SigningMaterial> {
         (**self).key_material().await
     }
 }
@@ -79,16 +80,16 @@ impl TestKeys {
 }
 
 pub struct StaticKeyMaterialProvider {
-    material: KeyMaterial,
+    material: SigningMaterial,
 }
 
 impl StaticKeyMaterialProvider {
-    pub fn new(material: KeyMaterial) -> Self {
+    pub fn new(material: SigningMaterial) -> Self {
         Self { material }
     }
 
     pub fn from_test_keys(keys: &TestKeys, agent_jwt: impl Into<String>) -> Self {
-        Self::new(KeyMaterial {
+        Self::new(SigningMaterial {
             signing_jwk: keys.agent_ephemeral.signing_jwk(),
             signature_key: SignatureKey::Jwt(SignatureKeyJwt {
                 jwt: agent_jwt.into(),
@@ -102,7 +103,7 @@ impl StaticKeyMaterialProvider {
 }
 
 impl KeyMaterialProvider for StaticKeyMaterialProvider {
-    async fn key_material(&self) -> Result<KeyMaterial> {
+    async fn key_material(&self) -> Result<SigningMaterial> {
         Ok(self.material.clone())
     }
 }

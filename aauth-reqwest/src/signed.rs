@@ -1,12 +1,7 @@
-use std::convert::TryFrom;
-
 use aauth::SignatureError;
-use aauth::protocol::{
-    AAUTH_CAPABILITIES, AAUTH_MISSION, Capability, KeyMaterial, Mission, SignatureKey,
-    SignatureKeyJwt,
-};
+use aauth::protocol::{AAUTH_CAPABILITIES, AAUTH_MISSION, Capability, Mission};
 use http::header::{AUTHORIZATION, HeaderValue};
-use httpsig_key::{SignOptions, SigningMaterial, sign};
+use httpsig_key::{SignOptions, SignatureKey, SignatureKeyJwt, SigningMaterial, sign};
 use reqwest::{Request, Response};
 
 use crate::error::Result;
@@ -51,20 +46,24 @@ pub(crate) fn apply_opaque_token(request: &mut Request, token: &str) {
     );
 }
 
-/// Extension trait: sign a `reqwest::Request` with [`KeyMaterial`].
+/// Extension trait: sign a `reqwest::Request` with [`SigningMaterial`].
 pub trait RequestSigningExt: Sized {
-    fn sign(&mut self, key_material: &KeyMaterial) -> Result<()>;
+    fn sign(&mut self, key_material: &SigningMaterial) -> Result<()>;
 
-    fn sign_with_auth_token(&mut self, key_material: &KeyMaterial, auth_token: &str) -> Result<()>;
+    fn sign_with_auth_token(
+        &mut self,
+        key_material: &SigningMaterial,
+        auth_token: &str,
+    ) -> Result<()>;
 
-    fn signed(mut self, key_material: &KeyMaterial) -> Result<Self> {
+    fn signed(mut self, key_material: &SigningMaterial) -> Result<Self> {
         self.sign(key_material)?;
         Ok(self)
     }
 
     fn signed_with_auth_token(
         mut self,
-        key_material: &KeyMaterial,
+        key_material: &SigningMaterial,
         auth_token: &str,
     ) -> Result<Self> {
         self.sign_with_auth_token(key_material, auth_token)?;
@@ -73,10 +72,10 @@ pub trait RequestSigningExt: Sized {
 }
 
 impl RequestSigningExt for Request {
-    fn sign(&mut self, key_material: &KeyMaterial) -> Result<()> {
+    fn sign(&mut self, key_material: &SigningMaterial) -> Result<()> {
         match &key_material.signature_key {
-            SignatureKey::Jwt(_) | SignatureKey::JktJwt(_) => {}
-            SignatureKey::Hwk(_) => {
+            SignatureKey::Jwt(_) => {}
+            SignatureKey::Hwk(_) | SignatureKey::Unsupported(_) => {
                 return Err(SignatureError::HwkUnsupported.into());
             }
         }
@@ -92,7 +91,6 @@ impl RequestSigningExt for Request {
         let authority = self.url().authority().to_string();
         let path = self.url().path().to_string();
 
-        let signing = SigningMaterial::try_from(key_material)?;
         let mut options = SignOptions::default();
         if let Some(auth) = authorization {
             options
@@ -104,14 +102,18 @@ impl RequestSigningExt for Request {
             &method,
             &authority,
             &path,
-            &signing,
+            key_material,
             &options,
         )?;
 
         Ok(())
     }
 
-    fn sign_with_auth_token(&mut self, key_material: &KeyMaterial, auth_token: &str) -> Result<()> {
+    fn sign_with_auth_token(
+        &mut self,
+        key_material: &SigningMaterial,
+        auth_token: &str,
+    ) -> Result<()> {
         let mut auth_material = key_material.clone();
         auth_material.signature_key = SignatureKey::Jwt(SignatureKeyJwt {
             jwt: auth_token.to_string(),

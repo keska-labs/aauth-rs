@@ -1,6 +1,7 @@
+use httpsig_key::SignatureKey;
+
 use crate::error::{AgentAuthError, Result};
 use crate::jwt::AgentClaims;
-use crate::protocol::SignatureKey;
 
 /// Resolve the Person Server URL for token exchange.
 ///
@@ -19,8 +20,8 @@ pub fn resolve_person_server_url(configured: Option<&str>, agent_jwt: &str) -> R
 pub fn agent_jwt_from_signature_key(signature_key: &SignatureKey) -> Result<&str> {
     match signature_key {
         SignatureKey::Jwt(j) => Ok(&j.jwt),
-        SignatureKey::JktJwt(j) => Ok(&j.jwt),
         SignatureKey::Hwk(_) => Err(AgentAuthError::HwkUnsupported.into()),
+        SignatureKey::Unsupported(_) => Err(AgentAuthError::HwkUnsupported.into()),
     }
 }
 

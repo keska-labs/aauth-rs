@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use aauth::{KeyMaterial, SignatureKey, SignatureKeyJwt, SigningJwk, StaticKeyMaterialProvider};
+use aauth::{SignatureKey, SignatureKeyJwt, SigningJwk, SigningMaterial, StaticKeyMaterialProvider};
 use aauth_reqwest::{AgentMiddleware, AgentOptions, CachedMetadataFetcher, ClientBuilder};
 use serde::Deserialize;
 use serde_json::Value;
@@ -123,7 +123,7 @@ fn provider_from_bootstrap() -> Arc<aauth::StaticKeyMaterialProvider> {
         ),
     }
 
-    StaticKeyMaterialProvider::new(KeyMaterial {
+    StaticKeyMaterialProvider::new(SigningMaterial {
         signing_jwk,
         signature_key: SignatureKey::Jwt(SignatureKeyJwt {
             jwt: token.signature_key.jwt,

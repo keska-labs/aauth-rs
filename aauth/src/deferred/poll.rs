@@ -1,16 +1,14 @@
-use std::convert::TryFrom;
 use std::time::{Duration, Instant};
 
 use http::HeaderMap;
 use http::header::{CONTENT_TYPE, RETRY_AFTER};
-use httpsig_key::{SignOptions, SigningMaterial, sign};
+use httpsig_key::{SignOptions, SignatureKey, SignatureKeyJwt, SigningMaterial, sign};
 use tokio::time::sleep;
 
 use crate::error::{DeferredError, Result};
 use crate::jwt::SigningJwk;
 use crate::protocol::{
-    AAuthErrorCode, AAuthProtocolError, ClarificationResponse, KeyMaterial, PREFER, SignatureKey,
-    SignatureKeyJwt, TokenResponseBody,
+    AAuthErrorCode, AAuthProtocolError, ClarificationResponse, PREFER, TokenResponseBody,
 };
 
 use super::parse::{parse_auth_token_response, parse_deferred_response};
@@ -90,13 +88,12 @@ pub async fn post_pending_input<S: OutboundSignatureProvider + ?Sized>(
         };
         let path = parsed.path().to_string();
         let mut headers = HeaderMap::new();
-        let material = KeyMaterial {
+        let signing = SigningMaterial {
             signing_jwk: signer.signing_jwk().clone(),
             signature_key: SignatureKey::Jwt(SignatureKeyJwt {
                 jwt: signer.signature_jwt(),
             }),
         };
-        let signing = SigningMaterial::try_from(&material)?;
         sign(
             &mut headers,
             "POST",
