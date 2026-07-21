@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use http::{HeaderMap, StatusCode};
 
 use crate::error::{AAuthError, Result};
-#[cfg(feature = "agent-reqwest-verify")]
+#[cfg(feature = "resource-verify")]
 use crate::metadata::MetadataFetcher;
 use crate::protocol::parse_aauth_requirement;
 use crate::protocol::{Capability, Mission, PersonServerMetadata};
@@ -48,8 +48,8 @@ struct CachedOpaque {
 /// Framework-agnostic auth/caching state machine for the AAuth protocol.
 ///
 /// Operates on `http::StatusCode` and `http::HeaderMap` only — no reqwest dependency.
-/// Pair with a transport adapter (e.g. [`AgentMiddleware`](crate::agent::reqwest::AgentMiddleware))
-/// that performs signing and HTTP.
+/// Pair with a transport adapter (e.g. `aauth_reqwest::AgentMiddleware`) that performs
+/// signing and HTTP.
 pub struct AgentAuth {
     token_cache: HashMap<String, CachedToken>,
     opaque_cache: HashMap<String, CachedOpaque>,
@@ -79,8 +79,9 @@ pub struct AgentOptions {
     pub(crate) on_clarification: Option<ClarificationCallback>,
     /// Max seconds to poll a pending URL before failing (default 300).
     pub(crate) max_poll_duration_secs: Option<u64>,
-    /// When set (requires `agent-reqwest-verify` feature), resource and auth tokens are verified before use.
-    #[cfg(feature = "agent-reqwest-verify")]
+    /// When set (requires `resource-verify`; enable via `aauth-reqwest`'s `verify` feature),
+    /// resource and auth tokens are verified before use.
+    #[cfg(feature = "resource-verify")]
     pub(crate) metadata_fetcher: Option<Arc<dyn MetadataFetcher>>,
 }
 
@@ -104,13 +105,86 @@ pub struct AgentOptionsBuilder {
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<ClarificationCallback>,
     max_poll_duration_secs: Option<u64>,
-    #[cfg(feature = "agent-reqwest-verify")]
+    #[cfg(feature = "resource-verify")]
     metadata_fetcher: Option<Arc<dyn MetadataFetcher>>,
 }
 
 impl AgentOptions {
     pub fn builder(provider: Arc<dyn super::keys::KeyMaterialProvider>) -> AgentOptionsBuilder {
         AgentOptionsBuilder::new(provider)
+    }
+
+    pub fn provider(&self) -> &Arc<dyn super::keys::KeyMaterialProvider> {
+        &self.provider
+    }
+
+    pub fn person_server_url(&self) -> Option<&str> {
+        self.person_server_url.as_deref()
+    }
+
+    pub fn person_server_metadata(&self) -> Option<&PersonServerMetadata> {
+        self.person_server_metadata.as_ref()
+    }
+
+    pub fn opaque_token(&self) -> Option<&str> {
+        self.opaque_token.as_deref()
+    }
+
+    pub fn capabilities(&self) -> Option<&Vec<Capability>> {
+        self.capabilities.as_ref()
+    }
+
+    pub fn mission(&self) -> Option<&Mission> {
+        self.mission.as_ref()
+    }
+
+    pub fn justification(&self) -> Option<&str> {
+        self.justification.as_deref()
+    }
+
+    pub fn login_hint(&self) -> Option<&str> {
+        self.login_hint.as_deref()
+    }
+
+    pub fn tenant(&self) -> Option<&str> {
+        self.tenant.as_deref()
+    }
+
+    pub fn domain_hint(&self) -> Option<&str> {
+        self.domain_hint.as_deref()
+    }
+
+    pub fn prompt(&self) -> Option<&str> {
+        self.prompt.as_deref()
+    }
+
+    pub fn on_metadata(&self) -> Option<&Arc<dyn Fn(PersonServerMetadata) + Send + Sync>> {
+        self.on_metadata.as_ref()
+    }
+
+    pub fn on_auth_token(&self) -> Option<&Arc<dyn Fn(String, u64) + Send + Sync>> {
+        self.on_auth_token.as_ref()
+    }
+
+    pub fn on_opaque_token(&self) -> Option<&Arc<dyn Fn(String) + Send + Sync>> {
+        self.on_opaque_token.as_ref()
+    }
+
+    pub fn on_interaction(&self) -> Option<&InteractionCallback> {
+        self.on_interaction.as_ref()
+    }
+
+    pub fn on_clarification(&self) -> Option<&ClarificationCallback> {
+        self.on_clarification.as_ref()
+    }
+
+    pub fn max_poll_duration_secs(&self) -> Option<u64> {
+        self.max_poll_duration_secs
+    }
+
+    #[cfg(feature = "resource-verify")]
+    pub fn metadata_fetcher(&self) -> Option<&Arc<dyn MetadataFetcher>> {
+        self.metadata_fetcher.as_ref()
     }
 }
 
@@ -134,7 +208,7 @@ impl AgentOptionsBuilder {
             on_interaction: None,
             on_clarification: None,
             max_poll_duration_secs: None,
-            #[cfg(feature = "agent-reqwest-verify")]
+            #[cfg(feature = "resource-verify")]
             metadata_fetcher: None,
         }
     }
@@ -222,7 +296,7 @@ impl AgentOptionsBuilder {
         self
     }
 
-    #[cfg(feature = "agent-reqwest-verify")]
+    #[cfg(feature = "resource-verify")]
     pub fn metadata_fetcher(mut self, fetcher: Arc<dyn MetadataFetcher>) -> Self {
         self.metadata_fetcher = Some(fetcher);
         self
@@ -247,7 +321,7 @@ impl AgentOptionsBuilder {
             on_interaction: self.on_interaction,
             on_clarification: self.on_clarification,
             max_poll_duration_secs: self.max_poll_duration_secs,
-            #[cfg(feature = "agent-reqwest-verify")]
+            #[cfg(feature = "resource-verify")]
             metadata_fetcher: self.metadata_fetcher,
         }
     }

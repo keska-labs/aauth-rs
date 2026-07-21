@@ -1,14 +1,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use aauth::error::{AAuthError, Result};
+use aauth::protocol::{Capability, KeyMaterial, Mission, SignatureKey};
+use aauth::protocol::{SignatureKeyJwt, build_capabilities_header, build_mission_header};
+use aauth::signature::{build_signature_base_with_extras, signing_key_from_jwk};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::Signer;
 use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
 use reqwest::Request;
-
-use crate::error::{AAuthError, Result};
-use crate::protocol::{Capability, KeyMaterial, Mission, SignatureKey};
-use crate::protocol::{build_capabilities_header, build_mission_header};
-use crate::signature::{build_signature_base_with_extras, signing_key_from_jwk};
 
 #[derive(Debug, Clone, Default)]
 pub struct SigningOptions {
@@ -127,7 +126,7 @@ pub fn sign_request_with_auth_token(
     auth_token: &str,
 ) -> Result<()> {
     let mut auth_material = material.clone();
-    auth_material.signature_key = SignatureKey::Jwt(crate::protocol::SignatureKeyJwt {
+    auth_material.signature_key = SignatureKey::Jwt(SignatureKeyJwt {
         jwt: auth_token.to_string(),
     });
     sign_request(request, &auth_material)

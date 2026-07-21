@@ -1,24 +1,24 @@
-use anyhow::anyhow;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use aauth::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
+use aauth::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
+use aauth::error::{AAuthError, Result};
+use aauth::jwt::{VerifiedToken, jwk_thumbprint};
+use aauth::protocol::AAuthChallenge;
+use aauth::protocol::parse_aauth_requirement;
+#[cfg(feature = "verify")]
+use aauth::resource_verify::{verify_client_auth_token, verify_resource_challenge};
+use anyhow::anyhow;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
-use crate::agent::reqwest::deferred::{AgentDeferredOptions, poll_deferred_with};
-use crate::agent::reqwest::middleware::signing::{SigningMiddleware, sign_and_run};
-use crate::agent::reqwest::send::SignedSend;
-use crate::agent::reqwest::signed::SigningOptions;
-use crate::agent::reqwest::token_exchange::{TokenExchangeOptions, exchange_token_with};
-use crate::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
-use crate::error::{AAuthError, Result};
-use crate::jwt::{VerifiedToken, jwk_thumbprint};
-use crate::protocol::AAuthChallenge;
-use crate::protocol::parse_aauth_requirement;
-#[cfg(feature = "agent-reqwest-verify")]
-use crate::resource_verify::{verify_client_auth_token, verify_resource_challenge};
+use crate::deferred::{AgentDeferredOptions, poll_deferred_with};
+use crate::middleware::signing::{SigningMiddleware, sign_and_run};
+use crate::send::SignedSend;
+use crate::signed::SigningOptions;
+use crate::token_exchange::{TokenExchangeOptions, exchange_token_with};
 
 pub struct AgentMiddleware {
     options: AgentOptions,
@@ -29,10 +29,10 @@ pub struct AgentMiddleware {
 impl AgentMiddleware {
     pub fn new(options: AgentOptions) -> Self {
         let signing = SigningMiddleware::new(
-            Arc::clone(&options.provider),
+            Arc::clone(options.provider()),
             SigningOptions {
-                capabilities: options.capabilities.clone(),
-                mission: options.mission.clone(),
+                capabilities: options.capabilities().cloned(),
+                mission: options.mission().cloned(),
             },
         );
         Self {
@@ -163,7 +163,7 @@ impl AgentMiddleware {
                 }
                 AgentAuthStep::Invalidate(_) => continue,
                 AgentAuthStep::ExchangeToken { resource_token } => {
-                    let material = self.options.provider.key_material().await?;
+                    let material = self.options.provider().key_material().await?;
                     let agent_jwt = agent_jwt_from_signature_key(&material.signature_key)?;
                     let agent_sub = match VerifiedToken::decode_unverified(agent_jwt)? {
                         VerifiedToken::Agent(agent) => agent.identifier().to_string(),
@@ -175,8 +175,8 @@ impl AgentMiddleware {
                     };
                     let agent_jkt = jwk_thumbprint(&material.signing_jwk.public_jwk())?;
 
-                    #[cfg(feature = "agent-reqwest-verify")]
-                    if let Some(fetcher) = &self.options.metadata_fetcher {
+                    #[cfg(feature = "verify")]
+                    if let Some(fetcher) = self.options.metadata_fetcher() {
                         verify_resource_challenge(
                             &resource_token,
                             &origin,
@@ -187,10 +187,8 @@ impl AgentMiddleware {
                         .await?;
                     }
 
-                    let person_server_url = resolve_person_server_url(
-                        self.options.person_server_url.as_deref(),
-                        agent_jwt,
-                    )?;
+                    let person_server_url =
+                        resolve_person_server_url(self.options.person_server_url(), agent_jwt)?;
 
                     let exchange = TokenExchangeOptions::from_agent_options(
                         &self.options,
@@ -208,8 +206,8 @@ impl AgentMiddleware {
                     )
                     .await?;
 
-                    #[cfg(feature = "agent-reqwest-verify")]
-                    if let Some(fetcher) = &self.options.metadata_fetcher {
+                    #[cfg(feature = "verify")]
+                    if let Some(fetcher) = self.options.metadata_fetcher() {
                         verify_client_auth_token(
                             &result.auth_token,
                             &origin,
@@ -227,7 +225,7 @@ impl AgentMiddleware {
                             &person_server_url,
                             result.auth_token,
                             result.expires_in,
-                            self.options.on_auth_token.as_ref(),
+                            self.options.on_auth_token(),
                         );
                     }
                     continue;

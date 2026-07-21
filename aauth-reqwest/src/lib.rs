@@ -1,11 +1,20 @@
+//! Reqwest transport adapter for the AAuth agent client.
+//!
+//! Pair [`AgentMiddleware`] with [`aauth::agent::auth::AgentOptions`] (re-exported here)
+//! to drive signed requests, token exchange, and deferred polling over HTTP.
+//!
+//! Enable the `verify` feature (on by default) to verify resource challenges and
+//! auth tokens when a [`aauth::metadata::MetadataFetcher`] is configured on
+//! [`AgentOptions`].
+
 mod deferred;
 mod metadata;
 mod middleware;
-pub(crate) mod send;
+mod send;
 pub mod signed;
 mod token_exchange;
 
-pub use super::auth::{
+pub use aauth::agent::auth::{
     AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions, AgentOptionsBuilder,
     ClarificationCallback, InteractionCallback,
 };

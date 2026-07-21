@@ -5,15 +5,16 @@
 //! Protocol-wide modules (`error`, `protocol`, `jwt`, `signature`, …) are always available.
 //! Enable role-specific features to compile only what you need:
 //!
-//! - `agent` / `agent-reqwest` — agent runtime and reqwest middleware
+//! - `agent` — agent runtime (transport-agnostic state machine and options)
 //! - `person-server` — Person Server service
 //! - `access-server` — Access Server service
 //! - `resource` — Resource Server consent service
-//! - `resource-verify` — resource token verification only (used by `person-server` and `agent-reqwest-verify`)
-//! - `full` — all roles and agent integrations (matches `default`)
+//! - `resource-verify` — resource token verification only (used by `person-server` and `aauth-reqwest`'s `verify`)
+//! - `full` — all roles and agent (matches `default`)
 //!
 //! For axum HTTP adapters (handlers, `ResourceAuthLayer`), use the companion
-//! crate `aauth-axum`.
+//! crate `aauth-axum`. For the reqwest agent client (`AgentMiddleware`), use
+//! `aauth-reqwest`.
 //!
 //! Role services, policy traits, and deferred store types live under their modules
 //! (`person_server`, `access_server`, `resource`, `policy`, `deferred`). Spec wire

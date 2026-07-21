@@ -1,18 +1,18 @@
 use std::future::Future;
 use std::sync::Arc;
 
+use aauth::agent::auth::{AgentOptions, ClarificationCallback, InteractionCallback};
+use aauth::error::{AAuthError, Result};
+use aauth::protocol::parse_aauth_requirement;
+use aauth::protocol::{
+    AAuthChallenge, AAuthProtocolError, Capability, PersonServerMetadata, TokenExchangeRequest,
+    TokenResponseBody,
+};
 use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 
-use crate::agent::auth::InteractionCallback;
-use crate::agent::reqwest::deferred::{AgentDeferredOptions, poll_deferred_with};
-use crate::agent::reqwest::send::SignedSend;
-use crate::error::{AAuthError, Result};
-use crate::protocol::parse_aauth_requirement;
-use crate::protocol::{
-    AAuthChallenge, AAuthProtocolError, PersonServerMetadata, TokenExchangeRequest,
-    TokenResponseBody,
-};
+use crate::deferred::{AgentDeferredOptions, poll_deferred_with};
+use crate::send::SignedSend;
 
 const PREFER_WAIT: u64 = 45;
 
@@ -32,10 +32,10 @@ pub struct TokenExchangeOptions {
     pub(crate) login_hint: Option<String>,
     pub(crate) tenant: Option<String>,
     pub(crate) domain_hint: Option<String>,
-    pub(crate) capabilities: Option<Vec<crate::protocol::Capability>>,
+    pub(crate) capabilities: Option<Vec<Capability>>,
     pub(crate) prompt: Option<String>,
     pub(crate) on_interaction: Option<InteractionCallback>,
-    pub(crate) on_clarification: Option<crate::agent::auth::ClarificationCallback>,
+    pub(crate) on_clarification: Option<ClarificationCallback>,
     pub(crate) max_poll_duration_secs: Option<u64>,
 }
 
@@ -49,10 +49,10 @@ pub struct TokenExchangeOptionsBuilder {
     login_hint: Option<String>,
     tenant: Option<String>,
     domain_hint: Option<String>,
-    capabilities: Option<Vec<crate::protocol::Capability>>,
+    capabilities: Option<Vec<Capability>>,
     prompt: Option<String>,
     on_interaction: Option<InteractionCallback>,
-    on_clarification: Option<crate::agent::auth::ClarificationCallback>,
+    on_clarification: Option<ClarificationCallback>,
     max_poll_duration_secs: Option<u64>,
 }
 
@@ -66,42 +66,42 @@ impl TokenExchangeOptions {
 
     /// Build exchange options from shared [`AgentOptions`] fields.
     pub(crate) fn from_agent_options(
-        options: &crate::agent::auth::AgentOptions,
+        options: &AgentOptions,
         person_server_url: String,
         resource_token: String,
     ) -> Self {
         let mut builder = Self::builder(person_server_url, resource_token);
-        if let Some(metadata) = options.person_server_metadata.clone() {
+        if let Some(metadata) = options.person_server_metadata().cloned() {
             builder = builder.person_server_metadata(metadata);
         }
-        if let Some(on_metadata) = options.on_metadata.clone() {
+        if let Some(on_metadata) = options.on_metadata().cloned() {
             builder = builder.on_metadata(on_metadata);
         }
-        if let Some(justification) = options.justification.clone() {
+        if let Some(justification) = options.justification().map(str::to_string) {
             builder = builder.justification(justification);
         }
-        if let Some(login_hint) = options.login_hint.clone() {
+        if let Some(login_hint) = options.login_hint().map(str::to_string) {
             builder = builder.login_hint(login_hint);
         }
-        if let Some(tenant) = options.tenant.clone() {
+        if let Some(tenant) = options.tenant().map(str::to_string) {
             builder = builder.tenant(tenant);
         }
-        if let Some(domain_hint) = options.domain_hint.clone() {
+        if let Some(domain_hint) = options.domain_hint().map(str::to_string) {
             builder = builder.domain_hint(domain_hint);
         }
-        if let Some(caps) = options.capabilities.clone() {
+        if let Some(caps) = options.capabilities().cloned() {
             builder = builder.capabilities(caps);
         }
-        if let Some(prompt) = options.prompt.clone() {
+        if let Some(prompt) = options.prompt().map(str::to_string) {
             builder = builder.prompt(prompt);
         }
-        if let Some(on_interaction) = options.on_interaction.clone() {
+        if let Some(on_interaction) = options.on_interaction().cloned() {
             builder = builder.on_interaction(on_interaction);
         }
-        if let Some(on_clarification) = options.on_clarification.clone() {
+        if let Some(on_clarification) = options.on_clarification().cloned() {
             builder = builder.on_clarification(on_clarification);
         }
-        if let Some(secs) = options.max_poll_duration_secs {
+        if let Some(secs) = options.max_poll_duration_secs() {
             builder = builder.max_poll_duration_secs(secs);
         }
         builder.build()
@@ -160,7 +160,7 @@ impl TokenExchangeOptionsBuilder {
         self
     }
 
-    pub fn capabilities(mut self, capabilities: Vec<crate::protocol::Capability>) -> Self {
+    pub fn capabilities(mut self, capabilities: Vec<Capability>) -> Self {
         self.capabilities = Some(capabilities);
         self
     }
@@ -175,7 +175,7 @@ impl TokenExchangeOptionsBuilder {
         self
     }
 
-    pub fn on_clarification(mut self, callback: crate::agent::auth::ClarificationCallback) -> Self {
+    pub fn on_clarification(mut self, callback: ClarificationCallback) -> Self {
         self.on_clarification = Some(callback);
         self
     }

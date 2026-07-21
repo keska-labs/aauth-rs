@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
+use aauth::KeyMaterialProvider;
+use aauth::agent::auth::AgentAuthAttempt;
+use aauth::error::{AAuthError, Result};
 use anyhow::anyhow;
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
-use crate::agent::auth::AgentAuthAttempt;
-use crate::agent::keys::KeyMaterialProvider;
-use crate::agent::reqwest::signed::{
+use crate::signed::{
     SigningOptions, apply_capability_mission, apply_opaque_token, sign_request,
     sign_request_with_auth_token,
 };
-use crate::error::{AAuthError, Result};
 
 #[derive(Clone)]
 pub(crate) struct AgentAuthAttemptKey(pub AgentAuthAttempt);

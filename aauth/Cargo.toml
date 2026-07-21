@@ -15,8 +15,6 @@ categories = ["authentication", "web-programming"]
 [features]
 default = [
     "agent",
-    "agent-reqwest",
-    "agent-reqwest-verify",
     "person-server",
     "access-server",
     "resource",
@@ -24,14 +22,6 @@ default = [
 
 # --- Agent ---
 agent = []
-agent-reqwest = [
-    "agent",
-    "dep:reqwest",
-    "dep:reqwest-middleware",
-    "dep:http-body-util",
-    "dep:tokio",
-]
-agent-reqwest-verify = ["agent-reqwest", "resource-verify"]
 
 # --- Shared server infrastructure ---
 deferred = []
@@ -55,8 +45,6 @@ resource = ["deferred", "policy", "resource-verify"]
 server = ["person-server", "access-server", "resource"]
 full = [
     "agent",
-    "agent-reqwest",
-    "agent-reqwest-verify",
     "server",
 ]
 
@@ -70,8 +58,6 @@ jsonwebtoken.workspace = true
 rand.workspace = true
 anyhow.workspace = true
 reqwest = { workspace = true, optional = true }
-reqwest-middleware = { workspace = true, optional = true }
-http-body-util = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
@@ -83,6 +69,7 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+aauth-reqwest = { workspace = true, features = ["verify"] }
 tokio.workspace = true
 wiremock.workspace = true
 reqwest.workspace = true

@@ -6,11 +6,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use aauth::agent::reqwest::{ClarificationCallback, InteractionCallback};
 use aauth::protocol::AuthOkResponse;
 use aauth::{
     PendingStore, create_key_provider, create_test_keys, mint_agent_jwt, mint_person_auth_jwt,
 };
+use aauth_reqwest::{ClarificationCallback, InteractionCallback};
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
@@ -22,8 +22,8 @@ async fn signed_request(
     url: &str,
     body: Option<String>,
 ) -> reqwest::Response {
-    use aauth::agent::reqwest::signed::sign_request;
     use aauth::{create_key_provider, mint_agent_jwt};
+    use aauth_reqwest::signed::sign_request;
 
     let agent_jwt = mint_agent_jwt(
         &spawned.keys,

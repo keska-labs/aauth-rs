@@ -2,13 +2,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use aauth::error::{AAuthError, Result};
+use aauth::metadata::MetadataFetcher;
+use aauth::protocol::AgentProviderMetadata;
 use async_trait::async_trait;
 use jsonwebtoken::jwk::JwkSet;
 use reqwest::Client;
-
-use crate::error::Result;
-use crate::metadata::MetadataFetcher;
-use crate::protocol::AgentProviderMetadata;
 
 const METADATA_CACHE_TTL: Duration = Duration::from_secs(600);
 const MIN_FETCH_INTERVAL: Duration = Duration::from_secs(60);
@@ -96,10 +95,10 @@ impl CachedMetadataFetcher {
             .get(metadata_url)
             .send()
             .await
-            .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
+            .map_err(|e| AAuthError::Message(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(crate::error::AAuthError::Token {
+            return Err(AAuthError::Token {
                 code: "metadata_fetch_failed".into(),
                 message: format!(
                     "Failed to fetch metadata from {metadata_url}: {}",
@@ -111,9 +110,9 @@ impl CachedMetadataFetcher {
         let metadata: AgentProviderMetadata = response
             .json()
             .await
-            .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
+            .map_err(|e| AAuthError::Message(e.to_string()))?;
         if metadata.jwks_uri.is_empty() {
-            return Err(crate::error::AAuthError::Token {
+            return Err(AAuthError::Token {
                 code: "metadata_fetch_failed".into(),
                 message: format!("No jwks_uri in metadata from {metadata_url}"),
             });
@@ -149,7 +148,7 @@ impl MetadataFetcher for CachedMetadataFetcher {
             if let Some(cached) = self.cache.jwks.lock().unwrap().get(jwks_uri) {
                 return Ok(cached.clone());
             }
-            return Err(crate::error::AAuthError::Token {
+            return Err(AAuthError::Token {
                 code: "metadata_fetch_failed".into(),
                 message: format!("JWKS fetch rate limited for {jwks_uri}"),
             });
@@ -161,10 +160,10 @@ impl MetadataFetcher for CachedMetadataFetcher {
             .get(jwks_uri)
             .send()
             .await
-            .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
+            .map_err(|e| AAuthError::Message(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(crate::error::AAuthError::Token {
+            return Err(AAuthError::Token {
                 code: "invalid_agent_token".into(),
                 message: format!(
                     "Failed to fetch JWKS from {jwks_uri}: {}",
@@ -176,7 +175,7 @@ impl MetadataFetcher for CachedMetadataFetcher {
         let jwks: JwkSet = response
             .json()
             .await
-            .map_err(|e| crate::error::AAuthError::Message(e.to_string()))?;
+            .map_err(|e| AAuthError::Message(e.to_string()))?;
         self.cache
             .jwks
             .lock()

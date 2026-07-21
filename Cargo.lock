@@ -6,6 +6,7 @@ version = 4
 name = "aauth"
 version = "0.0.3"
 dependencies = [
+ "aauth-reqwest",
  "anyhow",
  "async-trait",
  "base64",
@@ -35,6 +36,7 @@ name = "aauth-axum"
 version = "0.0.3"
 dependencies = [
  "aauth",
+ "aauth-reqwest",
  "anyhow",
  "async-trait",
  "axum",
@@ -47,6 +49,25 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower",
+ "url",
+]
+
+[[package]]
+name = "aauth-reqwest"
+version = "0.0.3"
+dependencies = [
+ "aauth",
+ "anyhow",
+ "async-trait",
+ "base64",
+ "ed25519-dalek 3.0.0-rc.1",
+ "http",
+ "jsonwebtoken",
+ "reqwest",
+ "reqwest-middleware",
+ "serde",
+ "serde_json",
+ "tokio",
  "url",
 ]
 

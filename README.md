@@ -2,7 +2,7 @@
 
 Rust implementation of the [AAuth authorization protocol](https://github.com/dickhardt/AAuth).
 
-This workspace provides the `aauth` crate with protocol primitives (always on) and optional modules per AAuth party — enable only the roles you implement.
+This workspace provides the `aauth` crate with protocol primitives (always on) and optional modules per AAuth party — enable only the roles you implement. Companion crates: `aauth-reqwest` (agent HTTP client) and `aauth-axum` (server HTTP adapters).
 
 ## ⚠️ WARNING: LLM usage & pre-alpha ⚠️
 This library is currently in pre-alpha and can't in any way be described as satisfactory. It's mainly a LLM translation of the `Javascript` implementation of the `aauth` draft and a start for us to work from. We currently discourage using this, and won't be accepting contributions because our internal plans will make any external contributions moot, but if you check back in a few weeks, we're hopefully in a more acceptable state.
@@ -12,7 +12,7 @@ This library is currently in pre-alpha and can't in any way be described as sati
 ```text
 aauth-rs/
 ├── Cargo.toml              # workspace root
-├── aauth/                  # protocol + role services (no axum)
+├── aauth/                  # protocol + role services (no axum / reqwest agent)
 │   ├── src/
 │   │   ├── agent/              # agent runtime (feature `agent`)
 │   │   ├── person_server/      # Person Server (feature `person-server`)
@@ -24,6 +24,7 @@ aauth-rs/
 │   │   ├── signature.rs        # shared HTTP Signature build + verify
 │   │   └── …                   # JWT helpers, metadata, protocol types
 │   └── tests/                  # protocol / agent integration tests
+├── aauth-reqwest/          # reqwest agent transport (`AgentMiddleware`, signing, exchange)
 └── aauth-axum/             # axum HTTP adapters (handlers, ResourceAuthLayer)
     ├── src/
     ├── examples/               # explorer access-mode demos
@@ -72,7 +73,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 Public types use role prefixes: `Agent*` (agent runtime), `Person*` / `Access*` / `Resource*` (server roles), `AAuth*` (protocol wire/errors). Configuration types use builders (`Type::builder(...)`). See [AGENTS.md](AGENTS.md) for full conventions.
 
-The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `agent::resolve::resolve_person_server_url` or omit `person_server_url` on [`AgentOptions`](aauth::agent::injector::AgentOptions) to resolve from the agent token.
+The agent JWT `ps` claim names the Person Server when not configured explicitly on the client. Use `agent::resolve::resolve_person_server_url` or omit `person_server_url` on [`AgentOptions`](aauth::agent::auth::AgentOptions) to resolve from the agent token.
 
 ## Features
 
@@ -82,14 +83,18 @@ Protocol modules (`error`, `protocol`, `jwt`, `signature`, …) are always avail
 
 | Feature | Description |
 |---------|-------------|
-| `agent` | `aauth::agent::injector`, `aauth::agent::keys` |
-| `agent-reqwest` | `aauth::agent::reqwest` — `AgentMiddleware`, `ClientBuilder`, token exchange |
-| `agent-reqwest-verify` | Optional 401 challenge binding checks (implies `resource-verify`) |
+| `agent` | `aauth::agent` — `AgentAuth`, `AgentOptions`, keys, resolve |
 | `person-server` | Person Server service |
 | `access-server` | Access Server service |
 | `resource` | Resource Server consent service |
 | `resource-verify` | Resource token verification only (no RS service/layer) |
-| `full` | All roles and agent integrations (matches `default`) |
+| `full` | All roles and agent (matches `default`) |
+
+### `aauth-reqwest`
+
+| Feature | Description |
+|---------|-------------|
+| `verify` (default) | 401 challenge / auth-token binding checks via `aauth/resource-verify` |
 
 ### `aauth-axum`
 
@@ -110,7 +115,8 @@ aauth-axum = { version = "0.0", default-features = false, features = ["person-se
 **Agent client only:**
 
 ```toml
-aauth = { version = "0.0", default-features = false, features = ["agent", "agent-reqwest"] }
+aauth = { version = "0.0", default-features = false, features = ["agent"] }
+aauth-reqwest = { version = "0.0" }
 ```
 
 ## Quick example
@@ -118,10 +124,10 @@ aauth = { version = "0.0", default-features = false, features = ["agent", "agent
 ```rust
 use std::sync::Arc;
 
-use aauth::agent::injector::AgentOptions;
+use aauth::agent::auth::AgentOptions;
 use aauth::agent::keys::KeyMaterialProvider;
-use aauth::agent::reqwest::{AgentMiddleware, ClientBuilder};
-use aauth::types::KeyMaterial;
+use aauth::protocol::KeyMaterial;
+use aauth_reqwest::{AgentMiddleware, ClientBuilder};
 
 #[async_trait::async_trait]
 impl KeyMaterialProvider for MyProvider {
@@ -202,7 +208,8 @@ cargo clippy --workspace --all-features -- -D warnings
 cargo check -p aauth --no-default-features --features person-server
 cargo check -p aauth --no-default-features --features access-server
 cargo check -p aauth --no-default-features --features resource
-cargo check -p aauth --no-default-features --features agent,agent-reqwest
+cargo check -p aauth --no-default-features --features agent
+cargo check -p aauth-reqwest --all-features
 
 # aauth-axum adapters
 cargo check -p aauth-axum --no-default-features --features person-server

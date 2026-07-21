@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Workspace crate `aauth-reqwest`: reqwest agent transport (`AgentMiddleware`, `sign_request`, token exchange, deferred poll, `CachedMetadataFetcher`). Default feature `verify` enables challenge/auth-token binding checks via `aauth/resource-verify`.
+- Public getters on `AgentOptions` for transport adapters (`provider`, callbacks, hints, `metadata_fetcher` when `resource-verify` is on).
+- Public `signing_key_from_jwk` for custom signing adapters (was crate-private).
 - `person_router`, `access_router`, and `resource_router` in `aauth-axum` to mount canonical role routes (`merge` / `nest` into an app whose state implements `FromRef` to the matching `*ServerState`).
 - Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
 - Cross-language e2e suite in `e2e/` against vendored [packages-js](https://github.com/aauth-dev/packages-js) `main`: JS client → Rust server and Rust client → JS server over real HTTP.
@@ -18,9 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AgentProviderMetadata` (replaces loose `MetadataDocument`) with typed agent-provider metadata fields from the spec.
 - `PaymentRequiredBody` in `protocol::pending` for `402` deferred poll responses.
 - Resource-initiated interaction: `ResourceInteractionProvider` and `interaction` on `ResourceTokenOptions`; PS `begin_interaction` / `resolve_interaction_callback` with `GET /interact` and `GET /interact/callback` axum handlers (now in `aauth-axum`).
-- Public `sign_request`, `sign_request_with_auth_token`, and related helpers on `aauth::agent::reqwest` for custom transport adapters.
 - `PersonServerConfig` and `AccessServerConfig` as domain config types (no longer gated on axum).
-- `poll_outcome_from_snapshot` / `resource_poll_outcome_from_snapshot` in `aauth` deferred/resource modules.
+- `poll_outcome_from_snapshot` and `poll_auth_pending` in `aauth` deferred module.
 
 ### Fixed
 
@@ -35,15 +37,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pending wire bodies (`PendingBody`, `PendingPostBody`, `PendingStatusBody`, clarification/claims challenges) moved from `deferred`/`types` to `protocol::pending`; `deferred` keeps server-state types only.
 - Crate-root re-exports now source protocol types from `protocol` instead of removed `types` and `headers` modules.
 - Restructured `src/` into protocol-party modules: `agent`, `person_server`, `access_server`, `resource`, with shared siblings `deferred` and `policy`.
-- Granular Cargo features per role: `person-server`, `access-server`, `resource`; agent `agent`, `agent-reqwest`, `agent-reqwest-verify`; meta-features `server` and `full`.
-- Renamed features `client` → `agent`, `client-reqwest` → `agent-reqwest`; optional `agent-reqwest-verify` for 401 challenge binding checks via `resource-verify`.
+- Granular Cargo features per role: `person-server`, `access-server`, `resource`; agent `agent`; meta-features `server` and `full`.
+- Renamed features `client` → `agent`; reqwest agent client moved to companion crate `aauth-reqwest` (optional `verify` for 401 challenge binding checks via `resource-verify`).
 - `AuthTokenFlowOutcome` / `AuthTokenPollOutcome` moved to `deferred` (shared by Person and Access servers).
 - `ResourceAccessMode` lives in `resource::mode` (was `resource::policy`).
-- Flat crate-root re-exports are feature-gated to match enabled roles.
+- Flat crate-root re-exports are feature-gated to match enabled roles; unused governance wire types stay under `aauth::protocol` only (not crate-root).
 - Axum HTTP adapters moved from `aauth` to `aauth-axum`; import handlers/layer/state from `aauth_axum` (examples and axum integration tests live under `aauth-axum/`).
+- Reqwest agent client moved from `aauth::agent::reqwest` to `aauth_reqwest`; import `AgentMiddleware`, `sign_request`, etc. from `aauth_reqwest`.
+- Collapsed `PersonOrchestrateConfig` into `PersonServerConfig`; token-request verify lives in `person_server::context`.
+- Renamed `AuthJwtMinter` → `PersonAuthJwtMinter`, `mint_auth_jwt` → `mint_person_auth_jwt`, `TokenPolicyDecision` → `AccessTokenDecision`.
+- Flattened `PersonTokenFlowOutcome` to `Granted` / `Deferred` / `Denied` / `Gone` / `Unauthorized` / `BadGateway` (no nested `Flow`).
+- Reference test policies (`AlwaysGrant*`, `Defer*`, …) are exported from `aauth::policy` only, not the crate root.
+- `resource` no longer re-exports `resource_verify`; import verify APIs from `aauth::resource_verify` or the crate root when the feature is on.
+- Renamed agent module `injector` → `auth` (`AgentAuth` types unchanged).
+- Person Server feature no longer depends on `agent`.
+- Person audience URL compare is case-insensitive (matches resource token binding).
+- `AgentOptions.metadata_fetcher` is gated on `resource-verify` (enable via `aauth-reqwest` feature `verify`).
 
 ### Removed
 
+- `aauth` features `agent-reqwest` and `agent-reqwest-verify` (use crate `aauth-reqwest`).
 - `aauth::types` and `aauth::headers` modules (use `aauth::protocol` or flat crate-root re-exports).
 - `MetadataDocument` (use `AgentProviderMetadata`).
 - `TokenExchangeOptions::localhost_callback` (not a spec token-exchange field).
@@ -51,13 +64,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aauth::server` umbrella module (use role modules or flat re-exports).
 - `server` as a single module gate; use per-role features instead.
 - `aauth` features `server-axum`, `person-server-axum`, `access-server-axum`, `resource-axum`, and the `server_axum` / `*/axum` modules (use `aauth-axum`).
+- Dead helpers: `PersonOrchestrateConfig`, `FederationConfig`, `fulfill_token_exchange`, `map_person_decision_for_aud`, `person_decision_aud_is_ps`, `FixedSubPersonPolicy`, `ResourceAccessPolicy`, `resource_token_audience_unverified`, `AgentAuthStep::Continue`, `resource_poll_outcome_from_snapshot`.
+- Unused `PersonServerConfig.agent_url` field.
 
 ### Added
 
 - `resource-verify` feature — resource token verification (`verify_resource_token`, `verify_token`, audience resolution) without the full Resource Server service or axum layer.
 - `resource_verify` module for token verification used by Person Server federation and optional agent middleware.
 - `PersonServerOutboundSigner` and `OutboundSignatureProvider` trait for federation pending POST signing.
-- `full` meta-feature matching previous default feature set (roles + agent; axum is a separate crate).
+- `full` meta-feature matching previous default feature set (roles + agent; axum and reqwest are separate crates).
 
 ## [0.0.2] - 2026-06-29
 

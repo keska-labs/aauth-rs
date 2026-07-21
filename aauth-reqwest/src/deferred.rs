@@ -1,17 +1,17 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
+use aauth::agent::auth::{AgentOptions, ClarificationCallback, InteractionCallback};
+use aauth::error::{AAuthError, Result};
+use aauth::protocol::parse_aauth_requirement;
+use aauth::protocol::{
+    AAuthChallenge, AAuthProtocolError, ClarificationChallenge, ClarificationResponse,
+};
 use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 use tokio::time::sleep;
 
-use crate::agent::auth::{ClarificationCallback, InteractionCallback};
-use crate::agent::reqwest::send::SignedSend;
-use crate::error::{AAuthError, Result};
-use crate::protocol::parse_aauth_requirement;
-use crate::protocol::{
-    AAuthChallenge, AAuthProtocolError, ClarificationChallenge, ClarificationResponse,
-};
+use crate::send::SignedSend;
 
 const DEFAULT_MAX_POLL_DURATION: u64 = 300;
 const DEFAULT_PREFER_WAIT: u64 = 45;
@@ -43,7 +43,7 @@ impl AgentDeferredOptions {
 
     /// Build deferred poll options from shared [`AgentOptions`] callbacks/limits.
     pub(crate) fn from_agent_options(
-        options: &crate::agent::auth::AgentOptions,
+        options: &AgentOptions,
         location_url: String,
         interaction_url: Option<String>,
         interaction_code: Option<String>,
@@ -52,13 +52,13 @@ impl AgentDeferredOptions {
         if let (Some(url), Some(code)) = (interaction_url, interaction_code) {
             builder = builder.interaction(url, code);
         }
-        if let Some(cb) = options.on_interaction.clone() {
+        if let Some(cb) = options.on_interaction().cloned() {
             builder = builder.on_interaction(cb);
         }
-        if let Some(cb) = options.on_clarification.clone() {
+        if let Some(cb) = options.on_clarification().cloned() {
             builder = builder.on_clarification(cb);
         }
-        if let Some(secs) = options.max_poll_duration_secs {
+        if let Some(secs) = options.max_poll_duration_secs() {
             builder = builder.max_poll_duration_secs(secs);
         }
         builder.build()

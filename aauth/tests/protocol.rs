@@ -4,11 +4,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use aauth::KeyMaterialProvider;
 use aauth::VerifiedToken;
-use aauth::agent::reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
 use aauth::protocol::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
 use aauth::protocol::{build_aauth_requirement, parse_aauth_requirement};
 use aauth::{DeferCreated, DeferRequirement, VerifyTokenOptions, verify_token};
 use aauth::{InMemoryPersonPendingStore, PendingOutcome, PendingStore};
+use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder, InteractionCallback};
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
@@ -33,10 +33,7 @@ fn test_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn build_client(
-    options: AgentOptions,
-    server: &MockServer,
-) -> aauth::agent::reqwest::ClientWithMiddleware {
+fn build_client(options: AgentOptions, server: &MockServer) -> aauth_reqwest::ClientWithMiddleware {
     ClientBuilder::new(reqwest::Client::new())
         .with(AgentMiddleware::new(options))
         .with(server.mock_transport())
@@ -385,7 +382,7 @@ fn aauth_client(
     server: &MockServer,
     justification: Option<String>,
     hints: Option<(String, String, String)>,
-) -> aauth::agent::reqwest::ClientWithMiddleware {
+) -> aauth_reqwest::ClientWithMiddleware {
     build_client(
         aauth_options(
             Arc::clone(&provider),

@@ -41,7 +41,7 @@ The agent JWT's `ps` claim names the Person Server. When `person_server_url` is 
 ```text
 aauth-rs/
 ├── Cargo.toml              # workspace root
-├── aauth/                  # protocol + role services (no axum)
+├── aauth/                  # protocol + role services (no axum / reqwest agent)
 │   ├── src/
 │   │   ├── agent/              # agent runtime (feature `agent`)
 │   │   ├── person_server/      # Person Server (feature `person-server`)
@@ -53,6 +53,7 @@ aauth-rs/
 │   │   ├── signature.rs        # shared HTTP Signature build + verify
 │   │   └── …                   # JWT helpers, metadata cache, protocol types
 │   └── tests/                  # protocol / agent integration tests
+├── aauth-reqwest/          # reqwest agent transport (`AgentMiddleware`, signing, exchange)
 └── aauth-axum/             # axum HTTP adapters
     ├── src/
     │   ├── person/             # Person Server handlers, person_router, PersonServerState
@@ -66,7 +67,9 @@ aauth-rs/
 
 **Shared protocol primitives** (no role prefix, always on): `protocol`, `signature`, `jwt`, `metadata`, `interaction_code`. These implement wire format and are used by all roles.
 
-**Cargo features (`aauth`):** per-role `person-server`, `access-server`, `resource`; agent `agent`, `agent-reqwest`, `agent-reqwest-verify`; meta `server`, `full`. Protocol modules need no feature flag.
+**Cargo features (`aauth`):** per-role `person-server`, `access-server`, `resource`; agent `agent`; meta `server`, `full`. Protocol modules need no feature flag.
+
+**Cargo features (`aauth-reqwest`):** `verify` (default) enables `aauth/resource-verify` for challenge/auth-token checks.
 
 **Cargo features (`aauth-axum`):** `person-server`, `access-server`, `resource` (each enables the matching `aauth` role feature). Prefer `person_router` / `access_router` / `resource_router` (`merge` or `nest`) over hand-wiring individual handlers; apply `ResourceAuthLayer` to protected app routes separately.
 
@@ -74,8 +77,8 @@ aauth-rs/
 
 The agent side is split into a transport-agnostic state machine and a reqwest adapter:
 
-1. **`AgentAuth`** (`agent/injector.rs`) — tracks per-origin cached auth/opaque tokens; on each response decides the next step (`AgentAuthStep`: continue, finish, exchange token, poll deferred, invalidate attempt).
-2. **`AgentMiddleware`** (`agent/reqwest/middleware/agent.rs`) — reqwest middleware that drives `AgentAuth`, signs requests via `SigningMiddleware`, calls `exchange_token` and `poll_deferred` when needed.
+1. **`AgentAuth`** (`agent/auth.rs`) — tracks per-origin cached auth/opaque tokens; on each response decides the next step (`AgentAuthStep`: continue, finish, exchange token, poll deferred, invalidate attempt).
+2. **`AgentMiddleware`** (`aauth-reqwest`) — reqwest middleware that drives `AgentAuth`, signs requests via `SigningMiddleware`, calls `exchange_token` and `poll_deferred` when needed.
 3. **`AgentOptions`** — configuration builder (provider, PS URL, callbacks, poll limits).
 
 Typical three-party flow:
@@ -171,6 +174,7 @@ cargo clippy --workspace --all-features -- -D warnings
 cargo check -p aauth --no-default-features --features person-server
 cargo check -p aauth --no-default-features --features access-server
 cargo check -p aauth --no-default-features --features resource
-cargo check -p aauth --no-default-features --features agent,agent-reqwest
+cargo check -p aauth --no-default-features --features agent
+cargo check -p aauth-reqwest --all-features
 cargo check -p aauth-axum --all-features
 ```

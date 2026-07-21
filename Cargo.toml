@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["aauth", "aauth-axum"]
+members = ["aauth", "aauth-axum", "aauth-reqwest"]
 
 [workspace.package]
 edition = "2024"
@@ -12,6 +12,7 @@ repository = "https://github.com/keska-labs/aauth-rs"
 [workspace.dependencies]
 aauth = { path = "aauth", default-features = false }
 aauth-axum = { path = "aauth-axum", default-features = false }
+aauth-reqwest = { path = "aauth-reqwest", default-features = false }
 async-trait = "0.1"
 base64 = "0.22"
 bytes = "1"

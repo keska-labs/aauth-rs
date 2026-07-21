@@ -1,6 +1,6 @@
 use reqwest::{Request, Response};
 
-use crate::error::Result;
+use aauth::Result;
 
 #[async_trait::async_trait]
 pub(crate) trait SignedSend {

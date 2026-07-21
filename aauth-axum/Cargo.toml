@@ -31,12 +31,11 @@ tower.workspace = true
 [dev-dependencies]
 aauth = { workspace = true, default-features = false, features = [
     "agent",
-    "agent-reqwest",
-    "agent-reqwest-verify",
     "person-server",
     "access-server",
     "resource",
 ] }
+aauth-reqwest = { workspace = true, features = ["verify"] }
 anyhow.workspace = true
 async-trait.workspace = true
 jsonwebtoken.workspace = true
