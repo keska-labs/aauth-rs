@@ -163,10 +163,7 @@ where
                 Ok(None)
             };
 
-            let opaque_retry = opaque_auth
-                .as_ref()
-                .map(|t| t.is_some())
-                .unwrap_or(true);
+            let opaque_retry = opaque_auth.as_ref().map(|t| t.is_some()).unwrap_or(true);
 
             let sig_options = if opaque_retry {
                 SignatureVerifyOptions {

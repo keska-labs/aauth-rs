@@ -7,7 +7,9 @@ use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 
 /// Trim trailing `/` and lowercase for comparing configured agent URL vs JWT `iss`.
 fn same_origin(configured: &str, iss: &str) -> bool {
-    configured.trim_end_matches('/').eq_ignore_ascii_case(iss.trim_end_matches('/'))
+    configured
+        .trim_end_matches('/')
+        .eq_ignore_ascii_case(iss.trim_end_matches('/'))
 }
 
 /// Routes well-known JWKS resolution by document type; optional HTTP for remote issuers.
