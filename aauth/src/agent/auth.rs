@@ -8,7 +8,7 @@ use crate::error::Result;
 #[cfg(feature = "resource-verify")]
 use crate::metadata::MetadataFetcher;
 use crate::protocol::AAuthChallenge;
-use crate::protocol::{Capability, Mission, PersonServerMetadata};
+use crate::protocol::{AAUTH_ACCESS, AAUTH_REQUIREMENT, Capability, Mission, PersonServerMetadata};
 use crate::signature::header_value;
 
 pub type InteractionCallback = std::sync::Arc<dyn Fn(String, String) + Send + Sync>;
@@ -400,7 +400,7 @@ impl AgentAuth {
                 Ok(AgentAuthStep::Invalidate(attempt.clone()))
             }
             AgentAuthAttempt::AgentSigned => {
-                if let Some(header) = header_value(headers, "aauth-requirement") {
+                if let Some(header) = header_value(headers, &AAUTH_REQUIREMENT) {
                     let challenge = AAuthChallenge::from_header(header)?;
                     if let crate::protocol::AAuthChallenge::AuthToken { resource_token } = challenge
                     {
@@ -457,7 +457,7 @@ impl AgentAuth {
     }
 
     fn cache_opaque_from_headers(&mut self, origin: &str, headers: &HeaderMap) {
-        if let Some(token) = header_value(headers, "aauth-access") {
+        if let Some(token) = header_value(headers, &AAUTH_ACCESS) {
             self.opaque_cache.insert(
                 origin.to_string(),
                 CachedOpaque {
@@ -476,6 +476,8 @@ mod tests {
     use std::sync::Mutex;
 
     use http::StatusCode;
+
+    use crate::protocol::{AAUTH_ACCESS_NAME, AAUTH_REQUIREMENT_NAME};
 
     use super::*;
 
@@ -532,7 +534,7 @@ mod tests {
                 &AgentAuthAttempt::AgentSigned,
                 StatusCode::UNAUTHORIZED,
                 &headers(&[(
-                    "aauth-requirement",
+                    AAUTH_REQUIREMENT_NAME,
                     "requirement=auth-token; resource-token=\"rt_abc\"",
                 )]),
             )
@@ -563,7 +565,7 @@ mod tests {
                 "https://resource.example",
                 &AgentAuthAttempt::AgentSigned,
                 StatusCode::OK,
-                &headers(&[("aauth-access", "opaque_tok")]),
+                &headers(&[(AAUTH_ACCESS_NAME, "opaque_tok")]),
             )
             .unwrap();
         assert_eq!(step, AgentAuthStep::Finish);

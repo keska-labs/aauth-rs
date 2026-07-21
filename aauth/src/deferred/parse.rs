@@ -1,8 +1,11 @@
 use http::HeaderMap;
+use http::header::LOCATION;
 
 use crate::error::{DeferredError, HeaderError, Result};
 use crate::protocol::AAuthChallenge;
-use crate::protocol::{ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody};
+use crate::protocol::{
+    AAUTH_REQUIREMENT, ClaimsChallenge, ClarificationChallenge, PendingStatus, TokenResponseBody,
+};
 use crate::signature::header_value;
 
 use super::types::DeferRequirement;
@@ -38,11 +41,11 @@ pub fn parse_deferred_response(
         .into());
     }
 
-    let location = header_value(headers, "location").ok_or(DeferredError::MissingLocation)?;
+    let location = header_value(headers, &LOCATION).ok_or(DeferredError::MissingLocation)?;
     let location = resolve_deferred_location(base_url, location);
 
     let requirement_header =
-        header_value(headers, "aauth-requirement").ok_or(DeferredError::MissingRequirement)?;
+        header_value(headers, &AAUTH_REQUIREMENT).ok_or(DeferredError::MissingRequirement)?;
     let challenge = AAuthChallenge::from_header(requirement_header)?;
 
     let requirement = defer_requirement_from(&challenge, body)?;
@@ -120,24 +123,26 @@ mod tests {
     use super::*;
     use http::HeaderMap;
 
+    use http::header::{CACHE_CONTROL, CONTENT_TYPE, LOCATION, RETRY_AFTER};
+
     use crate::deferred::DeferCreated;
-    use crate::protocol::{AAuthChallenge, PendingBody};
+    use crate::protocol::{AAUTH_REQUIREMENT, PendingBody};
 
     fn defer_created_parts(defer: &DeferCreated) -> (u16, HeaderMap, Vec<u8>) {
         let body = PendingBody::for_created(&defer.requirement).expect("pending body");
         let mut headers = HeaderMap::new();
-        headers.insert("Location", defer.location.parse().expect("valid location"));
-        headers.insert("Retry-After", "0".parse().expect("valid header"));
-        headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
+        headers.insert(LOCATION, defer.location.parse().expect("valid location"));
+        headers.insert(RETRY_AFTER, "0".parse().expect("valid header"));
+        headers.insert(CACHE_CONTROL, "no-store".parse().expect("valid header"));
         if let Ok(challenge) = defer.requirement.header_challenge() {
             let req = challenge.to_header();
             headers.insert(
-                "AAuth-Requirement",
+                AAUTH_REQUIREMENT,
                 req.parse().expect("valid requirement header"),
             );
         }
         headers.insert(
-            "Content-Type",
+            CONTENT_TYPE,
             "application/json".parse().expect("valid content-type"),
         );
         (

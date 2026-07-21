@@ -7,9 +7,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aauth::TestKeys;
-use aauth::protocol::AuthOkResponse;
+use aauth::protocol::{AAUTH_REQUIREMENT, AuthOkResponse};
 use aauth_policy::PendingStore;
 use aauth_reqwest::{ClarificationCallback, InteractionCallback};
+use http::header::{CONTENT_TYPE, LOCATION};
 use rstest::rstest;
 
 use support::axum_server::{ServerConfig, spawn_test_server};
@@ -33,9 +34,7 @@ async fn signed_request(
     let client = reqwest::Client::new();
     let mut builder = client.request(method, url);
     if let Some(body) = body {
-        builder = builder
-            .header("content-type", "application/json")
-            .body(body);
+        builder = builder.header(CONTENT_TYPE, "application/json").body(body);
     }
     let mut req = builder.build().expect("request");
     material.sign_request(&mut req).expect("sign");
@@ -302,7 +301,7 @@ async fn federated_as_interaction_deferred_over_http() {
             };
             let response = reqwest::Client::new()
                 .post(format!("{person_url}/pending/{id}"))
-                .header("content-type", "application/json")
+                .header(CONTENT_TYPE, "application/json")
                 .body("{}")
                 .send()
                 .await
@@ -398,7 +397,7 @@ async fn resource_initiated_interaction_over_http() {
     assert_eq!(challenge.status(), reqwest::StatusCode::UNAUTHORIZED);
     let requirement = challenge
         .headers()
-        .get("aauth-requirement")
+        .get(AAUTH_REQUIREMENT)
         .and_then(|v| v.to_str().ok())
         .expect("requirement");
     let aauth::protocol::AAuthChallenge::AuthToken { resource_token } =
@@ -430,7 +429,7 @@ async fn resource_initiated_interaction_over_http() {
     assert_eq!(exchange.status(), reqwest::StatusCode::ACCEPTED);
     let defer_requirement = exchange
         .headers()
-        .get("aauth-requirement")
+        .get(AAUTH_REQUIREMENT)
         .and_then(|v| v.to_str().ok())
         .expect("defer requirement");
     let aauth::protocol::AAuthChallenge::Interaction { url, code } =
@@ -448,7 +447,7 @@ async fn resource_initiated_interaction_over_http() {
     assert_eq!(start.status(), reqwest::StatusCode::FOUND);
     let location = start
         .headers()
-        .get("location")
+        .get(LOCATION)
         .expect("redirect")
         .to_str()
         .expect("location")
@@ -465,7 +464,7 @@ async fn resource_initiated_interaction_over_http() {
 
     let pending_url = exchange
         .headers()
-        .get("location")
+        .get(LOCATION)
         .and_then(|v| v.to_str().ok())
         .expect("pending location")
         .to_string();
@@ -500,7 +499,7 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
     .await;
     let requirement = challenge
         .headers()
-        .get("aauth-requirement")
+        .get(AAUTH_REQUIREMENT)
         .and_then(|v| v.to_str().ok())
         .expect("requirement");
     let aauth::protocol::AAuthChallenge::AuthToken { resource_token } =
@@ -531,7 +530,7 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
     .await;
     let defer_requirement = exchange
         .headers()
-        .get("aauth-requirement")
+        .get(AAUTH_REQUIREMENT)
         .and_then(|v| v.to_str().ok())
         .expect("defer requirement");
     let aauth::protocol::AAuthChallenge::Interaction { url, code } =
@@ -547,7 +546,7 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
         .expect("interaction start");
     let location = start
         .headers()
-        .get("location")
+        .get(LOCATION)
         .expect("redirect")
         .to_str()
         .expect("location")
@@ -567,7 +566,7 @@ async fn resource_initiated_interaction_callback_denied_over_http() {
 
     let pending_url = exchange
         .headers()
-        .get("location")
+        .get(LOCATION)
         .and_then(|v| v.to_str().ok())
         .expect("pending location")
         .to_string();

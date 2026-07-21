@@ -2,10 +2,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use aauth::SignatureError;
 use aauth::protocol::SignatureKeyJwt;
-use aauth::protocol::{Capability, KeyMaterial, Mission, SignatureKey};
+use aauth::protocol::{
+    AAUTH_CAPABILITIES, AAUTH_MISSION, Capability, KeyMaterial, Mission, SIGNATURE,
+    SIGNATURE_INPUT, SIGNATURE_KEY, SIGNATURE_KEY_NAME, SignatureKey,
+};
 use aauth::signature::{build_signature_base_with_extras, sign_http_message};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use http::header::{AUTHORIZATION, HeaderName, HeaderValue};
+use http::header::{AUTHORIZATION, HeaderValue};
 use reqwest::Request;
 
 use crate::error::Result;
@@ -22,7 +25,7 @@ impl SigningOptions {
         if let Some(capabilities) = &self.capabilities {
             if !capabilities.is_empty() {
                 request.headers_mut().insert(
-                    HeaderName::from_static("aauth-capabilities"),
+                    AAUTH_CAPABILITIES,
                     HeaderValue::from_str(&Capability::join_header(capabilities))
                         .expect("valid capabilities header"),
                 );
@@ -30,7 +33,7 @@ impl SigningOptions {
         }
         if let Some(mission) = &self.mission {
             request.headers_mut().insert(
-                HeaderName::from_static("aauth-mission"),
+                AAUTH_MISSION,
                 HeaderValue::from_str(&mission.to_header()).expect("valid mission header"),
             );
         }
@@ -63,7 +66,7 @@ impl SignRequest for KeyMaterial {
         let signature_key = format!("sig=jwt;jwt=\"{token}\"");
 
         request.headers_mut().insert(
-            HeaderName::from_static("signature-key"),
+            SIGNATURE_KEY,
             HeaderValue::from_str(&signature_key).map_err(SignatureError::InvalidHeaderValue)?,
         );
 
@@ -83,12 +86,12 @@ impl SignRequest for KeyMaterial {
             "@method".to_string(),
             "@authority".to_string(),
             "@path".to_string(),
-            "signature-key".to_string(),
+            SIGNATURE_KEY_NAME.to_string(),
         ];
         let mut extras = Vec::new();
         if let Some(ref auth) = authorization {
-            covered.push("authorization".to_string());
-            extras.push(("authorization".to_string(), auth.clone()));
+            covered.push(AUTHORIZATION.as_str().to_string());
+            extras.push((AUTHORIZATION.as_str().to_string(), auth.clone()));
         }
 
         let signature_input = format!(
@@ -117,11 +120,11 @@ impl SignRequest for KeyMaterial {
         let signature = URL_SAFE_NO_PAD.encode(signature_bytes);
 
         request.headers_mut().insert(
-            HeaderName::from_static("signature-input"),
+            SIGNATURE_INPUT,
             HeaderValue::from_str(&signature_input).map_err(SignatureError::InvalidHeaderValue)?,
         );
         request.headers_mut().insert(
-            HeaderName::from_static("signature"),
+            SIGNATURE,
             HeaderValue::from_str(&format!("sig=:{signature}:"))
                 .map_err(SignatureError::InvalidHeaderValue)?,
         );

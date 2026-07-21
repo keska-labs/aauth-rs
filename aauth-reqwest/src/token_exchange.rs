@@ -5,9 +5,10 @@ use aauth::DeferredError;
 use aauth::MetadataError;
 use aauth::agent::auth::{AgentOptions, ClarificationCallback, InteractionCallback};
 use aauth::protocol::{
-    AAuthChallenge, AAuthProtocolError, Capability, PersonServerMetadata, TokenExchangeRequest,
-    TokenResponseBody,
+    AAUTH_REQUIREMENT, AAuthChallenge, AAuthProtocolError, Capability, PREFER,
+    PersonServerMetadata, TokenExchangeRequest, TokenResponseBody,
 };
+use http::header::{CONTENT_TYPE, LOCATION};
 use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 
@@ -286,8 +287,8 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
     let http_req = HttpRequest::builder()
         .method(Method::POST)
         .uri(&metadata.token_endpoint)
-        .header("content-type", "application/json")
-        .header("prefer", format!("wait={PREFER_WAIT}"))
+        .header(CONTENT_TYPE, "application/json")
+        .header(PREFER, format!("wait={PREFER_WAIT}"))
         .body(token_body.into_bytes())
         .expect("valid http request");
     let response = send
@@ -297,7 +298,7 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
     if response.status().as_u16() == 202 {
         let location = response
             .headers()
-            .get("location")
+            .get(LOCATION)
             .and_then(|v| v.to_str().ok())
             .ok_or(DeferredError::MissingLocation)?
             .to_string();
@@ -306,7 +307,7 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             AgentDeferredOptions::builder(resolve_url(&options.person_server_url, &location));
         if let Some(header) = response
             .headers()
-            .get("aauth-requirement")
+            .get(AAUTH_REQUIREMENT)
             .and_then(|v| v.to_str().ok())
         {
             if let Ok(AAuthChallenge::Interaction { url, code }) =
@@ -384,7 +385,7 @@ async fn parse_protocol_error(response: Response) -> Option<AAuthProtocolError> 
 
 fn headers_contain_json(headers: &http::HeaderMap) -> bool {
     headers
-        .get("content-type")
+        .get(CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v.contains("application/json"))
 }

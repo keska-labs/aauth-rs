@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use axum::body::Body;
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, HOST};
 use axum::http::{Request, Response, StatusCode};
 use axum::response::IntoResponse;
 use tower::{Layer, Service};
@@ -13,7 +14,7 @@ use aauth::ResourceAccessMode;
 use aauth::ResourceAccessService;
 use aauth::jwt::VerifiedToken;
 use aauth::metadata::MetadataFetcher;
-use aauth::protocol::AAuthChallenge;
+use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge};
 use aauth::resource::keys::ResourceTokenSigner;
 use aauth::resource::{
     ResourceInteractionContext, ResourceInteractionProvider, ResourceTokenOptions,
@@ -234,7 +235,7 @@ where
 
                     Ok(Response::builder()
                         .status(StatusCode::UNAUTHORIZED)
-                        .header("AAuth-Requirement", header)
+                        .header(AAUTH_REQUIREMENT, header)
                         .body(Body::from("Auth token required"))
                         .expect("valid response"))
                 }
@@ -271,7 +272,7 @@ fn agent_sub_from_jwt(jwt: &str) -> String {
 }
 
 fn extract_aauth_access(headers: &axum::http::HeaderMap) -> Option<String> {
-    let value = headers.get("authorization").and_then(|v| v.to_str().ok())?;
+    let value = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok())?;
     let rest = value.strip_prefix("AAuth ")?;
     if rest.is_empty() {
         return None;
@@ -284,7 +285,7 @@ fn request_signature_parts<B>(req: &Request<B>) -> (String, String, String) {
     let uri = req.uri();
     let authority = req
         .headers()
-        .get("host")
+        .get(HOST)
         .and_then(|h| h.to_str().ok())
         .map(str::to_string)
         .unwrap_or_else(|| {
@@ -305,7 +306,7 @@ fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
         let status = StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED);
         return Response::builder()
             .status(status)
-            .header("content-type", "application/json")
+            .header(CONTENT_TYPE, "application/json")
             .body(Body::from(
                 serde_json::to_vec(&protocol).unwrap_or_default(),
             ))
@@ -313,7 +314,7 @@ fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
     }
     Response::builder()
         .status(StatusCode::UNAUTHORIZED)
-        .header("content-type", "application/json")
+        .header(CONTENT_TYPE, "application/json")
         .body(Body::from(
             serde_json::to_vec(&aauth::protocol::AAuthProtocolError::with_description(
                 aauth::protocol::AAuthErrorCode::InvalidSignature,
@@ -327,7 +328,7 @@ fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
 fn unauthorized_message(message: impl Into<String>) -> Response<Body> {
     Response::builder()
         .status(StatusCode::UNAUTHORIZED)
-        .header("content-type", "application/json")
+        .header(CONTENT_TYPE, "application/json")
         .body(Body::from(
             serde_json::to_vec(&aauth::protocol::AAuthProtocolError::with_description(
                 aauth::protocol::AAuthErrorCode::InvalidRequest,

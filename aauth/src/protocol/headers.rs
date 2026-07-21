@@ -1,8 +1,50 @@
 //! AAuth HTTP response/request headers.
 
+use http::HeaderName;
+
 use crate::error::{HeaderError, Result};
 
 use super::common::{Capability, Mission, RequirementLevel};
+
+/// Lowercase name for [`AAUTH_REQUIREMENT`] (also used as a signature covered component).
+pub const AAUTH_REQUIREMENT_NAME: &str = "aauth-requirement";
+/// `AAuth-Requirement` response header.
+pub const AAUTH_REQUIREMENT: HeaderName = HeaderName::from_static(AAUTH_REQUIREMENT_NAME);
+
+/// Lowercase name for [`AAUTH_ACCESS`].
+pub const AAUTH_ACCESS_NAME: &str = "aauth-access";
+/// `AAuth-Access` response header (opaque resource-managed token).
+pub const AAUTH_ACCESS: HeaderName = HeaderName::from_static(AAUTH_ACCESS_NAME);
+
+/// Lowercase name for [`AAUTH_CAPABILITIES`].
+pub const AAUTH_CAPABILITIES_NAME: &str = "aauth-capabilities";
+/// `AAuth-Capabilities` request header.
+pub const AAUTH_CAPABILITIES: HeaderName = HeaderName::from_static(AAUTH_CAPABILITIES_NAME);
+
+/// Lowercase name for [`AAUTH_MISSION`].
+pub const AAUTH_MISSION_NAME: &str = "aauth-mission";
+/// `AAuth-Mission` request header.
+pub const AAUTH_MISSION: HeaderName = HeaderName::from_static(AAUTH_MISSION_NAME);
+
+/// Lowercase name for [`SIGNATURE_KEY`] (also used as a signature covered component).
+pub const SIGNATURE_KEY_NAME: &str = "signature-key";
+/// HTTP Message Signatures `Signature-Key` header.
+pub const SIGNATURE_KEY: HeaderName = HeaderName::from_static(SIGNATURE_KEY_NAME);
+
+/// Lowercase name for [`SIGNATURE_INPUT`].
+pub const SIGNATURE_INPUT_NAME: &str = "signature-input";
+/// HTTP Message Signatures `Signature-Input` header.
+pub const SIGNATURE_INPUT: HeaderName = HeaderName::from_static(SIGNATURE_INPUT_NAME);
+
+/// Lowercase name for [`SIGNATURE`].
+pub const SIGNATURE_NAME: &str = "signature";
+/// HTTP Message Signatures `Signature` header.
+pub const SIGNATURE: HeaderName = HeaderName::from_static(SIGNATURE_NAME);
+
+/// Lowercase name for [`PREFER`].
+pub const PREFER_NAME: &str = "prefer";
+/// `Prefer` request header (e.g. `wait=` on token exchange / deferred poll).
+pub const PREFER: HeaderName = HeaderName::from_static(PREFER_NAME);
 
 /// Parsed `AAuth-Requirement` response header.
 ///

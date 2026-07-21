@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Canonical protocol header name constants in `protocol::headers` (`AAUTH_REQUIREMENT` / `_NAME`, `AAUTH_ACCESS`, `AAUTH_CAPABILITIES`, `AAUTH_MISSION`, `SIGNATURE_KEY`, `SIGNATURE_INPUT`, `SIGNATURE`, `PREFER`).
 - `StaticKeyMaterialProvider::new` to wrap arbitrary `KeyMaterial` (e.g. from `@aauth/bootstrap token`).
 - ES256 (P-256) HTTP Message Signature sign/verify via `sign_http_message` (Secure Enclave / EC JWKs).
 - `IntoAauthProtocol` to map domain errors to HTTP status + `AAuthProtocolError`.

@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::Router;
 use axum::extract::{FromRef, OriginalUri, Path, Query, State};
+use axum::http::header::HOST;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -77,7 +78,7 @@ where
     S: PersonTokenService,
 {
     let authority = headers
-        .get("host")
+        .get(HOST)
         .and_then(|h| h.to_str().ok())
         .unwrap_or("localhost")
         .to_string();

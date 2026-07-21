@@ -1,12 +1,13 @@
 use std::time::{Duration, Instant};
 
-use reqwest::header::HeaderMap;
+use http::HeaderMap;
+use http::header::{CONTENT_TYPE, RETRY_AFTER};
 use tokio::time::sleep;
 
 use crate::error::{DeferredError, Result};
 use crate::jwt::OkpSigningJwk;
 use crate::protocol::{
-    AAuthErrorCode, AAuthProtocolError, ClarificationResponse, TokenResponseBody,
+    AAuthErrorCode, AAuthProtocolError, ClarificationResponse, PREFER, TokenResponseBody,
 };
 use crate::signature::apply_outbound_signature;
 
@@ -77,7 +78,7 @@ pub async fn post_pending_input(
         ),
     };
 
-    let mut request = client.post(url).header("content-type", content_type);
+    let mut request = client.post(url).header(CONTENT_TYPE, content_type);
     if let Some(signer) = signer {
         let parsed = url::Url::parse(url).map_err(DeferredError::InvalidUrl)?;
         let authority = parsed.host_str().ok_or(DeferredError::MissingHost)?;
@@ -137,7 +138,7 @@ pub async fn poll_pending_http(
     while Instant::now() < deadline {
         let response = client
             .get(&poll_url)
-            .header("prefer", format!("wait={prefer_wait}"))
+            .header(PREFER, format!("wait={prefer_wait}"))
             .send()
             .await
             .map_err(DeferredError::Transport)?;
@@ -195,7 +196,7 @@ pub async fn poll_pending_http(
 
 fn parse_retry_after(headers: &HeaderMap) -> Option<u64> {
     headers
-        .get("retry-after")
+        .get(RETRY_AFTER)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse().ok())
 }
@@ -286,11 +287,11 @@ mod tests {
         let aauth_req = challenge.to_header();
 
         let template = wiremock::ResponseTemplate::new(202)
-            .insert_header("Location", location.as_str())
-            .insert_header("Retry-After", "0")
-            .insert_header("Cache-Control", "no-store")
-            .insert_header("AAuth-Requirement", aauth_req.as_str())
-            .insert_header("Content-Type", "application/json")
+            .insert_header(http::header::LOCATION, location.as_str())
+            .insert_header(http::header::RETRY_AFTER, "0")
+            .insert_header(http::header::CACHE_CONTROL, "no-store")
+            .insert_header(crate::AAUTH_REQUIREMENT, aauth_req.as_str())
+            .insert_header(http::header::CONTENT_TYPE, "application/json")
             .set_body_json(body);
 
         wiremock::Mock::given(wiremock::matchers::method("GET"))

@@ -5,8 +5,10 @@ use aauth::DeferredError;
 use aauth::MetadataError;
 use aauth::agent::auth::{AgentOptions, ClarificationCallback, InteractionCallback};
 use aauth::protocol::{
-    AAuthChallenge, AAuthProtocolError, ClarificationChallenge, ClarificationResponse,
+    AAUTH_REQUIREMENT, AAuthChallenge, AAuthProtocolError, ClarificationChallenge,
+    ClarificationResponse, PREFER,
 };
+use http::header::{CONTENT_TYPE, RETRY_AFTER};
 use http::{Method, Request as HttpRequest};
 use reqwest::{Request, Response};
 use tokio::time::sleep;
@@ -161,7 +163,7 @@ pub(crate) async fn poll_deferred_with<S: SignedSend>(
         let http_req = HttpRequest::builder()
             .method(Method::GET)
             .uri(&poll_url)
-            .header("prefer", &prefer)
+            .header(PREFER, &prefer)
             .body(Vec::new())
             .expect("valid http request");
         let response = send
@@ -171,12 +173,12 @@ pub(crate) async fn poll_deferred_with<S: SignedSend>(
         let status = response.status().as_u16();
         let retry_after = response
             .headers()
-            .get("retry-after")
+            .get(RETRY_AFTER)
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<u64>().ok());
         let requirement_header = response
             .headers()
-            .get("aauth-requirement")
+            .get(AAUTH_REQUIREMENT)
             .and_then(|v| v.to_str().ok())
             .map(str::to_string);
         let is_json = header_contains_json(&response);
@@ -199,7 +201,7 @@ pub(crate) async fn poll_deferred_with<S: SignedSend>(
                         let http_req = HttpRequest::builder()
                             .method(Method::POST)
                             .uri(&poll_url)
-                            .header("content-type", "application/json")
+                            .header(CONTENT_TYPE, "application/json")
                             .body(body.into_bytes())
                             .expect("valid http request");
                         let _ = send
@@ -279,7 +281,7 @@ async fn split_error(response: Response) -> Result<(Response, Option<AAuthProtoc
 
 fn headers_contain_json(headers: &http::HeaderMap) -> bool {
     headers
-        .get("content-type")
+        .get(CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v.contains("application/json"))
 }

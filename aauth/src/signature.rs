@@ -6,6 +6,7 @@ use ed25519_dalek::{
     VerifyingKey as Ed25519VerifyingKey,
 };
 use http::HeaderMap;
+use http::header::{AUTHORIZATION, HeaderName};
 use p256::ecdsa::signature::{Signer as Es256Signer, Verifier as Es256Verifier};
 use p256::ecdsa::{
     Signature as Es256Signature, SigningKey as Es256SigningKey, VerifyingKey as Es256VerifyingKey,
@@ -15,6 +16,7 @@ use p256::{EncodedPoint, SecretKey as P256SecretKey};
 
 use crate::error::{AAuthError, JwtError};
 use crate::jwt::{OkpSigningJwk, VerifiedToken, jwk_thumbprint};
+use crate::protocol::{SIGNATURE, SIGNATURE_INPUT, SIGNATURE_KEY, SIGNATURE_KEY_NAME};
 
 pub use crate::error::SignatureError;
 
@@ -70,7 +72,7 @@ pub fn build_signature_base_with_extras(
         "@method".to_string(),
         "@authority".to_string(),
         "@path".to_string(),
-        "signature-key".to_string(),
+        SIGNATURE_KEY_NAME.to_string(),
     ];
     for (name, _) in extras {
         components.push((*name).to_string());
@@ -87,7 +89,7 @@ pub fn build_signature_base_with_extras(
         format!("\"@method\": {}", method.to_uppercase()),
         format!("\"@authority\": {authority}"),
         format!("\"@path\": {path}"),
-        format!("\"signature-key\": {signature_key}"),
+        format!("\"{SIGNATURE_KEY_NAME}\": {signature_key}"),
     ];
     for (name, value) in extras {
         lines.push(format!("\"{name}\": {value}"));
@@ -99,7 +101,7 @@ pub fn build_signature_base_with_extras(
 
 fn parse_signature_key_jwt(headers: &HeaderMap) -> Result<String> {
     let header =
-        header_value(headers, "signature-key").ok_or(SignatureError::MissingSignatureKey)?;
+        header_value(headers, &SIGNATURE_KEY).ok_or(SignatureError::MissingSignatureKey)?;
     let start = header
         .find("jwt=\"")
         .ok_or(SignatureError::MissingJwtParam)?
@@ -168,23 +170,23 @@ pub fn verify_request_signature_with_options(
     headers: &HeaderMap,
     options: &SignatureVerifyOptions,
 ) -> Result<VerifiedSignature> {
-    let signature_key = header_value(headers, "signature-key")
+    let signature_key = header_value(headers, &SIGNATURE_KEY)
         .ok_or(SignatureError::MissingSignatureKey)?
         .to_string();
-    let signature_input = header_value(headers, "signature-input")
+    let signature_input = header_value(headers, &SIGNATURE_INPUT)
         .ok_or(SignatureError::MissingSignatureInput)?
         .to_string();
-    let signature_header = header_value(headers, "signature")
+    let signature_header = header_value(headers, &SIGNATURE)
         .ok_or(SignatureError::MissingSignature)?
         .to_string();
 
     let covered = parse_covered_components(&signature_input)?;
-    for required in ["@method", "@authority", "@path", "signature-key"] {
+    for required in ["@method", "@authority", "@path", SIGNATURE_KEY_NAME] {
         if !covered.iter().any(|c| c == required) {
             return Err(SignatureError::MissingComponent(required));
         }
     }
-    if options.require_authorization && !covered.iter().any(|c| c == "authorization") {
+    if options.require_authorization && !covered.iter().any(|c| c == AUTHORIZATION.as_str()) {
         return Err(SignatureError::MissingAuthorizationComponent);
     }
 
@@ -206,10 +208,10 @@ pub fn verify_request_signature_with_options(
     }
 
     let mut extras = Vec::new();
-    if covered.iter().any(|c| c == "authorization") {
-        let authorization = header_value(headers, "authorization")
+    if covered.iter().any(|c| c == AUTHORIZATION.as_str()) {
+        let authorization = header_value(headers, &AUTHORIZATION)
             .ok_or(SignatureError::AuthorizationHeaderMissing)?;
-        extras.push(("authorization", authorization));
+        extras.push((AUTHORIZATION.as_str(), authorization));
     }
 
     let (signature_base, _) =
@@ -234,7 +236,7 @@ pub fn apply_outbound_signature(
 
     let mut extras = Vec::new();
     if let Some(auth) = authorization {
-        extras.push(("authorization", auth));
+        extras.push((AUTHORIZATION.as_str(), auth));
     }
 
     let created = SystemTime::now()
@@ -252,24 +254,24 @@ pub fn apply_outbound_signature(
         "\"@method\"".to_string(),
         "\"@authority\"".to_string(),
         "\"@path\"".to_string(),
-        "\"signature-key\"".to_string(),
+        format!("\"{SIGNATURE_KEY_NAME}\""),
     ];
     if authorization.is_some() {
-        components.push("\"authorization\"".to_string());
+        components.push(format!("\"{}\"", AUTHORIZATION.as_str()));
     }
     let signature_input = format!("sig=({});created={created}", components.join(" "));
 
     headers.insert(
-        http::HeaderName::from_static("signature-key"),
+        SIGNATURE_KEY,
         http::HeaderValue::from_str(&signature_key).map_err(SignatureError::InvalidHeaderValue)?,
     );
     headers.insert(
-        http::HeaderName::from_static("signature-input"),
+        SIGNATURE_INPUT,
         http::HeaderValue::from_str(&signature_input)
             .map_err(SignatureError::InvalidHeaderValue)?,
     );
     headers.insert(
-        http::HeaderName::from_static("signature"),
+        SIGNATURE,
         http::HeaderValue::from_str(&format!("sig=:{signature}:"))
             .map_err(SignatureError::InvalidHeaderValue)?,
     );
@@ -384,16 +386,8 @@ fn es256_verifying_key_from_jwk(jwk: &crate::jwt::OkpJwk) -> Result<Es256Verifyi
     Ok(Es256VerifyingKey::from(public))
 }
 
-pub(crate) fn header_value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers.get(name).and_then(|v| v.to_str().ok()).or_else(|| {
-        headers.iter().find_map(|(k, v)| {
-            if k.as_str().eq_ignore_ascii_case(name) {
-                v.to_str().ok()
-            } else {
-                None
-            }
-        })
-    })
+pub(crate) fn header_value<'a>(headers: &'a HeaderMap, name: &HeaderName) -> Option<&'a str> {
+    headers.get(name).and_then(|v| v.to_str().ok())
 }
 
 #[cfg(test)]
@@ -414,14 +408,14 @@ mod tests {
         assert!(base.contains("@method"));
         assert!(base.contains("@authority"));
         assert!(base.contains("@path"));
-        assert!(base.contains("signature-key"));
+        assert!(base.contains(SIGNATURE_KEY_NAME));
     }
 
     #[test]
     fn parse_signature_key_jwt_from_header() {
         let mut headers = HeaderMap::new();
         headers.insert(
-            "signature-key",
+            SIGNATURE_KEY,
             "sig=jwt;jwt=\"eyJhbGciOiJIUzI1NiJ9.test\"".parse().unwrap(),
         );
         let jwt = parse_signature_key_jwt(&headers).unwrap();
@@ -455,16 +449,16 @@ mod tests {
         );
 
         let mut headers = HeaderMap::new();
-        headers.insert("signature-key", signature_key.parse().unwrap());
+        headers.insert(SIGNATURE_KEY, signature_key.parse().unwrap());
         headers.insert(
-            "signature-input",
+            SIGNATURE_INPUT,
             format!(
-                "sig=(\"@method\" \"@authority\" \"@path\" \"signature-key\");created={created}"
+                "sig=(\"@method\" \"@authority\" \"@path\" \"{SIGNATURE_KEY_NAME}\");created={created}"
             )
             .parse()
             .unwrap(),
         );
-        headers.insert("signature", format!("sig=:{sig}:").parse().unwrap());
+        headers.insert(SIGNATURE, format!("sig=:{sig}:").parse().unwrap());
 
         let err = verify_request_signature_with_options(
             "GET",

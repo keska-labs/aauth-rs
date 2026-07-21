@@ -1,4 +1,5 @@
 use axum::Json;
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, LOCATION, RETRY_AFTER};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
@@ -6,7 +7,10 @@ use aauth::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 use aauth::deferred::{DeferCreated, DeferWaiting, PaymentRequiredDefer, PendingOutcome};
 #[cfg(feature = "person-server")]
 use aauth::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
-use aauth::protocol::{AAuthErrorCode, AAuthProtocolError, PaymentRequiredBody, PendingBody};
+use aauth::protocol::{
+    AAUTH_ACCESS, AAUTH_REQUIREMENT, AAuthErrorCode, AAuthProtocolError, PaymentRequiredBody,
+    PendingBody,
+};
 #[cfg(feature = "resource")]
 use aauth::resource::ResourceConsentFlowOutcome;
 
@@ -70,11 +74,11 @@ pub fn polling_status(err: &AAuthProtocolError) -> StatusCode {
 }
 
 fn insert_poll_headers(headers: &mut HeaderMap, requirement: &aauth::deferred::DeferRequirement) {
-    headers.insert("Retry-After", "0".parse().expect("valid header"));
-    headers.insert("Cache-Control", "no-store".parse().expect("valid header"));
+    headers.insert(RETRY_AFTER, "0".parse().expect("valid header"));
+    headers.insert(CACHE_CONTROL, "no-store".parse().expect("valid header"));
     if let Ok(challenge) = requirement.header_challenge() {
         headers.insert(
-            "AAuth-Requirement",
+            AAUTH_REQUIREMENT,
             challenge
                 .to_header()
                 .parse()
@@ -88,10 +92,10 @@ fn insert_defer_created_headers(
     location: &str,
     requirement: &aauth::deferred::DeferRequirement,
 ) {
-    headers.insert("Location", location.parse().expect("valid location"));
+    headers.insert(LOCATION, location.parse().expect("valid location"));
     insert_poll_headers(headers, requirement);
     headers.insert(
-        "Content-Type",
+        CONTENT_TYPE,
         "application/json".parse().expect("valid content-type"),
     );
 }
@@ -117,7 +121,7 @@ impl IntoResponse for AauthResponse<DeferWaiting> {
         let mut headers = HeaderMap::new();
         insert_poll_headers(&mut headers, &self.0.requirement);
         headers.insert(
-            "Content-Type",
+            CONTENT_TYPE,
             "application/json".parse().expect("valid content-type"),
         );
         (StatusCode::ACCEPTED, headers, Json(body)).into_response()
@@ -127,9 +131,9 @@ impl IntoResponse for AauthResponse<DeferWaiting> {
 impl IntoResponse for AauthResponse<PaymentRequiredDefer> {
     fn into_response(self) -> Response {
         let mut headers = HeaderMap::new();
-        headers.insert("Location", self.0.location.parse().expect("valid location"));
+        headers.insert(LOCATION, self.0.location.parse().expect("valid location"));
         headers.insert(
-            "Content-Type",
+            CONTENT_TYPE,
             "application/json".parse().expect("valid content-type"),
         );
         (
@@ -210,7 +214,7 @@ impl IntoResponse for AauthResponse<ResourceConsentFlowOutcome> {
         match self.0 {
             ResourceConsentFlowOutcome::GrantOpaque(token) => {
                 let mut headers = HeaderMap::new();
-                headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
+                headers.insert(AAUTH_ACCESS, token.parse().expect("valid opaque"));
                 (StatusCode::OK, headers).into_response()
             }
             ResourceConsentFlowOutcome::Deferred(defer) => AauthResponse(defer).into_response(),
@@ -227,7 +231,7 @@ impl IntoResponse for AauthResponse<PendingOutcome> {
             PendingOutcome::AuthToken(body) => (StatusCode::OK, Json(body)).into_response(),
             PendingOutcome::OpaqueAccess(token) => {
                 let mut headers = HeaderMap::new();
-                headers.insert("AAuth-Access", token.parse().expect("valid opaque"));
+                headers.insert(AAUTH_ACCESS, token.parse().expect("valid opaque"));
                 (StatusCode::OK, headers).into_response()
             }
             PendingOutcome::Error(err) => (polling_status(&err), Json(err)).into_response(),

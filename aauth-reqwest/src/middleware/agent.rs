@@ -6,10 +6,11 @@ use aauth::DeferredError;
 use aauth::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
 use aauth::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use aauth::jwt::{VerifiedToken, jwk_thumbprint};
-use aauth::protocol::AAuthChallenge;
+use aauth::protocol::{AAUTH_REQUIREMENT, AAuthChallenge};
 #[cfg(feature = "verify")]
 use aauth::resource_verify::{verify_client_auth_token, verify_resource_challenge};
 use http::Extensions;
+use http::header::LOCATION;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
@@ -236,7 +237,7 @@ impl AgentMiddleware {
 
 fn location_header(resp: &Response) -> Result<String> {
     resp.headers()
-        .get("location")
+        .get(LOCATION)
         .and_then(|v| v.to_str().ok())
         .map(str::to_string)
         .ok_or_else(|| DeferredError::MissingLocation.into())
@@ -245,7 +246,7 @@ fn location_header(resp: &Response) -> Result<String> {
 fn interaction_from_response(resp: &Response) -> (Option<String>, Option<String>) {
     let Some(header) = resp
         .headers()
-        .get("aauth-requirement")
+        .get(AAUTH_REQUIREMENT)
         .and_then(|v| v.to_str().ok())
     else {
         return (None, None);

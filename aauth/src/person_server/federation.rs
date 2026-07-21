@@ -74,7 +74,7 @@ impl PersonServerConfig {
         let body_json = serde_json::to_string(&body).map_err(DeferredError::Serialize)?;
         let mut headers = HeaderMap::new();
         headers.insert(
-            http::HeaderName::from_static("content-type"),
+            http::header::CONTENT_TYPE,
             http::HeaderValue::from_static("application/json"),
         );
         apply_outbound_signature(

@@ -5,8 +5,8 @@ use aauth::VerifiedToken;
 use aauth::error::Result;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::protocol::{
-    AAuthChallenge, AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument,
-    PersonServerMetadata, TokenExchangeRequest, TokenResponseBody,
+    AAUTH_REQUIREMENT, AAuthChallenge, AgentOkResponse, AgentProviderMetadata, AuthOkResponse,
+    JwksDocument, PersonServerMetadata, SIGNATURE_KEY, TokenExchangeRequest, TokenResponseBody,
 };
 use aauth::resolve_resource_token_audience;
 use aauth::{
@@ -18,6 +18,7 @@ use aauth_policy::{
 };
 use async_trait::async_trait;
 use http::StatusCode;
+use http::header::{CACHE_CONTROL, CONTENT_TYPE, LOCATION, RETRY_AFTER};
 use http_body_util::BodyExt;
 use reqwest::{Request, Response, ResponseBuilderExt, Url};
 use reqwest_middleware::{Error, Middleware, Next};
@@ -83,7 +84,7 @@ impl MockServerState {
                 http::Response::builder()
                     .status(StatusCode::OK)
                     .url(Url::parse(&url).expect("valid url"))
-                    .header("content-type", "application/json")
+                    .header(CONTENT_TYPE, "application/json")
                     .body(serde_json::to_vec(&body).expect("serialize json"))
                     .expect("valid http response"),
             ));
@@ -105,7 +106,7 @@ impl MockServerState {
                 http::Response::builder()
                     .status(StatusCode::OK)
                     .url(Url::parse(&url).expect("valid url"))
-                    .header("content-type", "application/json")
+                    .header(CONTENT_TYPE, "application/json")
                     .body(serde_json::to_vec(&body).expect("serialize json"))
                     .expect("valid http response"),
             ));
@@ -120,7 +121,7 @@ impl MockServerState {
                 http::Response::builder()
                     .status(StatusCode::OK)
                     .url(Url::parse(&url).expect("valid url"))
-                    .header("content-type", "application/json")
+                    .header(CONTENT_TYPE, "application/json")
                     .body(serde_json::to_vec(&body).expect("serialize json"))
                     .expect("valid http response"),
             ));
@@ -135,7 +136,7 @@ impl MockServerState {
                 http::Response::builder()
                     .status(StatusCode::OK)
                     .url(Url::parse(&url).expect("valid url"))
-                    .header("content-type", "application/json")
+                    .header(CONTENT_TYPE, "application/json")
                     .body(serde_json::to_vec(&body).expect("serialize json"))
                     .expect("valid http response"),
             ));
@@ -192,7 +193,7 @@ impl MockServerState {
                     http::Response::builder()
                         .status(StatusCode::OK)
                         .url(Url::parse(url).expect("valid url"))
-                        .header("content-type", "application/json")
+                        .header(CONTENT_TYPE, "application/json")
                         .body(serde_json::to_vec(&body).expect("serialize json"))
                         .expect("valid http response"),
                 ))
@@ -225,7 +226,7 @@ impl MockServerState {
                     http::Response::builder()
                         .status(StatusCode::UNAUTHORIZED)
                         .url(Url::parse(url).expect("valid url"))
-                        .header("AAuth-Requirement", header)
+                        .header(AAUTH_REQUIREMENT, header)
                         .body(b"Auth token required".to_vec())
                         .expect("valid http response"),
                 ))
@@ -239,7 +240,7 @@ impl MockServerState {
                     http::Response::builder()
                         .status(StatusCode::OK)
                         .url(Url::parse(url).expect("valid url"))
-                        .header("content-type", "application/json")
+                        .header(CONTENT_TYPE, "application/json")
                         .body(serde_json::to_vec(&body).expect("serialize json"))
                         .expect("valid http response"),
                 ))
@@ -350,11 +351,11 @@ impl MockServerState {
                 http::Response::builder()
                     .status(StatusCode::ACCEPTED)
                     .url(Url::parse(url).expect("valid url"))
-                    .header("Location", defer.location.as_str())
-                    .header("Retry-After", "0")
-                    .header("Cache-Control", "no-store")
-                    .header("AAuth-Requirement", aauth_req.as_str())
-                    .header("Content-Type", "application/json")
+                    .header(LOCATION, defer.location.as_str())
+                    .header(RETRY_AFTER, "0")
+                    .header(CACHE_CONTROL, "no-store")
+                    .header(AAUTH_REQUIREMENT, aauth_req.as_str())
+                    .header(CONTENT_TYPE, "application/json")
                     .body(serde_json::to_vec(&body).expect("serialize"))
                     .expect("valid http response"),
             ));
@@ -376,7 +377,7 @@ impl MockServerState {
             http::Response::builder()
                 .status(StatusCode::OK)
                 .url(Url::parse(url).expect("valid url"))
-                .header("content-type", "application/json")
+                .header(CONTENT_TYPE, "application/json")
                 .body(serde_json::to_vec(&body).expect("serialize json"))
                 .expect("valid http response"),
         ))
@@ -416,7 +417,7 @@ impl MockServerState {
                     http::Response::builder()
                         .status(StatusCode::OK)
                         .url(Url::parse(url).expect("valid url"))
-                        .header("content-type", "application/json")
+                        .header(CONTENT_TYPE, "application/json")
                         .body(serde_json::to_vec(value).expect("serialize json"))
                         .expect("valid http response"),
                 )),
@@ -441,8 +442,8 @@ impl MockServerState {
             http::Response::builder()
                 .status(StatusCode::ACCEPTED)
                 .url(Url::parse(url).expect("valid url"))
-                .header("retry-after", "0")
-                .header("cache-control", "no-store")
+                .header(RETRY_AFTER, "0")
+                .header(CACHE_CONTROL, "no-store")
                 .body(Vec::new())
                 .expect("valid http response"),
         ))
@@ -497,7 +498,7 @@ impl MetadataFetcher for DualMetadataFetcher {
 fn extract_signature_jwt(req: &Request) -> Option<String> {
     let header = req
         .headers()
-        .get("signature-key")
+        .get(SIGNATURE_KEY)
         .and_then(|v| v.to_str().ok())?;
     let start = header.find("jwt=\"")? + 5;
     let rest = &header[start..];
