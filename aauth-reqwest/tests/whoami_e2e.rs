@@ -1,5 +1,7 @@
-//! Live E2E against [whoami.aauth.dev](https://whoami.aauth.dev), mirroring
-//! [`@aauth/fetch`](https://www.npmjs.com/package/@aauth/fetch).
+//! Live E2E against [whoami.aauth.dev](https://whoami.aauth.dev) via `aauth-reqwest`.
+//!
+//! Prefer the `@aauth/fetch` CLI interop tests in `aauth-axum` (`fetch_person_server`)
+//! when validating JS client ↔ Rust server. This suite keeps a Rust-client path.
 //!
 //! Prerequisites:
 //! - `npx @aauth/bootstrap create <agent-provider-url>` with JWKS published

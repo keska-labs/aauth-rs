@@ -1,21 +1,25 @@
-//! Resource Managed access (two-party with interaction): opaque access tokens.
+//! Resource-managed (two-party opaque access) mode.
 
 mod support;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use aauth::protocol::AgentOkResponse;
 use aauth_policy::{OpaqueAccessStore, PendingStore};
+use rstest::rstest;
 
-use support::{AGENT_ID, TestScenario, spawn_test_server};
+use support::AGENT_ID;
+use support::axum_server::{TestScenario, spawn_test_server};
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+#[rstest]
+#[timeout(Duration::from_secs(1))]
+#[tokio::test]
+async fn resource_managed_over_http() {
     let spawned = spawn_test_server(TestScenario::resource_managed()).await;
 
     let resource_pending_cb = spawned.resource_pending.clone();
     let opaque_store_cb = spawned.opaque_store.clone();
-
     let on_interaction = Arc::new(move |_url: String, _code: String| {
         let pending = resource_pending_cb.clone();
         let opaque = opaque_store_cb.issue(AGENT_ID);
@@ -33,11 +37,11 @@ async fn main() -> anyhow::Result<()> {
     let response = client
         .get(format!("{}/api/data", spawned.resource_url))
         .send()
-        .await?;
+        .await
+        .expect("request");
 
-    println!("status: {}", response.status());
-    let body: AgentOkResponse = response.json().await?;
-    println!("agent: {}", body.agent);
-
-    Ok(())
+    assert!(response.status().is_success());
+    let body: AgentOkResponse = response.json().await.expect("json");
+    assert_eq!(body.status, "ok");
+    assert_eq!(body.agent, AGENT_ID);
 }

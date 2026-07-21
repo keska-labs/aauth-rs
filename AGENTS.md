@@ -141,7 +141,7 @@ Axum state types hold a single service field: `PersonServerState<S>`, `AccessSer
 
 Reference test policies (in `aauth-policy`): `AlwaysGrantPersonPolicy`, `AlwaysGrantAccessPolicy`, `DeferInteractionPersonPolicy`, `ClarificationThenGrantPersonPolicy`, `DeferInteractionResourcePolicy`, `ClarificationThenGrantAccessPolicy`.
 
-Examples in `aauth-axum/examples/` mirror the [AAuth explorer](https://explorer.aauth.dev/) access modes; matching E2E tests live in `aauth-axum/tests/example_flows.rs`.
+Examples in `aauth-axum/examples/` mirror the [AAuth explorer](https://explorer.aauth.dev/) access modes; matching HTTP tests live under `aauth-axum/tests/` (`identity_based`, `person_managed`, `resource_managed`, `federated`). Hybrid `@aauth/fetch` CLI interop tests are `fetch_person_server` and `fetch_federated_hosted_ps` (ignored by default).
 
 ## Naming conventions
 
@@ -183,3 +183,20 @@ cargo check -p aauth-reqwest --all-features
 cargo check -p aauth-policy --all-features
 cargo check -p aauth-axum --all-features
 ```
+
+### Fetch CLI interop (hybrid local + hosted)
+
+Ignored by default. Needs Node/`npx`, `@aauth/bootstrap` config (`AAUTH_DIR` or `~/.aauth`), and a tunnel whose public URL is in `AAUTH_E2E_PUBLIC_BASE` (the harness advertises that base so hosted parties can reach local JWKS / AS).
+
+```bash
+# Local Person Server + https://whoami.aauth.dev
+AAUTH_E2E_PUBLIC_BASE=https://your-tunnel.example \
+  cargo test -p aauth-axum --test fetch_person_server --features full -- --ignored --nocapture
+
+# Local resource + hosted Person Server (person.hello.coop; three-party — hosted PS
+# expects resource-token aud = PS, not a local Access Server)
+AAUTH_E2E_PUBLIC_BASE=https://your-tunnel.example \
+  cargo test -p aauth-axum --test fetch_federated_hosted_ps --features full -- --ignored --nocapture
+```
+
+Optional env: `AAUTH_E2E_WHOAMI`, `AAUTH_E2E_PERSON_SERVER`, `AAUTH_E2E_BIND` (fixed bind for tunnels, e.g. `127.0.0.1:18765`).

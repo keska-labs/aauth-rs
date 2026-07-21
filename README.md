@@ -188,7 +188,7 @@ cargo run -p aauth-axum --example resource_managed
 cargo run -p aauth-axum --example federated
 ```
 
-Each example has a matching E2E test in `aauth-axum/tests/example_flows.rs` (run with `cargo test -p aauth-axum --test example_flows --all-features`).
+Each example has a matching HTTP test under `aauth-axum/tests/` (e.g. `cargo test -p aauth-axum --test person_managed --all-features`). Hybrid `@aauth/fetch` CLI interop: `fetch_person_server` / `fetch_federated_hosted_ps` (see `AGENTS.md`).
 
 Build all examples in CI:
 

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::sync::Arc;
 
 use aauth::AccessServerConfig;
@@ -12,6 +10,7 @@ use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 use aauth::person_server::keys::TestPersonAuthJwtMinter;
 use aauth::protocol::{
     AgentOkResponse, AgentProviderMetadata, AuthOkResponse, JwksDocument, ResourceInteractionClaim,
+    ResourceServerMetadata,
 };
 use aauth::resource::{
     ResourceAccessConfig, ResourceAccessMode, ResourceInteractionContext,
@@ -22,10 +21,10 @@ use aauth_axum::{
     VerifiedAAuthToken, access_router, person_router, resource_router,
 };
 use aauth_policy::{
-    AlwaysGrantPersonPolicy, ClarificationThenGrantPersonPolicy, DeferInteractionAccessPolicy,
-    DeferInteractionPersonPolicy, DeferInteractionResourcePolicy, InMemoryAccessPendingStore,
-    InMemoryOpaqueAccessStore, InMemoryPersonPendingStore, InMemoryResourcePendingStore,
-    OpaqueAccessStore, PendingStore, PolicyResourceAccessService,
+    AlwaysGrantPersonPolicy, AlwaysGrantResourcePolicy, ClarificationThenGrantPersonPolicy,
+    DeferInteractionAccessPolicy, DeferInteractionPersonPolicy, DeferInteractionResourcePolicy,
+    InMemoryAccessPendingStore, InMemoryOpaqueAccessStore, InMemoryPersonPendingStore,
+    InMemoryResourcePendingStore, OpaqueAccessStore, PendingStore, PolicyResourceAccessService,
 };
 use async_trait::async_trait;
 use axum::Json;
@@ -35,14 +34,9 @@ use axum::routing::get;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-#[path = "harness_policy.rs"]
-mod harness_policy;
-use harness_policy::HarnessPersonPolicy;
-
-#[path = "harness_access_policy.rs"]
-mod harness_access_policy;
-use harness_access_policy::HarnessAccessPolicy;
-
+use super::harness_access_policy::HarnessAccessPolicy;
+use super::harness_policy::HarnessPersonPolicy;
+use super::harness_resource_policy::HarnessResourcePolicy;
 use super::timeout::TEST_POLL_MAX_SECS;
 
 #[derive(Clone)]
@@ -59,31 +53,114 @@ impl ResourceInteractionProvider for StaticResourceInteractionProvider {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ServerConfig {
-    pub require_auth_token: bool,
-    pub with_auth_routes: bool,
-    pub deferred_mode: bool,
-    pub clarification_on_poll: bool,
-    pub federated: bool,
-    pub as_deferred_mode: bool,
-    pub as_clarification: bool,
-    pub resource_managed: bool,
-    pub resource_initiated_interaction: bool,
+/// Pending / grant behaviour for Person Server–asserted flows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PersonPending {
+    #[default]
+    Grant,
+    Interaction,
+    Clarification,
 }
 
-impl Default for ServerConfig {
-    fn default() -> Self {
-        Self {
-            require_auth_token: false,
-            with_auth_routes: false,
-            deferred_mode: false,
-            clarification_on_poll: false,
-            federated: false,
-            as_deferred_mode: false,
-            as_clarification: false,
-            resource_managed: false,
+/// Pending / grant behaviour for Access Server (federated) flows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AccessPending {
+    #[default]
+    Grant,
+    Interaction,
+    Clarification,
+}
+
+/// Pending / grant behaviour for resource-managed consent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ResourcePending {
+    Grant,
+    #[default]
+    Interaction,
+}
+
+/// Named access-mode scenario for the axum test harness (mirrors explorer modes).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestScenario {
+    IdentityBased,
+    PersonManaged {
+        pending: PersonPending,
+        /// When true, the resource challenge includes a static interaction claim.
+        resource_initiated_interaction: bool,
+    },
+    /// Local resource only; resource-token `aud` is a hosted Person Server URL.
+    /// Used for `@aauth/fetch` hybrids against `person.hello.coop` (no local PS/AS).
+    HostedPersonManaged {
+        person_server_url: String,
+    },
+    ResourceManaged {
+        pending: ResourcePending,
+    },
+    Federated {
+        pending: AccessPending,
+    },
+}
+
+impl TestScenario {
+    pub fn identity_based() -> Self {
+        Self::IdentityBased
+    }
+
+    pub fn person_managed() -> Self {
+        Self::PersonManaged {
+            pending: PersonPending::Grant,
             resource_initiated_interaction: false,
+        }
+    }
+
+    pub fn person_managed_interaction() -> Self {
+        Self::PersonManaged {
+            pending: PersonPending::Interaction,
+            resource_initiated_interaction: false,
+        }
+    }
+
+    pub fn person_managed_clarification() -> Self {
+        Self::PersonManaged {
+            pending: PersonPending::Clarification,
+            resource_initiated_interaction: false,
+        }
+    }
+
+    pub fn person_managed_resource_interaction() -> Self {
+        Self::PersonManaged {
+            pending: PersonPending::Grant,
+            resource_initiated_interaction: true,
+        }
+    }
+
+    pub fn hosted_person_managed(person_server_url: impl Into<String>) -> Self {
+        Self::HostedPersonManaged {
+            person_server_url: person_server_url.into(),
+        }
+    }
+
+    pub fn resource_managed() -> Self {
+        Self::ResourceManaged {
+            pending: ResourcePending::Interaction,
+        }
+    }
+
+    pub fn federated() -> Self {
+        Self::Federated {
+            pending: AccessPending::Grant,
+        }
+    }
+
+    pub fn federated_interaction() -> Self {
+        Self::Federated {
+            pending: AccessPending::Interaction,
+        }
+    }
+
+    pub fn federated_clarification() -> Self {
+        Self::Federated {
+            pending: AccessPending::Clarification,
         }
     }
 }
@@ -92,6 +169,7 @@ pub struct SpawnedServer {
     pub keys: TestKeys,
     pub agent_url: String,
     pub person_server_url: String,
+    pub access_server_url: String,
     pub resource_url: String,
     pub metadata_fetcher: Arc<dyn MetadataFetcher>,
     pub person_pending: InMemoryPersonPendingStore,
@@ -103,7 +181,8 @@ pub struct SpawnedServer {
 
 impl SpawnedServer {
     pub async fn resolve_person_pending(&self, auth_token: &str) {
-        if let Some(id) = self.person_pending.last_created.lock().unwrap().clone() {
+        let id = self.person_pending.last_created.lock().unwrap().clone();
+        if let Some(id) = id {
             let _ = self
                 .person_pending
                 .complete(
@@ -118,7 +197,8 @@ impl SpawnedServer {
     }
 
     pub async fn resolve_resource_pending(&self, agent_id: &str) {
-        if let Some(id) = self.resource_pending.last_created.lock().unwrap().clone() {
+        let id = self.resource_pending.last_created.lock().unwrap().clone();
+        if let Some(id) = id {
             let opaque = self.opaque_store.issue(agent_id);
             let _ = self
                 .resource_pending
@@ -149,7 +229,7 @@ type TestAccessState = AccessServerState<
     >,
 >;
 type TestResourceService = PolicyResourceAccessService<
-    DeferInteractionResourcePolicy,
+    HarnessResourcePolicy,
     InMemoryResourcePendingStore,
     InMemoryOpaqueAccessStore,
 >;
@@ -161,6 +241,8 @@ struct TestServerState {
     access: TestAccessState,
     resource: TestResourceState,
     agent_jwks_uri: String,
+    resource_jwks_uri: String,
+    resource_url: String,
 }
 
 impl FromRef<TestServerState> for TestPersonState {
@@ -181,13 +263,25 @@ impl FromRef<TestServerState> for TestResourceState {
     }
 }
 
-pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
+pub async fn spawn_test_server(scenario: TestScenario) -> SpawnedServer {
     let keys = aauth::TestKeys::generate();
-    let listener = TcpListener::bind("127.0.0.1:0")
+    // Prefer a fixed bind (`AAUTH_E2E_BIND=127.0.0.1:PORT`) so a tunnel can front the
+    // same port; otherwise pick an ephemeral port.
+    let bind_addr = std::env::var("AAUTH_E2E_BIND")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "127.0.0.1:0".to_string());
+    let listener = TcpListener::bind(&bind_addr)
         .await
-        .expect("bind ephemeral port");
+        .unwrap_or_else(|e| panic!("bind {bind_addr}: {e}"));
     let addr = listener.local_addr().expect("local addr");
-    let base_url = format!("http://{addr}");
+    // When a tunnel fronts this listener, advertise public URLs so hosted parties
+    // can fetch JWKS and federate to the local Access Server.
+    let base_url = std::env::var("AAUTH_E2E_PUBLIC_BASE")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(|s| s.trim_end_matches('/').to_string())
+        .unwrap_or_else(|| format!("http://{addr}"));
     let agent_url = base_url.clone();
     let person_server_url = base_url.clone();
     let access_server_url = format!("{base_url}/as");
@@ -196,6 +290,9 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let person_jwks_uri = format!("{base_url}/auth/jwks");
     let access_jwks_uri = format!("{access_server_url}/access/jwks");
     let resource_jwks_uri = format!("{base_url}/resource/jwks");
+
+    let http_client = reqwest::Client::new();
+    let http_fetcher = aauth_reqwest::CachedMetadataFetcher::new(http_client.clone());
 
     let fetcher: Arc<TriMetadataFetcher> = Arc::new(TriMetadataFetcher {
         agent: StaticMetadataFetcher::new(agent_jwks_uri.clone(), keys.agent_root.jwk_set()),
@@ -206,6 +303,8 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         person_jwks_uri: person_jwks_uri.clone(),
         access_jwks_uri: access_jwks_uri.clone(),
         resource_jwks_uri: resource_jwks_uri.clone(),
+        local_base: base_url.clone(),
+        http: http_fetcher,
     });
 
     let resource_token_signer: Arc<dyn ResourceTokenSigner> =
@@ -214,42 +313,56 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let opaque_store = InMemoryOpaqueAccessStore::new();
     let person_pending = InMemoryPersonPendingStore::new();
     let resource_pending = InMemoryResourcePendingStore::new();
-    let http_client = reqwest::Client::new();
 
     let access_pending = InMemoryAccessPendingStore::new();
 
-    let person_policy = if config.clarification_on_poll {
-        HarnessPersonPolicy::Clarify(ClarificationThenGrantPersonPolicy {
+    let person_policy = match &scenario {
+        TestScenario::PersonManaged {
+            pending: PersonPending::Clarification,
+            ..
+        } => HarnessPersonPolicy::Clarify(ClarificationThenGrantPersonPolicy {
             sub: "user-clarified".into(),
             question: "What is your purpose?".into(),
-        })
-    } else if config.deferred_mode {
-        HarnessPersonPolicy::Defer(DeferInteractionPersonPolicy {
+        }),
+        TestScenario::PersonManaged {
+            pending: PersonPending::Interaction,
+            ..
+        } => HarnessPersonPolicy::Defer(DeferInteractionPersonPolicy {
             inner: AlwaysGrantPersonPolicy::new("user-deferred"),
             interaction_url: format!("{person_server_url}/interact"),
-        })
-    } else {
-        HarnessPersonPolicy::Grant(AlwaysGrantPersonPolicy::new("user-123"))
+        }),
+        _ => HarnessPersonPolicy::Grant(AlwaysGrantPersonPolicy::new("user-123")),
     };
 
-    let access_policy = if config.federated && config.as_clarification {
-        HarnessAccessPolicy::Clarify(aauth_policy::ClarificationThenGrantAccessPolicy {
+    let access_policy = match &scenario {
+        TestScenario::Federated {
+            pending: AccessPending::Clarification,
+        } => HarnessAccessPolicy::Clarify(aauth_policy::ClarificationThenGrantAccessPolicy {
             sub: "user-federated".into(),
             question: "What is your purpose?".into(),
-        })
-    } else if config.federated && config.as_deferred_mode {
-        HarnessAccessPolicy::Defer(DeferInteractionAccessPolicy {
+        }),
+        TestScenario::Federated {
+            pending: AccessPending::Interaction,
+        } => HarnessAccessPolicy::Defer(DeferInteractionAccessPolicy {
             inner: aauth_policy::AlwaysGrantAccessPolicy::new("user-federated"),
             interaction_url: format!("{access_server_url}/interact"),
-        })
-    } else {
-        HarnessAccessPolicy::Grant(aauth_policy::AlwaysGrantAccessPolicy::new("user-federated"))
+        }),
+        _ => {
+            HarnessAccessPolicy::Grant(aauth_policy::AlwaysGrantAccessPolicy::new("user-federated"))
+        }
+    };
+
+    let resource_policy = match &scenario {
+        TestScenario::ResourceManaged {
+            pending: ResourcePending::Interaction,
+        } => HarnessResourcePolicy::Defer(DeferInteractionResourcePolicy {
+            interaction_url: format!("{resource_url}/interact"),
+        }),
+        _ => HarnessResourcePolicy::Grant(AlwaysGrantResourcePolicy),
     };
 
     let resource_service = PolicyResourceAccessService::new(
-        DeferInteractionResourcePolicy {
-            interaction_url: format!("{resource_url}/interact"),
-        },
+        resource_policy,
         resource_pending.clone(),
         opaque_store.clone(),
         ResourceAccessConfig {
@@ -260,20 +373,65 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         },
     );
 
-    let mode = if config.resource_managed {
-        ResourceAccessMode::ResourceManaged {
-            service: resource_service.clone(),
-        }
-    } else {
-        ResourceAccessMode::PsAsserted {
-            require_auth_token: config.require_auth_token,
-            access_server_url: if config.federated {
-                Some(access_server_url.clone())
-            } else {
-                None
+    let (mode, with_person, with_access, with_resource, resource_initiated) = match &scenario {
+        TestScenario::IdentityBased => (
+            ResourceAccessMode::PsAsserted {
+                require_auth_token: false,
+                access_server_url: None,
+                person_server_fallback: Some(person_server_url.clone()),
             },
-            person_server_fallback: Some(person_server_url.clone()),
-        }
+            false,
+            false,
+            false,
+            false,
+        ),
+        TestScenario::PersonManaged {
+            resource_initiated_interaction,
+            ..
+        } => (
+            ResourceAccessMode::PsAsserted {
+                require_auth_token: true,
+                access_server_url: None,
+                person_server_fallback: Some(person_server_url.clone()),
+            },
+            true,
+            false,
+            false,
+            *resource_initiated_interaction,
+        ),
+        TestScenario::HostedPersonManaged {
+            person_server_url: hosted_ps,
+        } => (
+            ResourceAccessMode::PsAsserted {
+                require_auth_token: true,
+                access_server_url: None,
+                person_server_fallback: Some(hosted_ps.clone()),
+            },
+            false,
+            false,
+            false,
+            false,
+        ),
+        TestScenario::ResourceManaged { .. } => (
+            ResourceAccessMode::ResourceManaged {
+                service: resource_service.clone(),
+            },
+            false,
+            false,
+            true,
+            false,
+        ),
+        TestScenario::Federated { .. } => (
+            ResourceAccessMode::PsAsserted {
+                require_auth_token: true,
+                access_server_url: Some(access_server_url.clone()),
+                person_server_fallback: Some(person_server_url.clone()),
+            },
+            true,
+            true,
+            false,
+            false,
+        ),
     };
 
     let resource_auth_layer = {
@@ -283,7 +441,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
             mode,
             resource_token_signer,
         );
-        if config.resource_initiated_interaction {
+        if resource_initiated {
             layer.with_interaction_provider(Arc::new(StaticResourceInteractionProvider {
                 claim: ResourceInteractionClaim {
                     url: format!(
@@ -337,6 +495,8 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
             service: resource_service,
         },
         agent_jwks_uri: agent_jwks_uri.clone(),
+        resource_jwks_uri: resource_jwks_uri.clone(),
+        resource_url: resource_url.clone(),
     };
 
     let api = Router::new()
@@ -346,17 +506,23 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
     let mut app = Router::new()
         .merge(api)
         .route("/.well-known/aauth-agent.json", get(agent_metadata_handler))
-        .route("/agent/jwks", get(agent_jwks_handler));
+        .route("/agent/jwks", get(agent_jwks_handler))
+        // Always publish resource JWKS/metadata so hosted PS/AS can verify resource tokens.
+        .route(
+            "/.well-known/aauth-resource.json",
+            get(resource_metadata_handler),
+        )
+        .route("/resource/jwks", get(resource_jwks_handler));
 
-    if config.with_auth_routes || config.federated {
+    if with_person {
         app = app.merge(person_router::<TestServerState, _>());
     }
 
-    if config.federated {
+    if with_access {
         app = app.nest("/as", access_router::<TestServerState, _>());
     }
 
-    if config.resource_managed {
+    if with_resource {
         app = app.merge(resource_router::<TestServerState, _>());
     }
 
@@ -370,6 +536,7 @@ pub async fn spawn_test_server(config: ServerConfig) -> SpawnedServer {
         keys,
         agent_url,
         person_server_url,
+        access_server_url,
         resource_url,
         metadata_fetcher: Arc::clone(&fetcher) as Arc<dyn MetadataFetcher>,
         person_pending,
@@ -411,6 +578,36 @@ async fn agent_jwks_handler(State(state): State<TestServerState>) -> Json<JwksDo
     })
 }
 
+async fn resource_metadata_handler(
+    State(state): State<TestServerState>,
+) -> Json<ResourceServerMetadata> {
+    Json(ResourceServerMetadata {
+        issuer: Some(state.resource_url.clone()),
+        jwks_uri: Some(state.resource_jwks_uri.clone()),
+        access_mode: None,
+        name: Some("aauth-rs test resource".into()),
+        description: None,
+        logo_uri: None,
+        logo_dark_uri: None,
+        documentation_uri: None,
+        tos_uri: None,
+        policy_uri: None,
+        authorization_endpoint: None,
+        login_endpoint: None,
+        scope_descriptions: None,
+        signature_window: None,
+        additional_signature_components: None,
+        revocation_endpoint: None,
+        r3_vocabularies: None,
+    })
+}
+
+async fn resource_jwks_handler(State(state): State<TestServerState>) -> Json<JwksDocument> {
+    Json(JwksDocument {
+        keys: state.person.config.keys.resource.jwk_set(),
+    })
+}
+
 #[derive(Clone)]
 struct TriMetadataFetcher {
     agent: StaticMetadataFetcher,
@@ -421,19 +618,33 @@ struct TriMetadataFetcher {
     person_jwks_uri: String,
     access_jwks_uri: String,
     resource_jwks_uri: String,
+    /// Advertised local base URL; issuers under this host use in-memory TestKeys.
+    local_base: String,
+    /// HTTP fallback for remote agent / person / access issuers (hybrid e2e).
+    http: aauth_reqwest::CachedMetadataFetcher,
+}
+
+fn issuer_is_local(local_base: &str, iss: &str) -> bool {
+    let local = local_base.trim_end_matches('/');
+    let iss = iss.trim_end_matches('/');
+    iss == local || iss.starts_with(&format!("{local}/"))
 }
 
 #[async_trait]
 impl MetadataFetcher for TriMetadataFetcher {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> aauth::Result<String> {
-        let _ = iss;
-        match dwk {
-            "aauth-agent.json" => self.agent.resolve_jwks_uri(iss, dwk).await,
-            "aauth-person.json" => self.person.resolve_jwks_uri(iss, dwk).await,
-            "aauth-access.json" => self.access.resolve_jwks_uri(iss, dwk).await,
-            "aauth-resource.json" => self.resource.resolve_jwks_uri(iss, dwk).await,
-            _ => Err(aauth::MetadataError::UnknownJwksUri(format!("unknown dwk: {dwk}")).into()),
+        if issuer_is_local(&self.local_base, iss) {
+            return match dwk {
+                "aauth-agent.json" => self.agent.resolve_jwks_uri(iss, dwk).await,
+                "aauth-person.json" => self.person.resolve_jwks_uri(iss, dwk).await,
+                "aauth-access.json" => self.access.resolve_jwks_uri(iss, dwk).await,
+                "aauth-resource.json" => self.resource.resolve_jwks_uri(iss, dwk).await,
+                _ => {
+                    Err(aauth::MetadataError::UnknownJwksUri(format!("unknown dwk: {dwk}")).into())
+                }
+            };
         }
+        self.http.resolve_jwks_uri(iss, dwk).await
     }
 
     async fn fetch_jwks(&self, jwks_uri: &str) -> aauth::Result<jsonwebtoken::jwk::JwkSet> {
@@ -446,7 +657,7 @@ impl MetadataFetcher for TriMetadataFetcher {
         } else if jwks_uri == self.resource_jwks_uri {
             self.resource.fetch_jwks(jwks_uri).await
         } else {
-            Err(aauth::MetadataError::UnknownJwksUri(jwks_uri.to_string()).into())
+            self.http.fetch_jwks(jwks_uri).await
         }
     }
 }

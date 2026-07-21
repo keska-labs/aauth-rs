@@ -15,4 +15,10 @@ pub mod harness_policy;
 #[allow(dead_code)]
 pub mod harness_access_policy;
 
+#[allow(dead_code)]
+pub mod harness_resource_policy;
+
+#[allow(dead_code)]
+pub mod fetch_cli;
+
 pub use constants::AGENT_ID;

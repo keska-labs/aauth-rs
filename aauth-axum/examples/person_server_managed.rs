@@ -8,25 +8,13 @@ mod support;
 
 use aauth::protocol::AuthOkResponse;
 
-use support::{ServerConfig, build_client, spawn_test_server};
+use support::{TestScenario, spawn_test_server};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let spawned = spawn_test_server(ServerConfig {
-        require_auth_token: true,
-        with_auth_routes: true,
-        ..Default::default()
-    })
-    .await;
+    let spawned = spawn_test_server(TestScenario::person_managed()).await;
 
-    let client = build_client(
-        &spawned,
-        Some(spawned.person_server_url.clone()),
-        Some(&spawned.person_server_url),
-        None,
-        None,
-        None,
-    );
+    let client = spawned.agent().with_spawned_person_server().build();
     let response = client
         .get(format!("{}/api/data", spawned.resource_url))
         .send()

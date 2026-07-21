@@ -25,8 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public getters on `AgentOptions` for transport adapters (`provider`, callbacks, hints, `metadata_fetcher` when `resource-verify` is on).
 - `person_router`, `access_router`, and `resource_router` in `aauth-axum` to mount canonical role routes (`merge` / `nest` into an app whose state implements `FromRef` to the matching `*ServerState`).
 - Workspace crate `aauth-axum`: axum handlers, extractors, `ResourceAuthLayer`, `*ServerState`, and `AauthResponse<T>` (`IntoResponse` wrappers for domain outcomes).
-- Cross-language e2e suite in `e2e/` against vendored [packages-js](https://github.com/aauth-dev/packages-js) `main`: JS client → Rust server and Rust client → JS server over real HTTP.
-- Workspace crates `aauth-testkit` (shared axum harness + `ServerManifest`) and `aauth-e2e` binaries (`aauth-e2e-server`, `aauth-e2e-agent`) for Vitest subprocess fixtures.
+- Named `TestScenario` harness in `aauth-axum` tests/examples (identity / person-managed / resource-managed / federated) replacing boolean `ServerConfig` flags; `SpawnedServer::agent()` client builder.
+- `@aauth/fetch` CLI interop tests (`fetch_person_server`, `fetch_federated_hosted_ps`) for hybrid local axum + hosted whoami / Person Server (ignored; need bootstrap + `AAUTH_E2E_PUBLIC_BASE`).
 - Spec-complete governance wire types: `MissionProposalRequest`, `PermissionRequest`/`PermissionResponse`, `InteractionRequest`, `AuditRequest`, and related payloads.
 - `AuthorizationRequest`, `ResourceTokenResponse`, `AuthorizationGrantedResponse`, and resource authorization response bodies in `protocol::authorization`.
 - `AgentProviderMetadata` (replaces loose `MetadataDocument`) with typed agent-provider metadata fields from the spec.

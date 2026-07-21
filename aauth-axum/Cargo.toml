@@ -67,11 +67,27 @@ name = "federated"
 required-features = ["person-server", "access-server", "resource", "policy"]
 
 [[test]]
-name = "axum_integration"
+name = "identity_based"
 required-features = ["full"]
 
 [[test]]
-name = "example_flows"
+name = "person_managed"
+required-features = ["full"]
+
+[[test]]
+name = "resource_managed"
+required-features = ["full"]
+
+[[test]]
+name = "federated"
+required-features = ["full"]
+
+[[test]]
+name = "fetch_person_server"
+required-features = ["full"]
+
+[[test]]
+name = "fetch_federated_hosted_ps"
 required-features = ["full"]
 
 [package.metadata.docs.rs]
