@@ -1,13 +1,9 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use aauth::SignatureError;
-use aauth::protocol::SignatureKeyJwt;
 use aauth::protocol::{
-    AAUTH_CAPABILITIES, AAUTH_MISSION, Capability, KeyMaterial, Mission, SIGNATURE,
-    SIGNATURE_INPUT, SIGNATURE_KEY, SIGNATURE_KEY_NAME, SignatureKey,
+    AAUTH_CAPABILITIES, AAUTH_MISSION, Capability, KeyMaterial, Mission, SignatureKey,
+    SignatureKeyJwt,
 };
-use aauth::signature::{build_signature_base_with_extras, sign_http_message};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use aauth::signature::sign_request_headers;
 use http::header::{AUTHORIZATION, HeaderValue};
 use reqwest::Request;
 
@@ -47,96 +43,63 @@ pub(crate) fn apply_opaque_token(request: &mut Request, token: &str) {
     );
 }
 
-/// Signing helpers for [`KeyMaterial`] against a `reqwest::Request`.
-pub trait SignRequest {
-    fn sign_request(&self, request: &mut Request) -> Result<()>;
+/// Extension trait: sign a `reqwest::Request` with [`KeyMaterial`].
+pub trait RequestSigningExt: Sized {
+    fn sign(&mut self, key_material: &KeyMaterial) -> Result<()>;
 
-    fn sign_request_with_auth_token(&self, request: &mut Request, auth_token: &str) -> Result<()>;
+    fn sign_with_auth_token(&mut self, key_material: &KeyMaterial, auth_token: &str) -> Result<()>;
+
+    fn signed(mut self, key_material: &KeyMaterial) -> Result<Self> {
+        self.sign(key_material)?;
+        Ok(self)
+    }
+
+    fn signed_with_auth_token(
+        mut self,
+        key_material: &KeyMaterial,
+        auth_token: &str,
+    ) -> Result<Self> {
+        self.sign_with_auth_token(key_material, auth_token)?;
+        Ok(self)
+    }
 }
 
-impl SignRequest for KeyMaterial {
-    fn sign_request(&self, request: &mut Request) -> Result<()> {
-        let token = match &self.signature_key {
-            SignatureKey::Jwt(j) => &j.jwt,
-            SignatureKey::JktJwt(j) => &j.jwt,
+impl RequestSigningExt for Request {
+    fn sign(&mut self, key_material: &KeyMaterial) -> Result<()> {
+        match &key_material.signature_key {
+            SignatureKey::Jwt(_) | SignatureKey::JktJwt(_) => {}
             SignatureKey::Hwk(_) => {
                 return Err(SignatureError::HwkUnsupported.into());
             }
-        };
-        let signature_key = format!("sig=jwt;jwt=\"{token}\"");
+        }
 
-        request.headers_mut().insert(
-            SIGNATURE_KEY,
-            HeaderValue::from_str(&signature_key).map_err(SignatureError::InvalidHeaderValue)?,
-        );
-
-        let created = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        let authorization = request
+        let authorization = self
             .headers()
             .get(AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
             .filter(|v| v.starts_with("AAuth "))
             .map(str::to_string);
 
-        let mut covered = vec![
-            "@method".to_string(),
-            "@authority".to_string(),
-            "@path".to_string(),
-            SIGNATURE_KEY_NAME.to_string(),
-        ];
-        let mut extras = Vec::new();
-        if let Some(ref auth) = authorization {
-            covered.push(AUTHORIZATION.as_str().to_string());
-            extras.push((AUTHORIZATION.as_str().to_string(), auth.clone()));
-        }
-
-        let signature_input = format!(
-            "sig=({});created={created}",
-            covered
-                .iter()
-                .map(|c| format!("\"{c}\""))
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-        let url = request.url();
-        let extra_refs: Vec<(&str, &str)> = extras
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-        let signature_base = build_signature_base_with_extras(
-            request.method().as_str(),
-            url.authority(),
-            url.path(),
-            &signature_key,
-            created,
-            &extra_refs,
-        )
-        .0;
-        let signature_bytes = sign_http_message(&self.signing_jwk, signature_base.as_bytes())?;
-        let signature = URL_SAFE_NO_PAD.encode(signature_bytes);
-
-        request.headers_mut().insert(
-            SIGNATURE_INPUT,
-            HeaderValue::from_str(&signature_input).map_err(SignatureError::InvalidHeaderValue)?,
-        );
-        request.headers_mut().insert(
-            SIGNATURE,
-            HeaderValue::from_str(&format!("sig=:{signature}:"))
-                .map_err(SignatureError::InvalidHeaderValue)?,
-        );
+        let method = self.method().as_str().to_string();
+        let authority = self.url().authority().to_string();
+        let path = self.url().path().to_string();
+        sign_request_headers(
+            self.headers_mut(),
+            &method,
+            &authority,
+            &path,
+            key_material,
+            authorization.as_deref(),
+        )?;
 
         Ok(())
     }
 
-    fn sign_request_with_auth_token(&self, request: &mut Request, auth_token: &str) -> Result<()> {
-        let mut auth_material = self.clone();
+    fn sign_with_auth_token(&mut self, key_material: &KeyMaterial, auth_token: &str) -> Result<()> {
+        let mut auth_material = key_material.clone();
         auth_material.signature_key = SignatureKey::Jwt(SignatureKeyJwt {
             jwt: auth_token.to_string(),
         });
-        auth_material.sign_request(request)
+        self.sign(&auth_material)
     }
 }

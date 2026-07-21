@@ -25,7 +25,7 @@ pub use deferred::{
 pub use error::{AgentError, Result};
 pub use metadata::CachedMetadataFetcher;
 pub use middleware::{AgentMiddleware, ClientBuilder, ClientWithMiddleware};
-pub use signed::{SignRequest, SigningOptions};
+pub use signed::{RequestSigningExt, SigningOptions};
 pub use token_exchange::{
     TokenExchangeError, TokenExchangeOptions, TokenExchangeOptionsBuilder, TokenExchangeResult,
     exchange_token,

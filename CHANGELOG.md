@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `aauth-reqwest` signing: `SignRequest` trait on `KeyMaterial`, `SigningOptions::apply_to`; removed free `sign_request` / `apply_*` / free `sign_and_run` shim.
+- `aauth-reqwest` signing: `RequestSigningExt` on `reqwest::Request` (`.sign` / `.signed`, `.sign_with_auth_token` / `.signed_with_auth_token`), `SigningOptions::apply_to`; removed free `sign_request` / `SignRequest` on `KeyMaterial` / free `sign_and_run` shim.
 - Demoted signature parse helpers (`parse_signature_*`) and removed thin `build_signature_base`; shared `http_util` for URL normalize + reqwest→http header copy; folded `person_server_from_agent_jwt` into `resolve_person_server_url`; demoted `resolve_deferred_location`.
 - `aauth-policy` defer/decision/federation helpers are private methods on `Policy*Service`; `AccessPendingContext` converts via `From` into `AccessTokenContext`.
 - Role constructors are methods: `AccessTokenContext::from_exchange`, `PersonServerConfig::verify_token_request` / `mint_person_auth` / `federate_to_access_server`, `ResourceTokenOptions::sign` (free `build_access_context`, `verify_person_token_request`, `create_resource_token`, and free `federate_to_access_server` / `mint_person_auth` removed).

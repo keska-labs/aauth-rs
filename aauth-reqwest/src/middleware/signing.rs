@@ -7,7 +7,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 
 use crate::error::AgentError;
-use crate::signed::{SignRequest, SigningOptions, apply_opaque_token};
+use crate::signed::{RequestSigningExt, SigningOptions, apply_opaque_token};
 
 #[derive(Clone)]
 pub(crate) struct AgentAuthAttemptKey(pub AgentAuthAttempt);
@@ -37,19 +37,16 @@ impl SigningMiddleware {
 
         match &attempt {
             AgentAuthAttempt::AuthToken(token) => {
-                material
-                    .sign_request_with_auth_token(&mut req, token)
+                req.sign_with_auth_token(&material, token)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
             AgentAuthAttempt::OpaqueToken(token) => {
                 apply_opaque_token(&mut req, token);
-                material
-                    .sign_request(&mut req)
+                req.sign(&material)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
             AgentAuthAttempt::AgentSigned => {
-                material
-                    .sign_request(&mut req)
+                req.sign(&material)
                     .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
             }
         }

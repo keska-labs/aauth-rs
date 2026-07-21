@@ -22,7 +22,7 @@ async fn signed_request(
     url: &str,
     body: Option<String>,
 ) -> reqwest::Response {
-    use aauth_reqwest::SignRequest;
+    use aauth_reqwest::RequestSigningExt;
 
     let agent_jwt = spawned.keys.mint_agent_jwt(
         &spawned.agent_url,
@@ -36,9 +36,9 @@ async fn signed_request(
     if let Some(body) = body {
         builder = builder.header(CONTENT_TYPE, "application/json").body(body);
     }
-    let mut req = builder.build().expect("request");
-    material.sign_request(&mut req).expect("sign");
-    client.execute(req).await.expect("send")
+    let mut request = builder.build().expect("request");
+    request.sign(&material).expect("sign");
+    client.execute(request).await.expect("send")
 }
 
 #[rstest]

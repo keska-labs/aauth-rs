@@ -1,6 +1,6 @@
 use aauth::TestKeys;
 use aauth::signature::verify_request_signature;
-use aauth_reqwest::SignRequest;
+use aauth_reqwest::RequestSigningExt;
 
 #[tokio::test]
 async fn sign_request_verify_roundtrip() {
@@ -12,7 +12,7 @@ async fn sign_request_verify_roundtrip() {
 
     let url = format!("{agent_url}/api/data");
     let mut req = reqwest::Client::new().get(&url).build().unwrap();
-    material.sign_request(&mut req).unwrap();
+    req.sign(&material).unwrap();
 
     let headers = req.headers().clone();
     let verified = verify_request_signature(
