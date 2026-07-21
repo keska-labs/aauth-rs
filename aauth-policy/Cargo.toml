@@ -8,13 +8,13 @@ authors.workspace = true
 repository.workspace = true
 description = "High-level policy, pending store, and reference services for AAuth"
 documentation = "https://docs.rs/aauth-policy"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["aauth", "oauth", "authentication", "policy"]
 categories = ["authentication", "web-programming"]
 
 [features]
 default = ["person-server", "access-server", "resource"]
-person-server = ["aauth/person-server"]
+person-server = ["aauth/person-server", "dep:reqwest"]
 access-server = ["aauth/access-server"]
 resource = ["aauth/resource"]
 full = ["person-server", "access-server", "resource"]
@@ -24,6 +24,7 @@ aauth = { workspace = true, default-features = false, features = ["deferred"] }
 base64.workspace = true
 dynosaur.workspace = true
 rand.workspace = true
+reqwest = { workspace = true, optional = true }
 serde.workspace = true
 serde_with.workspace = true
 thiserror.workspace = true

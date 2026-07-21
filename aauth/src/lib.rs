@@ -1,33 +1,4 @@
-//! Rust implementation of the [AAuth authorization protocol](https://github.com/dickhardt/AAuth).
-//!
-//! # Features
-//!
-//! Protocol-wide modules (`error`, `protocol`, `jwt`, `signature`, …) are always available.
-//! Enable role-specific features to compile only what you need:
-//!
-//! - `agent` — agent runtime (includes `resource-verify` for challenge / auth-token checks)
-//! - `person-server` — Person Server service trait
-//! - `access-server` — Access Server service trait
-//! - `resource` — Resource Server consent service trait
-//! - `resource-verify` — resource token verification only (also pulled in by `agent` and `person-server`)
-//! - `full` — all roles and agent (matches `default`)
-//!
-//! For axum HTTP adapters (handlers, `ResourceAuthLayer`), use the companion
-//! crate `aauth-axum`. For the reqwest agent client (`AgentMiddleware`), use
-//! `aauth-reqwest`. For batteries-included policy + pending store services, use
-//! `aauth-policy`.
-//!
-//! Role services and deferred wire types live under their modules
-//! (`person_server`, `access_server`, `resource`, `deferred`). Spec wire
-//! types that have no runtime yet (missions, permissions, authorization endpoint, …)
-//! live under [`protocol`] only — they are not re-exported at the crate root.
-//!
-//! # Protocol roles
-//!
-//! - **Agent** — [`agent`]
-//! - **Resource server** — [`resource`]
-//! - **Person server** — [`person_server`]
-//! - **Access server** — [`access_server`]
+#![doc = include_str!("../README.md")]
 
 pub mod error;
 pub mod http_util;

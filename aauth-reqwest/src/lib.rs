@@ -1,13 +1,4 @@
-//! Reqwest transport adapter for the AAuth agent client.
-//!
-//! Pair [`AgentMiddleware`] with [`aauth::agent::auth::AgentOptions`] (re-exported here)
-//! to drive signed requests, token exchange, and deferred polling over HTTP.
-//!
-//! Challenge verification always runs before token exchange. Auth-token claim binding
-//! always runs after exchange. JWT signature verification of returned auth tokens is
-//! controlled by [`AgentOptions::verify_auth_signature`] (default `true`, spec SHOULD).
-//! Provide a [`aauth::metadata::MetadataFetcher`] (for example [`CachedMetadataFetcher`])
-//! so JWKS discovery succeeds for challenges and optional auth signatures.
+#![doc = include_str!("../README.md")]
 
 mod deferred;
 mod error;

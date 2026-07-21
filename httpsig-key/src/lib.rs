@@ -1,6 +1,4 @@
-//! HTTP Signature Keys on top of [`httpsig`] (RFC 9421).
-//!
-//! Spec: [`draft-hardt-httpbis-signature-key-05.txt`](../docs/specs/draft-hardt-httpbis-signature-key-05.txt)
+#![doc = include_str!("../README.md")]
 
 mod crypto;
 mod error;

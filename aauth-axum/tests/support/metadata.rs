@@ -5,6 +5,11 @@ use std::sync::Arc;
 use aauth::TestKeys;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
 
+/// Trim trailing `/` and lowercase for comparing configured agent URL vs JWT `iss`.
+fn same_origin(configured: &str, iss: &str) -> bool {
+    configured.trim_end_matches('/').eq_ignore_ascii_case(iss.trim_end_matches('/'))
+}
+
 /// Routes well-known JWKS resolution by document type; optional HTTP for remote issuers.
 #[derive(Clone)]
 pub struct MultiPartyMetadataFetcher {
@@ -12,6 +17,8 @@ pub struct MultiPartyMetadataFetcher {
     person: Option<StaticMetadataFetcher>,
     access: Option<StaticMetadataFetcher>,
     resource: StaticMetadataFetcher,
+    /// Local agent issuer base URL (TestKeys path); foreign `iss` uses HTTP when enabled.
+    agent_url: String,
     agent_jwks_uri: String,
     person_jwks_uri: Option<String>,
     access_jwks_uri: Option<String>,
@@ -101,6 +108,7 @@ impl MultiPartyMetadataFetcherBuilder {
                 resource_jwks_uri.clone(),
                 self.keys.resource.jwk_set(),
             ),
+            agent_url: self.agent_url,
             agent_jwks_uri,
             person_jwks_uri: person.map(|(u, _)| u),
             access_jwks_uri: access.map(|(u, _)| u),
@@ -113,7 +121,14 @@ impl MultiPartyMetadataFetcherBuilder {
 impl MetadataFetcher for MultiPartyMetadataFetcher {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> aauth::Result<String> {
         match dwk {
-            "aauth-agent.json" => self.agent.resolve_jwks_uri(iss, dwk).await,
+            "aauth-agent.json" => {
+                if let Some(http) = &self.http {
+                    if !same_origin(&self.agent_url, iss) {
+                        return http.resolve_jwks_uri(iss, dwk).await;
+                    }
+                }
+                self.agent.resolve_jwks_uri(iss, dwk).await
+            }
             "aauth-person.json" => {
                 if let Some(person) = &self.person {
                     person.resolve_jwks_uri(iss, dwk).await

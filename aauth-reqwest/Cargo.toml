@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 description = "Reqwest transport adapter for the AAuth agent client"
 documentation = "https://docs.rs/aauth-reqwest"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["aauth", "oauth", "authentication", "reqwest", "http-signatures"]
 categories = ["authentication", "web-programming", "asynchronous"]
 
@@ -29,7 +29,7 @@ reqwest-middleware.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
 trait-variant.workspace = true
 url.workspace = true
 

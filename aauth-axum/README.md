@@ -1,98 +1,38 @@
-# aauth-rs
+# aauth-axum
 
-Rust implementation of the [AAuth authorization protocol](https://github.com/dickhardt/AAuth).
+Axum HTTP adapters for AAuth **Person**, **Access**, and **Resource** servers.
 
-AAuth lets an **agent** present a signed identity to a **resource**, and — when needed — obtain authorization from a **Person Server** (and optionally an **Access Server**) before the resource grants access. This workspace is a pre-alpha Rust port aimed at protocol parity with the [reference TypeScript packages](https://github.com/aauth-dev/packages-js).
+Domain types and service traits live in [`aauth`](https://docs.rs/aauth). This crate maps them to HTTP: role routers, extractors, [`ResourceAuthLayer`], and [`AauthResponse`] (`IntoResponse` wrappers for orphan-rule compliance).
 
-## Status
+**Pre-alpha.** Breaking changes are expected.
 
-**Pre-alpha.** The API and behavior are unstable. We are still aligning with the draft and the JS reference; expect breaking changes. Contributions are not useful yet — check back after the next round of internal work.
-
-## Protocol in one glance
-
-```text
-Agent ──signed request──▶ Resource
-Agent ◀──401 + AAuth-Requirement── Resource   (when more than identity is required)
-Agent ──POST /token──▶ Person Server (+ Access Server if federated)
-Agent ──signed request + auth/opaque token──▶ Resource
-Agent ◀──200── Resource
-```
-
-Access modes (identity-based, Person Server managed, resource-managed, federated) are compared in the [AAuth Protocol Explorer](https://explorer.aauth.dev/access/compare).
-
-Canonical spec: [`docs/specs/draft-hardt-oauth-aauth-protocol.md`](./docs/specs/draft-hardt-oauth-aauth-protocol.md).
-
-## Crates
-
-| Crate | Role | docs.rs |
-|-------|------|---------|
-| [`aauth`](./aauth/) | Protocol types, JWT/signature helpers, role service traits, agent state machine | [docs.rs/aauth](https://docs.rs/aauth) |
-| [`aauth-reqwest`](./aauth-reqwest/) | Agent HTTP client (`AgentMiddleware` on reqwest) | [docs.rs/aauth-reqwest](https://docs.rs/aauth-reqwest) |
-| [`aauth-axum`](./aauth-axum/) | Server HTTP adapters (routers, `ResourceAuthLayer`) | [docs.rs/aauth-axum](https://docs.rs/aauth-axum) |
-| [`aauth-policy`](./aauth-policy/) | Opinionated policy traits, pending stores, and `Policy*Service` helpers | [docs.rs/aauth-policy](https://docs.rs/aauth-policy) |
-| [`httpsig-key`](./httpsig-key/) | HTTP Signature Keys (`Signature-Key`) on top of [`httpsig`](https://crates.io/crates/httpsig) | [docs.rs/httpsig-key](https://docs.rs/httpsig-key) |
-
-Pick crates by what you implement:
-
-- **Agent client** → `aauth` (`agent`) + `aauth-reqwest`
-- **Person / Access / Resource server** → `aauth` (role feature) + `aauth-axum` (matching feature); optionally `aauth-policy` for a batteries-included service
-- **Wire / crypto only** → `aauth` protocol modules, or `httpsig-key` alone
-
-Each crate’s README is the rustdoc crate page (`#![doc = include_str!(…)]`). The Rust snippets below are doctests (run via `cargo test -p aauth-axum --doc --features full`).
-
-## Repository layout
-
-```text
-aauth-rs/
-├── aauth/           # core protocol + role traits
-├── aauth-reqwest/   # reqwest agent transport
-├── aauth-axum/      # axum server adapters + examples
-├── aauth-policy/    # policy + pending-store services
-├── httpsig-key/     # Signature-Key (RFC 9421 companion draft)
-└── docs/specs/      # protocol drafts used as source of truth
-```
-
-## Usage
-
-### Agent (reqwest)
+## Install
 
 ```toml
-aauth = { version = "0.0", default-features = false, features = ["agent"] }
-aauth-reqwest = { version = "0.0" }
-```
-
-```rust
-#![cfg(feature = "full")]
-use aauth::TestKeys;
-use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder};
-
-fn main() {
-let keys = TestKeys::generate();
-let issuer = "https://example.com";
-let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
-
-let client = ClientBuilder::new(reqwest::Client::new())
-    .with(AgentMiddleware::new(
-        AgentOptions::builder(keys.key_provider(agent_jwt))
-            .metadata_fetcher(keys.agent_metadata_fetcher(issuer))
-            // person_server_url omitted → resolved from agent JWT `ps` when challenged
-            .build(),
-    ))
-    .build();
-
-// Ready to call a protected resource (signing + challenge handling are automatic).
-let _ = client;
-}
-```
-
-### Resource server (axum)
-
-Protect routes with `ResourceAuthLayer`; handlers read `VerifiedAAuthToken`. Switch `ResourceAccessMode` for identity-based, Person Server managed, federated, or resource-managed.
-
-```toml
-aauth = { version = "0.0", default-features = false, features = ["resource"] }
+# Resource server only
 aauth-axum = { version = "0.0", default-features = false, features = ["resource"] }
+
+# Person Server + aauth-policy shortcut
+aauth = { version = "0.0", default-features = false, features = ["person-server"] }
+aauth-policy = { version = "0.0", default-features = false, features = ["person-server"] }
+aauth-axum = { version = "0.0", default-features = false, features = ["person-server", "policy"] }
 ```
+
+## Features
+
+| Feature | What you get |
+|---------|----------------|
+| `person-server` | [`PersonServerState`], [`person_router`], token / pending / interaction handlers |
+| `access-server` | [`AccessServerState`], [`access_router`], token / pending handlers |
+| `resource` | [`ResourceAuthLayer`], [`resource_router`], [`VerifiedAAuthToken`], pending poll |
+| `policy` | `from_policy` constructors via [`aauth-policy`](https://docs.rs/aauth-policy) |
+| `full` | All of the above (+ `aauth-reqwest` for workspace README doctests) |
+
+Default features enable the three role features (not `policy`).
+
+## Resource protection
+
+Apply [`ResourceAuthLayer`] to protected routes. After the layer succeeds, handlers extract [`VerifiedAAuthToken`]:
 
 ```rust
 #![cfg(feature = "resource")]
@@ -150,15 +90,26 @@ assert_eq!(res.status(), StatusCode::OK);
 }
 ```
 
-For resource-managed mode, also merge `resource_router` and hold a `ResourceServerState` (authorize + pending poll). See `aauth-axum` example `resource_managed`.
+### Access modes
 
-### Person Server (axum + policy)
+| Mode | [`ResourceAccessMode`](https://docs.rs/aauth/latest/aauth/resource/enum.ResourceAccessMode.html) | Notes |
+|------|--------------------------------------------------------------------------------------------------|-------|
+| Identity-based | `IdentityBased` | Agent JWT alone |
+| Person Server managed | `PsAsserted { access_server_url: None, … }` | Challenge → PS token exchange |
+| Federated | `PsAsserted { access_server_url: Some(…), … }` | PS federates to Access Server |
+| Resource-managed | `ResourceManaged { service, … }` | Opaque `AAuth-Access` via [`ResourceAccessService`](https://docs.rs/aauth/latest/aauth/resource/trait.ResourceAccessService.html) |
 
-```toml
-aauth = { version = "0.0", default-features = false, features = ["person-server"] }
-aauth-policy = { version = "0.0", default-features = false, features = ["person-server"] }
-aauth-axum = { version = "0.0", default-features = false, features = ["person-server", "policy"] }
-```
+## Role routers
+
+Prefer merging canonical routers over wiring handlers by hand:
+
+- [`person_router`] — `POST /token`, pending GET/POST, JWKS, metadata, interaction
+- [`access_router`] — Access Server token + pending + JWKS + metadata
+- [`resource_router`] — resource pending poll + `POST /resource/authorize` (resource-managed)
+
+App state must implement [`FromRef`](https://docs.rs/axum/latest/axum/extract/trait.FromRef.html) to the matching `*ServerState`.
+
+### Person Server
 
 ```rust
 #![cfg(all(feature = "person-server", feature = "policy"))]
@@ -234,15 +185,7 @@ assert_eq!(res.status(), StatusCode::OK);
 }
 ```
 
-### Access Server (axum + policy)
-
-Used when the Person Server federates token exchange (four-party).
-
-```toml
-aauth = { version = "0.0", default-features = false, features = ["access-server"] }
-aauth-policy = { version = "0.0", default-features = false, features = ["access-server"] }
-aauth-axum = { version = "0.0", default-features = false, features = ["access-server", "policy"] }
-```
+### Access Server
 
 ```rust
 #![cfg(all(feature = "access-server", feature = "policy"))]
@@ -317,9 +260,17 @@ assert_eq!(res.status(), StatusCode::OK);
 }
 ```
 
-Server snippets use `aauth-policy` for a quick grant path. Production apps can implement `PersonTokenService` / `AccessTokenService` / `ResourceAccessService` from `aauth` with their own persistence and skip `aauth-policy`.
+Implement [`PersonTokenService`](https://docs.rs/aauth/latest/aauth/person_server/trait.PersonTokenService.html) or [`AccessTokenService`](https://docs.rs/aauth/latest/aauth/access_server/trait.AccessTokenService.html) (or the resource counterpart) directly if you do not want `aauth-policy`.
 
-### Examples
+## Responses and errors
+
+Service outcomes map through [`AauthResponse`]: `200` / `202` / `403` / `410` / `502` as appropriate. Unexpected service `Err` becomes `500` + `{ "error": "server_error" }` via [`InternalServiceError`]. Pending resume bodies use [`PendingResumeInput`] (`FromRequest`).
+
+Domain types stay HTTP-free in `aauth`; only this crate implements `IntoResponse` / `FromRequest`.
+
+## Examples
+
+Each example mirrors an [explorer](https://explorer.aauth.dev/) access mode:
 
 ```bash
 cargo run -p aauth-axum --example identity_based --all-features
@@ -328,18 +279,10 @@ cargo run -p aauth-axum --example resource_managed --all-features
 cargo run -p aauth-axum --example federated --all-features
 ```
 
-## Development
+Matching HTTP tests: `cargo test -p aauth-axum --test person_managed --all-features` (and siblings).
 
-```bash
-cargo test --workspace --all-features
-cargo fmt --all
-cargo clippy --workspace --all-features -- -D warnings
-```
+## See also
 
-Release notes: [CHANGELOG.md](./CHANGELOG.md). Contributor-oriented architecture notes: [AGENTS.md](./AGENTS.md).
-
-## License
-
-Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in `aauth-rs` shall be dual licensed as above, without additional terms or conditions.
+- Core protocol: [`aauth`](https://docs.rs/aauth)
+- Agent client: [`aauth-reqwest`](https://docs.rs/aauth-reqwest)
+- Policy shortcut: [`aauth-policy`](https://docs.rs/aauth-policy)

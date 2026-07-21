@@ -1,12 +1,9 @@
-//! Axum HTTP adapters for AAuth Person, Access, and Resource servers.
-//!
-//! Domain types and services live in [`aauth`]. This crate provides handlers,
-//! role routers ([`person_router`], [`access_router`], [`resource_router`]),
-//! extractors, [`ResourceAuthLayer`], and [`AauthResponse`] (`IntoResponse`
-//! wrappers for orphan-rule compliance).
-//!
-//! Enable feature `policy` to use `from_policy` constructors backed by
-//! [`aauth_policy`].
+#![doc = include_str!("../README.md")]
+
+// Run workspace README snippets as doctests (`cargo test -p aauth-axum --doc --features full`).
+#[cfg(doctest)]
+#[doc = include_str!("../../README.md")]
+mod readme_workspace {}
 
 mod extract;
 mod respond;

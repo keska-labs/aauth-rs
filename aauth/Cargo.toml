@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 description = "Rust implementation of the AAuth authorization protocol"
 documentation = "https://docs.rs/aauth"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["aauth", "oauth", "authentication", "http-signatures"]
 categories = ["authentication", "web-programming"]
 

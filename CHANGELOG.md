@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Runnable README doctests for agent, Person/Access/Resource servers, and `httpsig-key` sign/verify (workspace README exercised via `aauth-axum` with `--features full`).
+- `aauth-axum` depends on `tokio` and `reqwest`; feature `full` also enables optional `aauth-reqwest` for workspace README doctests.
+- `aauth-policy` pulls optional `reqwest` with feature `person-server` (for `PersonServerConfig` construction).
 - `is_valid_server_identifier` / `is_valid_agent_identifier` for HTTPS server identifiers and `aauth:local@domain` agent IDs (loopback HTTP accepted for local tests).
 - `SIGNATURE_ERROR` / `SIGNATURE_ERROR_NAME` header constants; `SignatureErrorHeader` re-exported from `aauth::signature`.
 - `SignatureError::signature_error_code` / `is_missing_agent_credential` and `AAuthError::signature_error_header` for `Signature-Error` responses.

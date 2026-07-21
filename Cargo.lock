@@ -63,6 +63,7 @@ dependencies = [
  "base64",
  "dynosaur",
  "rand 0.10.1",
+ "reqwest",
  "serde",
  "serde_with",
  "thiserror",

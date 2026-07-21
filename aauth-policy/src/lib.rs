@@ -1,12 +1,4 @@
-//! High-level policy helpers for AAuth.
-//!
-//! This crate is intentionally more opinionated than [`aauth`]: it provides
-//! stateless policy traits, a [`PendingStore`] persistence model with fixed
-//! pending-record schemas, in-memory stores, and policy-backed services that
-//! implement the role service traits from `aauth`.
-//!
-//! Production integrators may implement `aauth` role service traits directly
-//! with their own persistence and never depend on this crate.
+#![doc = include_str!("../README.md")]
 
 pub mod decision;
 pub mod error;

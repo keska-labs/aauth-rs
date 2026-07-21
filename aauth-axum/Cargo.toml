@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 description = "Axum integration for the AAuth authorization protocol"
 documentation = "https://docs.rs/aauth-axum"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["aauth", "oauth", "authentication", "axum"]
 categories = ["authentication", "web-programming", "asynchronous"]
 
@@ -18,16 +18,25 @@ person-server = ["aauth/person-server"]
 access-server = ["aauth/access-server"]
 resource = ["aauth/resource"]
 policy = ["dep:aauth-policy", "aauth-policy/full"]
-full = ["person-server", "access-server", "resource", "policy"]
+full = [
+    "person-server",
+    "access-server",
+    "resource",
+    "policy",
+    "dep:aauth-reqwest",
+]
 
 [dependencies]
 aauth = { workspace = true, default-features = false, features = ["deferred"] }
 aauth-policy = { workspace = true, optional = true, default-features = false }
+aauth-reqwest = { workspace = true, optional = true }
 axum.workspace = true
 http.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tower.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
+tower = { workspace = true, features = ["util"] }
 
 [dev-dependencies]
 aauth = { workspace = true, default-features = false, features = [
