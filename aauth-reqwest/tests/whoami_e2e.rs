@@ -17,7 +17,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use aauth::{SignatureKey, SignatureKeyJwt, SigningJwk, SigningMaterial, StaticKeyMaterialProvider};
+use aauth::{
+    SignatureKey, SignatureKeyJwt, SigningJwk, SigningMaterial, StaticKeyMaterialProvider,
+};
 use aauth_reqwest::{AgentMiddleware, AgentOptions, CachedMetadataFetcher, ClientBuilder};
 use serde::Deserialize;
 use serde_json::Value;

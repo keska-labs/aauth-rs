@@ -24,9 +24,7 @@ pub struct MockServer {
 
 impl MockServer {
     pub fn new(config: MockServerConfig) -> Self {
-        let pending = config
-            .pending
-            .unwrap_or_else(InMemoryPersonPendingStore::new);
+        let pending = config.pending.unwrap_or_default();
 
         let state = Arc::new(MockServerState {
             keys: config.keys,

@@ -28,8 +28,7 @@ pub struct PersonServerState<
 }
 
 #[cfg(feature = "policy")]
-impl<P, S, M, F, C>
-    PersonServerState<aauth_policy::PolicyPersonTokenService<P, S, M, F, C>, F, C>
+impl<P, S, M, F, C> PersonServerState<aauth_policy::PolicyPersonTokenService<P, S, M, F, C>, F, C>
 where
     P: aauth_policy::PersonTokenPolicy,
     S: aauth_policy::PendingStore<aauth_policy::PersonPendingRecord>,
@@ -37,12 +36,7 @@ where
     F: MetadataFetcher + Clone + 'static,
     C: AccessServerClient + Clone + 'static,
 {
-    pub fn from_policy(
-        policy: P,
-        pending: S,
-        minter: M,
-        config: PersonServerConfig<F, C>,
-    ) -> Self {
+    pub fn from_policy(policy: P, pending: S, minter: M, config: PersonServerConfig<F, C>) -> Self {
         Self {
             service: aauth_policy::PolicyPersonTokenService::new(
                 policy,

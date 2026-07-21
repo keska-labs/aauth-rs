@@ -67,11 +67,11 @@ pub use protocol::{
 pub use deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome, poll_outcome_from_snapshot};
 #[cfg(feature = "deferred")]
 pub use deferred::{
-    DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, DeferWaiting, PaymentRequiredDefer,
-    PendingInput, PendingOutcome, PendingSnapshot, SERVER_POLL_DEFAULT_MAX_SECS,
-    SERVER_POLL_DEFAULT_PREFER_WAIT, ServerPollOptions, ServerPollOutcome, generate_pending_id,
-    parse_auth_token_response, parse_deferred_response, parse_pending_post_body, pending_location,
-    ParsedDeferred,
+    DEFAULT_PENDING_TTL_SECS, DeferCreated, DeferRequirement, DeferWaiting, ParsedDeferred,
+    PaymentRequiredDefer, PendingInput, PendingOutcome, PendingSnapshot,
+    SERVER_POLL_DEFAULT_MAX_SECS, SERVER_POLL_DEFAULT_PREFER_WAIT, ServerPollOptions,
+    ServerPollOutcome, generate_pending_id, parse_auth_token_response, parse_deferred_response,
+    parse_pending_post_body, pending_location,
 };
 
 #[cfg(feature = "resource-verify")]

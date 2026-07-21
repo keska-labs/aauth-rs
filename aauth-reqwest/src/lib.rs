@@ -9,12 +9,12 @@ mod middleware;
 pub mod signed;
 mod token_exchange;
 
-#[cfg(feature = "person-server")]
-pub use access_client::ReqwestAccessServerClient;
 pub use aauth::agent::auth::{
     AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions, AgentOptionsBuilder,
     ClarificationCallback, InteractionCallback,
 };
+#[cfg(feature = "person-server")]
+pub use access_client::ReqwestAccessServerClient;
 pub use deferred::{
     AgentDeferredOptions, AgentDeferredOptionsBuilder, DeferredResult, poll_deferred,
 };

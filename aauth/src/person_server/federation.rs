@@ -1,4 +1,4 @@
-use crate::deferred::{DeferRequirement};
+use crate::deferred::DeferRequirement;
 use crate::error::{Result, VerifyError, VerifyReason};
 use crate::jwt::ParsedToken;
 use crate::metadata::MetadataFetcher;
@@ -39,7 +39,10 @@ impl<F: MetadataFetcher, C: AccessServerClient> PersonServerConfig<F, C> {
         };
         let access_server_url = claims.aud.trim_end_matches('/').to_string();
 
-        let metadata = self.access_server.fetch_metadata(&access_server_url).await?;
+        let metadata = self
+            .access_server
+            .fetch_metadata(&access_server_url)
+            .await?;
         metadata.validate()?;
 
         let request = AccessTokenExchangeRequest {

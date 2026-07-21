@@ -1,3 +1,7 @@
+//! Integration tests share a process-wide lock so mock servers do not race.
+//! Holding that lock across `.await` is intentional; clippy's sync-mutex lint does not apply.
+#![allow(clippy::await_holding_lock)]
+
 mod support;
 
 use std::sync::{Arc, Mutex, OnceLock};

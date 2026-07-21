@@ -217,10 +217,7 @@ pub fn federated_person_server_app(
             fetcher,
             access_server: aauth_reqwest::ReqwestAccessServerClient::new(
                 reqwest::Client::new(),
-                aauth::PersonServerOutboundSigner::new(
-                    keys.clone(),
-                    person_server_url.to_string(),
-                ),
+                aauth::PersonServerOutboundSigner::new(keys.clone(), person_server_url.to_string()),
             ),
             federation_poll_max_secs: Some(TEST_POLL_MAX_SECS),
         },

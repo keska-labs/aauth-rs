@@ -4,6 +4,7 @@ use http::HeaderMap;
 use http::header::HeaderName;
 
 /// Trim trailing `/` and lowercase for URL equality checks (audience / issuer binding).
+#[cfg(feature = "resource-verify")]
 pub(crate) fn normalize_server_url(url: &str) -> String {
     url.trim_end_matches('/').to_lowercase()
 }

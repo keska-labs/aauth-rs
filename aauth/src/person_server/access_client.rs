@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use crate::deferred::{
-    DeferRequirement, PendingInput, ServerPollOptions, ServerPollOutcome,
-};
+use crate::deferred::{DeferRequirement, PendingInput, ServerPollOptions, ServerPollOutcome};
 use crate::error::{MetadataError, Result};
 use crate::protocol::{AccessServerMetadata, AccessTokenExchangeRequest, TokenResponseBody};
 

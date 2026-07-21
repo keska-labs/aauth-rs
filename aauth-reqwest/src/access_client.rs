@@ -195,9 +195,12 @@ impl AccessServerClient for ReqwestAccessServerClient {
         })?;
 
         let status = response.status().as_u16();
-        let body = response.bytes().await.map_err(|e| DeferredError::Transport {
-            source: Box::new(e),
-        })?;
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| DeferredError::Transport {
+                source: Box::new(e),
+            })?;
 
         if status == 200 {
             return parse_auth_token_response(status, &body).map(Some);
@@ -239,9 +242,12 @@ impl AccessServerClient for ReqwestAccessServerClient {
             let status = response.status().as_u16();
             let headers = response_headers_to_http(response.headers());
             let retry_after = parse_retry_after(&headers);
-            let body = response.bytes().await.map_err(|e| DeferredError::Transport {
-                source: Box::new(e),
-            })?;
+            let body = response
+                .bytes()
+                .await
+                .map_err(|e| DeferredError::Transport {
+                    source: Box::new(e),
+                })?;
 
             if status == 200 {
                 if let Ok(token) = parse_auth_token_response(status, &body) {
@@ -265,8 +271,7 @@ impl AccessServerClient for ReqwestAccessServerClient {
             }
 
             if status == 202 {
-                let parsed =
-                    parse_deferred_response(status, &headers, &body, access_server_url)?;
+                let parsed = parse_deferred_response(status, &headers, &body, access_server_url)?;
                 return Ok(ServerPollOutcome::Deferred {
                     requirement: parsed.requirement,
                     location_url: parsed.location,
@@ -338,10 +343,10 @@ fn parse_retry_after(headers: &HeaderMap) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aauth::AAUTH_REQUIREMENT;
     use aauth::DeferRequirement;
     use aauth::PendingBody;
     use aauth::TestKeys;
-    use aauth::AAUTH_REQUIREMENT;
 
     fn test_client() -> ReqwestAccessServerClient {
         let keys = TestKeys::generate();

@@ -5,9 +5,9 @@ mod support;
 use std::sync::Arc;
 use std::time::Duration;
 
+use aauth::SignatureErrorHeader;
 use aauth::TestKeys;
 use aauth::protocol::{AAUTH_REQUIREMENT, AgentOkResponse, SIGNATURE_ERROR};
-use aauth::SignatureErrorHeader;
 use rstest::rstest;
 
 use support::AGENT_ID;

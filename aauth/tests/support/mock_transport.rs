@@ -371,7 +371,7 @@ impl MockServerState {
         let auth_jwt = self.keys.mint_person_auth_jwt(
             &self.person_server_url,
             &self.resource_url,
-            &AGENT_ID,
+            AGENT_ID,
             Some("user-123"),
             None,
         );
@@ -414,8 +414,7 @@ impl MockServerState {
         };
 
         if let PendingSnapshot::Complete(outcome) = &record.snapshot {
-            let _ = self
-                .pending
+            self.pending
                 .remove(&id)
                 .await
                 .unwrap_or_else(|e| match e {});

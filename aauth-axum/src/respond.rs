@@ -52,7 +52,7 @@ impl IntoResponse for InternalServiceError {
 
 /// HTTP status for a polling error response.
 ///
-/// Spec: https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#polling-error-codes
+/// Spec: <https://github.com/dickhardt/AAuth/blob/main/draft-hardt-oauth-aauth-protocol.md#polling-error-codes>
 pub fn polling_status(err: &AAuthProtocolError) -> StatusCode {
     match err.error {
         AAuthErrorCode::Denied | AAuthErrorCode::Abandoned | AAuthErrorCode::AccessDenied => {
