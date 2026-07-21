@@ -4,8 +4,9 @@ use aauth::ResourceAccessContext;
 use crate::PolicyError;
 use crate::ResourceConsentDecision;
 
-#[async_trait::async_trait]
-pub trait ResourceConsentPolicy: Send + Sync + Clone {
+#[trait_variant::make(ResourceConsentPolicy: Send)]
+#[dynosaur::dynosaur(pub DynResourceConsentPolicy = dyn(box) ResourceConsentPolicy, bridge(dyn))]
+pub trait LocalResourceConsentPolicy: Sync {
     async fn evaluate(
         &self,
         ctx: &ResourceAccessContext,

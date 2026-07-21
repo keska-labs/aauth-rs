@@ -9,8 +9,9 @@ pub struct ResourceAccessConfig {
     pub pending_ttl_secs: u64,
 }
 
-#[async_trait::async_trait]
-pub trait ResourceAccessService: Send + Sync + Clone {
+#[trait_variant::make(ResourceAccessService: Send)]
+#[dynosaur::dynosaur(pub DynResourceAccessService = dyn(box) ResourceAccessService, bridge(dyn))]
+pub trait LocalResourceAccessService: Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
     async fn consent_for_agent(

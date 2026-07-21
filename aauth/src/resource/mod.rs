@@ -12,9 +12,15 @@ pub use access_context::ResourceAccessContext;
 pub use interaction::{
     NoResourceInteraction, ResourceInteractionContext, ResourceInteractionProvider,
 };
-pub use keys::{Ed25519ResourceTokenSigner, ResourceTokenSigner};
+pub use keys::{
+    DynResourceTokenSigner, Ed25519ResourceTokenSigner, LocalResourceTokenSigner,
+    ResourceTokenSigner,
+};
 pub use mode::ResourceAccessMode;
 pub use no_service::NoResourceAccessService;
 pub use outcome::{ResourceConsentFlowOutcome, ResourcePollOutcome};
-pub use service::{ResourceAccessConfig, ResourceAccessService};
+pub use service::{
+    DynResourceAccessService, LocalResourceAccessService, ResourceAccessConfig,
+    ResourceAccessService,
+};
 pub use token::ResourceTokenOptions;

@@ -6,7 +6,6 @@ use aauth::MetadataError;
 use aauth::error::Result;
 use aauth::metadata::MetadataFetcher;
 use aauth::protocol::AgentProviderMetadata;
-use async_trait::async_trait;
 use jsonwebtoken::jwk::JwkSet;
 use reqwest::Client;
 
@@ -137,7 +136,6 @@ impl CachedMetadataFetcher {
     }
 }
 
-#[async_trait]
 impl MetadataFetcher for CachedMetadataFetcher {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String> {
         let iss = iss.trim_end_matches('/');

@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use jsonwebtoken::{Header, encode};
 
 use crate::error::ResourceTokenError;
 use crate::jwt::ResourceClaims;
 use crate::keys::{Ed25519KeyPair, TestKeys};
 
-#[async_trait]
-pub trait ResourceTokenSigner: Send + Sync {
+#[trait_variant::make(ResourceTokenSigner: Send)]
+#[dynosaur::dynosaur(pub DynResourceTokenSigner = dyn(box) ResourceTokenSigner, bridge(dyn))]
+pub trait LocalResourceTokenSigner: Sync {
     async fn sign_resource_token(
         &self,
         header: Header,
@@ -16,8 +16,7 @@ pub trait ResourceTokenSigner: Send + Sync {
     ) -> Result<String, ResourceTokenError>;
 }
 
-#[async_trait]
-impl<T: ResourceTokenSigner + ?Sized> ResourceTokenSigner for Arc<T> {
+impl<T: ResourceTokenSigner + Sync> ResourceTokenSigner for Arc<T> {
     async fn sign_resource_token(
         &self,
         header: Header,
@@ -38,7 +37,6 @@ impl Ed25519ResourceTokenSigner {
     }
 }
 
-#[async_trait]
 impl ResourceTokenSigner for Ed25519ResourceTokenSigner {
     async fn sign_resource_token(
         &self,

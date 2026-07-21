@@ -15,6 +15,7 @@ aauth-axum = { path = "aauth-axum", default-features = false }
 aauth-policy = { path = "aauth-policy", default-features = false }
 aauth-reqwest = { path = "aauth-reqwest", default-features = false }
 async-trait = "0.1"
+dynosaur = "0.3"
 base64 = "0.22"
 bytes = "1"
 ed25519-dalek = { version = "3.0.0-rc.1", features = [
@@ -45,6 +46,7 @@ sfv = "0.15.0"
 sha2 = "0.11.0"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+trait-variant = "0.1"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 tower = "0.5"

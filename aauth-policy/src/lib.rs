@@ -36,13 +36,20 @@ pub use store::{
 };
 
 #[cfg(feature = "access-server")]
-pub use access::{AccessTokenPolicy, AccessTokenServiceError, PolicyAccessTokenService};
+pub use access::{
+    AccessTokenPolicy, AccessTokenServiceError, DynAccessTokenPolicy, LocalAccessTokenPolicy,
+    PolicyAccessTokenService,
+};
 #[cfg(feature = "person-server")]
-pub use person::{PersonTokenPolicy, PersonTokenServiceError, PolicyPersonTokenService};
+pub use person::{
+    DynPersonTokenPolicy, LocalPersonTokenPolicy, PersonTokenPolicy, PersonTokenServiceError,
+    PolicyPersonTokenService,
+};
 #[cfg(feature = "resource")]
 pub use resource::{
-    InMemoryOpaqueAccessStore, OpaqueAccessStore, PolicyResourceAccessService,
-    ResourceAccessServiceError, ResourceConsentPolicy,
+    DynResourceConsentPolicy, InMemoryOpaqueAccessStore, LocalResourceConsentPolicy,
+    OpaqueAccessStore, PolicyResourceAccessService, ResourceAccessServiceError,
+    ResourceConsentPolicy,
 };
 
 #[cfg(feature = "access-server")]

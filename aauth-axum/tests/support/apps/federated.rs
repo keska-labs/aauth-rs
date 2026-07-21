@@ -38,7 +38,6 @@ enum AccessPolicy {
     Clarify(ClarificationThenGrantAccessPolicy),
 }
 
-#[async_trait::async_trait]
 impl AccessTokenPolicy for AccessPolicy {
     async fn evaluate(
         &self,
@@ -67,7 +66,6 @@ impl AccessTokenPolicy for AccessPolicy {
 #[derive(Clone)]
 struct FederatePersonPolicy;
 
-#[async_trait::async_trait]
 impl PersonTokenPolicy for FederatePersonPolicy {
     async fn evaluate(
         &self,

@@ -56,7 +56,8 @@ pub mod resource;
 
 #[cfg(feature = "agent")]
 pub use agent::keys::{
-    AgentJwtMinter, KeyMaterialProvider, StaticKeyMaterialProvider, TestAgentJwtMinter,
+    AgentJwtMinter, DynKeyMaterialProvider, KeyMaterialProvider, LocalKeyMaterialProvider,
+    StaticKeyMaterialProvider, TestAgentJwtMinter,
 };
 #[cfg(feature = "agent")]
 pub use agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
@@ -70,7 +71,9 @@ pub use jwt::{
     ResourceInteractionClaim, SigningJwk, jwk_set_from_public, jwk_thumbprint,
 };
 pub use keys::{Ed25519KeyPair, SigningKey, TestKeys};
-pub use metadata::{MetadataFetcher, StaticMetadataFetcher};
+pub use metadata::{
+    DynMetadataFetcher, LocalMetadataFetcher, MetadataFetcher, StaticMetadataFetcher,
+};
 
 // Common protocol prelude used across roles (not the full governance surface).
 pub use protocol::{
@@ -109,21 +112,22 @@ pub use resource_verify::{
 
 #[cfg(feature = "person-server")]
 pub use person_server::{
-    FederationOutcome, PersonAuthJwtMinter, PersonServerConfig, PersonServerOutboundSigner,
-    PersonTokenContext, PersonTokenFlowOutcome, PersonTokenService, TestPersonAuthJwtMinter,
-    verify_federated_auth_token,
+    DynPersonTokenService, FederationOutcome, LocalPersonTokenService, PersonAuthJwtMinter,
+    PersonServerConfig, PersonServerOutboundSigner, PersonTokenContext, PersonTokenFlowOutcome,
+    PersonTokenService, TestPersonAuthJwtMinter, verify_federated_auth_token,
 };
 
 #[cfg(feature = "access-server")]
 pub use access_server::{
     AccessAuthJwtMinter, AccessServerConfig, AccessTokenContext, AccessTokenService,
-    TestAccessAuthJwtMinter,
+    DynAccessTokenService, LocalAccessTokenService, TestAccessAuthJwtMinter,
 };
 
 #[cfg(feature = "resource")]
 pub use resource::{
-    Ed25519ResourceTokenSigner, NoResourceAccessService, NoResourceInteraction,
-    ResourceAccessConfig, ResourceAccessContext, ResourceAccessMode, ResourceAccessService,
-    ResourceConsentFlowOutcome, ResourceInteractionContext, ResourceInteractionProvider,
-    ResourcePollOutcome, ResourceTokenOptions, ResourceTokenSigner,
+    DynResourceAccessService, DynResourceTokenSigner, Ed25519ResourceTokenSigner,
+    LocalResourceAccessService, LocalResourceTokenSigner, NoResourceAccessService,
+    NoResourceInteraction, ResourceAccessConfig, ResourceAccessContext, ResourceAccessMode,
+    ResourceAccessService, ResourceConsentFlowOutcome, ResourceInteractionContext,
+    ResourceInteractionProvider, ResourcePollOutcome, ResourceTokenOptions, ResourceTokenSigner,
 };

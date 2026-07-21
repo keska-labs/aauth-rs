@@ -21,6 +21,7 @@ aauth = { workspace = true, default-features = false, features = ["agent"] }
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
+dynosaur.workspace = true
 ed25519-dalek.workspace = true
 http.workspace = true
 jsonwebtoken.workspace = true
@@ -30,6 +31,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["time"] }
+trait-variant.workspace = true
 url.workspace = true
 
 [dev-dependencies]

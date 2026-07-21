@@ -7,7 +7,6 @@ use crate::resource::service::ResourceAccessService;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoResourceAccessService;
 
-#[async_trait::async_trait]
 impl ResourceAccessService for NoResourceAccessService {
     type Error = std::convert::Infallible;
 

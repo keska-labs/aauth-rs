@@ -86,7 +86,7 @@ where
 
 impl<S, RAS, F, T, I> Layer<S> for ResourceAuthLayer<RAS, F, T, I>
 where
-    RAS: ResourceAccessService,
+    RAS: ResourceAccessService + Clone,
     F: MetadataFetcher + Clone,
     T: ResourceTokenSigner + Clone,
     I: ResourceInteractionProvider + Clone,

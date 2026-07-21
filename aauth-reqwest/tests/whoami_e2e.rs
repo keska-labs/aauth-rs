@@ -94,7 +94,7 @@ fn load_bootstrap_token() -> BootstrapToken {
         .unwrap_or_else(|e| panic!("failed to parse bootstrap token JSON ({e}). stdout:\n{stdout}"))
 }
 
-fn provider_from_bootstrap() -> Arc<dyn aauth::KeyMaterialProvider> {
+fn provider_from_bootstrap() -> Arc<aauth::DynKeyMaterialProvider<'static>> {
     let token = load_bootstrap_token();
     assert_eq!(
         token.signature_key.key_type, "jwt",

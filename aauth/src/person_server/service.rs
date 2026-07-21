@@ -3,8 +3,9 @@ use crate::deferred::PendingInput;
 use crate::person_server::outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
 use crate::person_server::token_context::PersonTokenContext;
 
-#[async_trait::async_trait]
-pub trait PersonTokenService: Send + Sync + Clone {
+#[trait_variant::make(PersonTokenService: Send)]
+#[dynosaur::dynosaur(pub DynPersonTokenService = dyn(box) PersonTokenService, bridge(dyn))]
+pub trait LocalPersonTokenService: Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
     async fn exchange_token(

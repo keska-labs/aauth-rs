@@ -49,7 +49,6 @@ where
     }
 }
 
-#[async_trait::async_trait]
 impl<R> PendingStore<R> for InMemoryPendingStore<R>
 where
     R: PendingStorable,
@@ -85,10 +84,10 @@ where
         Ok(())
     }
 
-    async fn find_if<F>(&self, pred: F) -> Result<Option<(String, R)>, Self::Error>
-    where
-        F: Fn(&R) -> bool + Send,
-    {
+    async fn find_if(
+        &self,
+        pred: impl Fn(&R) -> bool + Send,
+    ) -> Result<Option<(String, R)>, Self::Error> {
         let guard = self.inner.lock().unwrap();
         Ok(guard
             .iter()

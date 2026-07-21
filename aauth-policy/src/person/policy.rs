@@ -4,8 +4,9 @@ use aauth::PersonTokenContext;
 use crate::PersonTokenDecision;
 use crate::PolicyError;
 
-#[async_trait::async_trait]
-pub trait PersonTokenPolicy: Send + Sync + Clone {
+#[trait_variant::make(PersonTokenPolicy: Send)]
+#[dynosaur::dynosaur(pub DynPersonTokenPolicy = dyn(box) PersonTokenPolicy, bridge(dyn))]
+pub trait LocalPersonTokenPolicy: Sync {
     async fn evaluate(&self, ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError>;
 
     async fn resume(

@@ -5,6 +5,7 @@ mod support;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use aauth::KeyMaterialProvider;
 use aauth::TestKeys;
 use aauth::protocol::{AAUTH_REQUIREMENT, AuthOkResponse};
 use aauth_policy::PendingStore;

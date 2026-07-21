@@ -2,7 +2,8 @@ mod support;
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use aauth::KeyMaterialProvider;
+use aauth::DynKeyMaterialProvider;
+use aauth::DynMetadataFetcher;
 use aauth::ParsedToken;
 use aauth::PendingOutcome;
 use aauth::protocol::{AAuthChallenge, AuthOkResponse, TokenExchangeRequest, TokenResponseBody};
@@ -351,8 +352,8 @@ fn mock_config(
 }
 
 fn aauth_options(
-    provider: Arc<dyn KeyMaterialProvider>,
-    fetcher: Arc<dyn aauth::MetadataFetcher>,
+    provider: Arc<DynKeyMaterialProvider<'static>>,
+    fetcher: Arc<DynMetadataFetcher<'static>>,
     justification: Option<String>,
     hints: Option<(String, String, String)>,
 ) -> AgentOptions {
@@ -373,7 +374,7 @@ fn aauth_options(
 }
 
 fn aauth_client(
-    provider: Arc<dyn KeyMaterialProvider>,
+    provider: Arc<DynKeyMaterialProvider<'static>>,
     server: &MockServer,
     justification: Option<String>,
     hints: Option<(String, String, String)>,

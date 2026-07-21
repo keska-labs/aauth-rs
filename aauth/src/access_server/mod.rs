@@ -8,5 +8,5 @@ pub use crate::deferred::{AuthTokenFlowOutcome, AuthTokenPollOutcome};
 pub use crate::protocol::AccessServerMetadata;
 pub use config::AccessServerConfig;
 pub use keys::{AccessAuthJwtMinter, TestAccessAuthJwtMinter};
-pub use service::AccessTokenService;
+pub use service::{AccessTokenService, DynAccessTokenService, LocalAccessTokenService};
 pub use token_context::AccessTokenContext;

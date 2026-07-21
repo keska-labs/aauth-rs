@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use aauth::AgentAuthError;
 use aauth::DeferredError;
+use aauth::KeyMaterialProvider;
 use aauth::agent::auth::{AgentAuth, AgentAuthAttempt, AgentAuthStep, AgentOptions};
 use aauth::agent::resolve::{agent_jwt_from_signature_key, resolve_person_server_url};
 use aauth::jwt::{ParsedToken, jwk_thumbprint};
@@ -73,7 +74,6 @@ struct AgentSend<'a> {
     next: Next<'a>,
 }
 
-#[async_trait::async_trait]
 impl SignedSend for AgentSend<'_> {
     async fn send(&mut self, req: Request) -> Result<Response> {
         self.middleware
@@ -182,7 +182,7 @@ impl AgentMiddleware {
                             &origin,
                             &agent_sub,
                             &agent_jkt,
-                            Arc::clone(fetcher),
+                            fetcher.as_ref(),
                         )
                         .await?;
                     }
@@ -213,7 +213,7 @@ impl AgentMiddleware {
                             &origin,
                             &agent_sub,
                             &agent_jkt,
-                            Arc::clone(fetcher),
+                            fetcher.as_ref(),
                         )
                         .await?;
                     }

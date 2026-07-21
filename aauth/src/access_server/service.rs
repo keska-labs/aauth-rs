@@ -5,8 +5,9 @@ use crate::error::{AAuthError, VerifyError, VerifyReason};
 use crate::jwt::ParsedToken;
 use crate::protocol::JwtTyp;
 
-#[async_trait::async_trait]
-pub trait AccessTokenService: Send + Sync + Clone {
+#[trait_variant::make(AccessTokenService: Send)]
+#[dynosaur::dynosaur(pub DynAccessTokenService = dyn(box) AccessTokenService, bridge(dyn))]
+pub trait LocalAccessTokenService: Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
     async fn exchange_token(

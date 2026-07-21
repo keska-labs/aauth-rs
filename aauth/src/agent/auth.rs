@@ -7,7 +7,7 @@ use http::{HeaderMap, StatusCode};
 use crate::error::Result;
 use crate::http_util::header_value;
 #[cfg(feature = "resource-verify")]
-use crate::metadata::MetadataFetcher;
+use crate::metadata::DynMetadataFetcher;
 use crate::protocol::AAuthChallenge;
 use crate::protocol::{AAUTH_ACCESS, AAUTH_REQUIREMENT, Capability, Mission, PersonServerMetadata};
 
@@ -61,7 +61,7 @@ pub struct AgentAuth {
 /// Configuration for an AAuth agent client (signing, token exchange, deferred flows).
 #[derive(Clone)]
 pub struct AgentOptions {
-    pub(crate) provider: Arc<dyn super::keys::KeyMaterialProvider>,
+    pub(crate) provider: Arc<super::keys::DynKeyMaterialProvider<'static>>,
     pub(crate) person_server_url: Option<String>,
     pub(crate) person_server_metadata: Option<PersonServerMetadata>,
     pub(crate) opaque_token: Option<String>,
@@ -82,13 +82,13 @@ pub struct AgentOptions {
     /// When set (requires `resource-verify`; enable via `aauth-reqwest`'s `verify` feature),
     /// resource and auth tokens are verified before use.
     #[cfg(feature = "resource-verify")]
-    pub(crate) metadata_fetcher: Option<Arc<dyn MetadataFetcher>>,
+    pub(crate) metadata_fetcher: Option<Arc<DynMetadataFetcher<'static>>>,
 }
 
 /// Builder for [`AgentOptions`]. Only `provider` is required.
 #[derive(Clone)]
 pub struct AgentOptionsBuilder {
-    provider: Arc<dyn super::keys::KeyMaterialProvider>,
+    provider: Arc<super::keys::DynKeyMaterialProvider<'static>>,
     person_server_url: Option<String>,
     person_server_metadata: Option<PersonServerMetadata>,
     opaque_token: Option<String>,
@@ -106,15 +106,17 @@ pub struct AgentOptionsBuilder {
     on_clarification: Option<ClarificationCallback>,
     max_poll_duration_secs: Option<u64>,
     #[cfg(feature = "resource-verify")]
-    metadata_fetcher: Option<Arc<dyn MetadataFetcher>>,
+    metadata_fetcher: Option<Arc<DynMetadataFetcher<'static>>>,
 }
 
 impl AgentOptions {
-    pub fn builder(provider: Arc<dyn super::keys::KeyMaterialProvider>) -> AgentOptionsBuilder {
+    pub fn builder(
+        provider: Arc<super::keys::DynKeyMaterialProvider<'static>>,
+    ) -> AgentOptionsBuilder {
         AgentOptionsBuilder::new(provider)
     }
 
-    pub fn provider(&self) -> &Arc<dyn super::keys::KeyMaterialProvider> {
+    pub fn provider(&self) -> &Arc<super::keys::DynKeyMaterialProvider<'static>> {
         &self.provider
     }
 
@@ -183,13 +185,13 @@ impl AgentOptions {
     }
 
     #[cfg(feature = "resource-verify")]
-    pub fn metadata_fetcher(&self) -> Option<&Arc<dyn MetadataFetcher>> {
+    pub fn metadata_fetcher(&self) -> Option<&Arc<DynMetadataFetcher<'static>>> {
         self.metadata_fetcher.as_ref()
     }
 }
 
 impl AgentOptionsBuilder {
-    pub fn new(provider: Arc<dyn super::keys::KeyMaterialProvider>) -> Self {
+    pub fn new(provider: Arc<super::keys::DynKeyMaterialProvider<'static>>) -> Self {
         Self {
             provider,
             person_server_url: None,
@@ -297,7 +299,7 @@ impl AgentOptionsBuilder {
     }
 
     #[cfg(feature = "resource-verify")]
-    pub fn metadata_fetcher(mut self, fetcher: Arc<dyn MetadataFetcher>) -> Self {
+    pub fn metadata_fetcher(mut self, fetcher: Arc<DynMetadataFetcher<'static>>) -> Self {
         self.metadata_fetcher = Some(fetcher);
         self
     }

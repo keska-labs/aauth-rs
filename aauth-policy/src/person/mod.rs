@@ -19,7 +19,7 @@ mod federation_pending;
 mod interaction;
 mod policy;
 
-pub use policy::PersonTokenPolicy;
+pub use policy::{DynPersonTokenPolicy, LocalPersonTokenPolicy, PersonTokenPolicy};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersonTokenServiceError<E>
@@ -57,7 +57,6 @@ impl<P, S, M, F: MetadataFetcher> PolicyPersonTokenService<P, S, M, F> {
     }
 }
 
-#[async_trait::async_trait]
 impl<P, S, M, F> PersonTokenService for PolicyPersonTokenService<P, S, M, F>
 where
     P: PersonTokenPolicy,

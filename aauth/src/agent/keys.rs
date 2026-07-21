@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use jsonwebtoken::{Algorithm, Header, encode};
 use uuid::Uuid;
 
@@ -9,9 +8,16 @@ use crate::jwt::{AgentClaims, CnfClaim};
 use crate::keys::TestKeys;
 use crate::protocol::{JwtTyp, KeyMaterial, SignatureKey, SignatureKeyJwt};
 
-#[async_trait]
-pub trait KeyMaterialProvider: Send + Sync {
+#[trait_variant::make(KeyMaterialProvider: Send)]
+#[dynosaur::dynosaur(pub DynKeyMaterialProvider = dyn(box) KeyMaterialProvider, bridge(dyn))]
+pub trait LocalKeyMaterialProvider: Sync {
     async fn key_material(&self) -> Result<KeyMaterial>;
+}
+
+impl<T: KeyMaterialProvider + Sync> KeyMaterialProvider for Arc<T> {
+    async fn key_material(&self) -> Result<KeyMaterial> {
+        (**self).key_material().await
+    }
 }
 
 pub trait AgentJwtMinter: Send + Sync {
@@ -67,7 +73,10 @@ impl TestKeys {
         AgentJwtMinter::mint_agent_jwt(&self.agent_jwt_minter(), agent_url, sub, ps)
     }
 
-    pub fn key_provider(&self, agent_jwt: impl Into<String>) -> Arc<dyn KeyMaterialProvider> {
+    pub fn key_provider(
+        &self,
+        agent_jwt: impl Into<String>,
+    ) -> Arc<DynKeyMaterialProvider<'static>> {
         StaticKeyMaterialProvider::from_test_keys(self, agent_jwt).into_arc()
     }
 }
@@ -90,12 +99,11 @@ impl StaticKeyMaterialProvider {
         })
     }
 
-    pub fn into_arc(self) -> Arc<dyn KeyMaterialProvider> {
-        Arc::new(self)
+    pub fn into_arc(self) -> Arc<DynKeyMaterialProvider<'static>> {
+        DynKeyMaterialProvider::new_arc(self)
     }
 }
 
-#[async_trait]
 impl KeyMaterialProvider for StaticKeyMaterialProvider {
     async fn key_material(&self) -> Result<KeyMaterial> {
         Ok(self.material.clone())

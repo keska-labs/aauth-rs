@@ -37,7 +37,6 @@ enum PersonPolicy {
     Clarify(ClarificationThenGrantPersonPolicy),
 }
 
-#[async_trait::async_trait]
 impl PersonTokenPolicy for PersonPolicy {
     async fn evaluate(
         &self,

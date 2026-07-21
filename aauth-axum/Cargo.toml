@@ -23,7 +23,6 @@ full = ["person-server", "access-server", "resource", "policy"]
 [dependencies]
 aauth = { workspace = true, default-features = false, features = ["deferred"] }
 aauth-policy = { workspace = true, optional = true, default-features = false }
-async-trait.workspace = true
 axum.workspace = true
 http.workspace = true
 serde.workspace = true
@@ -40,7 +39,6 @@ aauth = { workspace = true, default-features = false, features = [
 aauth-policy = { workspace = true, features = ["full"] }
 aauth-reqwest = { workspace = true, features = ["verify"] }
 anyhow.workspace = true
-async-trait.workspace = true
 jsonwebtoken.workspace = true
 reqwest.workspace = true
 reqwest-middleware.workspace = true

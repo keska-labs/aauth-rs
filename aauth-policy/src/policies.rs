@@ -39,7 +39,6 @@ impl AlwaysGrantPersonPolicy {
 }
 
 #[cfg(feature = "person-server")]
-#[async_trait::async_trait]
 impl PersonTokenPolicy for AlwaysGrantPersonPolicy {
     async fn evaluate(&self, ctx: &PersonTokenContext) -> Result<PersonTokenDecision, PolicyError> {
         if ctx.audience_is_person_server() {
@@ -89,7 +88,6 @@ impl AlwaysGrantAccessPolicy {
 }
 
 #[cfg(feature = "access-server")]
-#[async_trait::async_trait]
 impl AccessTokenPolicy for AlwaysGrantAccessPolicy {
     async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<AccessTokenDecision, PolicyError> {
         Ok(AccessTokenDecision::Grant(AuthGrant {
@@ -124,7 +122,6 @@ impl AccessTokenPolicy for AlwaysGrantAccessPolicy {
 pub struct AlwaysGrantResourcePolicy;
 
 #[cfg(feature = "resource")]
-#[async_trait::async_trait]
 impl ResourceConsentPolicy for AlwaysGrantResourcePolicy {
     async fn evaluate(
         &self,
@@ -158,7 +155,6 @@ pub struct DeferInteractionResourcePolicy {
 }
 
 #[cfg(feature = "resource")]
-#[async_trait::async_trait]
 impl ResourceConsentPolicy for DeferInteractionResourcePolicy {
     async fn evaluate(
         &self,
@@ -198,7 +194,6 @@ pub struct ClarificationThenGrantPersonPolicy {
 }
 
 #[cfg(feature = "person-server")]
-#[async_trait::async_trait]
 impl PersonTokenPolicy for ClarificationThenGrantPersonPolicy {
     async fn evaluate(
         &self,
@@ -259,7 +254,6 @@ pub struct DeferInteractionPersonPolicy<P> {
 }
 
 #[cfg(feature = "person-server")]
-#[async_trait::async_trait]
 impl<P> PersonTokenPolicy for DeferInteractionPersonPolicy<P>
 where
     P: PersonTokenPolicy + Send + Sync + Clone,
@@ -291,7 +285,6 @@ pub struct ClarificationThenGrantAccessPolicy {
 }
 
 #[cfg(feature = "access-server")]
-#[async_trait::async_trait]
 impl AccessTokenPolicy for ClarificationThenGrantAccessPolicy {
     async fn evaluate(
         &self,
@@ -342,7 +335,6 @@ pub struct DeferInteractionAccessPolicy<P> {
 }
 
 #[cfg(feature = "access-server")]
-#[async_trait::async_trait]
 impl<P> AccessTokenPolicy for DeferInteractionAccessPolicy<P>
 where
     P: AccessTokenPolicy + Send + Sync + Clone,
@@ -374,7 +366,6 @@ pub struct DeferClaimsAccessPolicy {
 }
 
 #[cfg(feature = "access-server")]
-#[async_trait::async_trait]
 impl AccessTokenPolicy for DeferClaimsAccessPolicy {
     async fn evaluate(
         &self,
@@ -417,7 +408,6 @@ pub struct DeferApprovalAccessPolicy {
 }
 
 #[cfg(feature = "access-server")]
-#[async_trait::async_trait]
 impl AccessTokenPolicy for DeferApprovalAccessPolicy {
     async fn evaluate(
         &self,

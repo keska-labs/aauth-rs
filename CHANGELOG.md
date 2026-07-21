@@ -34,7 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PersonServerConfig` and `AccessServerConfig` as domain config types (no longer gated on axum).
 - `poll_outcome_from_snapshot` in `aauth` deferred module.
 - `NoResourceInteraction` marker for `ResourceAuthLayer` when no resource-initiated interaction claim is needed.
-- Blanket `MetadataFetcher` / `ResourceTokenSigner` / `ResourceInteractionProvider` impls for `Arc<T>` and `MetadataFetcher` for `&T`, so shared deps can be owned concretely or wrapped for cheap `Clone`.
+- Blanket `MetadataFetcher` / `ResourceTokenSigner` / `ResourceInteractionProvider` impls for `Arc<T>`, so shared deps can be owned concretely or wrapped for cheap `Clone`.
+- `Local*` / `Dyn*` companions for crate-owned async traits (`KeyMaterialProvider`, `MetadataFetcher`, role services, policy traits, `PendingStore`, …).
 
 ### Fixed
 
@@ -42,6 +43,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Person and Access token-exchange handlers verify HTTP signatures against the request path (`OriginalUri`) instead of hardcoded paths, so Access Server routes remain nestable.
 
 ### Changed
+
+- Async traits use `trait_variant` + `dynosaur`: each crate-owned async trait has a `Local*` base (`Sync`), a Send variant keeping the previous public name, and a public `Dyn*` type (except `PendingStore`, which is generic over `R` and uses in-place `trait_variant::make(Send)` only). `Arc<dyn Trait>` call sites use `Arc<DynTrait<'static>>` (construct with `DynTrait::new_arc`).
+- `PendingStore::find_if` takes `impl Fn(&R) -> bool + Send` instead of a generic type parameter.
+- `Clone` is no longer a supertrait of role/policy service traits (needed for `Dyn*` object-safety); call sites that clone keep an explicit `+ Clone` bound.
+- Blanket `MetadataFetcher` / `ResourceTokenSigner` `Arc<T>` (and `MetadataFetcher` for `&T`) impls remain for concrete shared ownership.
+
+### Removed
+
+- Direct `async-trait` dependency from `aauth` / `aauth-policy` / `aauth-axum` production deps (retained as `aauth` / `aauth-reqwest` **dev**/runtime deps only for foreign `reqwest_middleware::Middleware` impls).
+
+### Changed (prior)
 
 - `ResourceAuthLayer` / `ResourceAuthService` take type parameters for `MetadataFetcher`, `ResourceTokenSigner`, and `ResourceInteractionProvider` instead of `Arc<dyn …>` (default interaction provider is `NoResourceInteraction`).
 - `PersonServerConfig` / `AccessServerConfig`, `VerifyTokenOptions` / `VerifyResourceTokenOptions`, and related verify helpers are generic over `MetadataFetcher`; `PersonServerState` / `AccessServerState` and `Policy*TokenService` carry the same fetcher type parameter.

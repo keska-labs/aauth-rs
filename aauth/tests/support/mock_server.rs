@@ -50,7 +50,7 @@ impl MockServer {
         self.state.pending.clone()
     }
 
-    pub fn metadata_fetcher(&self) -> Arc<dyn aauth::MetadataFetcher> {
+    pub fn metadata_fetcher(&self) -> Arc<aauth::DynMetadataFetcher<'static>> {
         self.state.metadata_fetcher()
     }
 }

@@ -210,7 +210,6 @@ impl<P, S, M, F: MetadataFetcher> PolicyAccessTokenService<P, S, M, F> {
     }
 }
 
-#[async_trait::async_trait]
 impl<P, S, M, F> AccessTokenService for PolicyAccessTokenService<P, S, M, F>
 where
     P: AccessTokenPolicy,

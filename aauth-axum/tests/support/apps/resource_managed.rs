@@ -30,7 +30,6 @@ enum ResourcePolicy {
     Defer(DeferInteractionResourcePolicy),
 }
 
-#[async_trait::async_trait]
 impl ResourceConsentPolicy for ResourcePolicy {
     async fn evaluate(
         &self,

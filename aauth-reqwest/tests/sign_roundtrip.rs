@@ -1,3 +1,4 @@
+use aauth::KeyMaterialProvider;
 use aauth::TestKeys;
 use aauth::signature::verify_request_signature;
 use aauth_reqwest::RequestSigningExt;

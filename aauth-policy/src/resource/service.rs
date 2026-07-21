@@ -98,7 +98,6 @@ impl<P, S, O> PolicyResourceAccessService<P, S, O> {
     }
 }
 
-#[async_trait::async_trait]
 impl<P, S, O> ResourceAccessService for PolicyResourceAccessService<P, S, O>
 where
     P: ResourceConsentPolicy,

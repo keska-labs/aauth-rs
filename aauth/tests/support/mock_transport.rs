@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use aauth::ParsedToken;
 use aauth::PendingOutcome;
 use aauth::error::Result;
-use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
+use aauth::metadata::{DynMetadataFetcher, MetadataFetcher, StaticMetadataFetcher};
 use aauth::protocol::{
     AAUTH_REQUIREMENT, AAuthChallenge, AgentOkResponse, AgentProviderMetadata, AuthOkResponse,
     JwksDocument, PersonServerMetadata, SIGNATURE_KEY, TokenExchangeRequest, TokenResponseBody,
@@ -16,7 +16,6 @@ use aauth::{
 use aauth_policy::{
     InMemoryPersonPendingStore, PendingStore, PersonPendingContext, PersonPendingRecord,
 };
-use async_trait::async_trait;
 use http::StatusCode;
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, LOCATION, RETRY_AFTER};
 use http_body_util::BodyExt;
@@ -468,8 +467,8 @@ struct DualMetadataFetcher {
 }
 
 impl MockServerState {
-    pub fn metadata_fetcher(&self) -> Arc<dyn MetadataFetcher> {
-        Arc::new(DualMetadataFetcher {
+    pub fn metadata_fetcher(&self) -> Arc<DynMetadataFetcher<'static>> {
+        DynMetadataFetcher::new_arc(DualMetadataFetcher {
             agent: self.keys.agent_metadata_fetcher(&self.agent_url),
             person: self.keys.person_metadata_fetcher(&self.person_server_url),
             resource: self.keys.resource_metadata_fetcher(&self.resource_url),
@@ -480,7 +479,6 @@ impl MockServerState {
     }
 }
 
-#[async_trait]
 impl MetadataFetcher for DualMetadataFetcher {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String> {
         let _ = iss;

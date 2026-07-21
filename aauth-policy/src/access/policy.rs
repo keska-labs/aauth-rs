@@ -4,8 +4,9 @@ use aauth::PendingInput;
 use crate::AccessTokenDecision;
 use crate::PolicyError;
 
-#[async_trait::async_trait]
-pub trait AccessTokenPolicy: Send + Sync + Clone {
+#[trait_variant::make(AccessTokenPolicy: Send)]
+#[dynosaur::dynosaur(pub DynAccessTokenPolicy = dyn(box) AccessTokenPolicy, bridge(dyn))]
+pub trait LocalAccessTokenPolicy: Sync {
     async fn evaluate(&self, ctx: &AccessTokenContext) -> Result<AccessTokenDecision, PolicyError>;
 
     async fn resume(

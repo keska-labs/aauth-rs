@@ -12,5 +12,5 @@ pub use federation::{FederationOutcome, verify_federated_auth_token};
 pub use keys::*;
 pub use outbound::PersonServerOutboundSigner;
 pub use outcome::{PersonInteractionOutcome, PersonTokenFlowOutcome};
-pub use service::PersonTokenService;
+pub use service::{DynPersonTokenService, LocalPersonTokenService, PersonTokenService};
 pub use token_context::PersonTokenContext;

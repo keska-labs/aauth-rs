@@ -30,8 +30,11 @@ where
     }
 }
 
-#[async_trait::async_trait]
-pub trait PendingStore<R: PendingStorable>: Send + Sync + Clone {
+/// Generic pending persistence. Uses in-place `trait_variant::make(Send)` (no `Local*` /
+/// `Dyn*` pair) because the type parameter `R` is not supported by that naming pattern
+/// with dynosaur.
+#[trait_variant::make(Send)]
+pub trait PendingStore<R: PendingStorable>: Send + Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
     async fn create(&self, record: R) -> Result<String, Self::Error>;
@@ -40,12 +43,11 @@ pub trait PendingStore<R: PendingStorable>: Send + Sync + Clone {
     async fn complete(&self, id: &str, outcome: PendingOutcome) -> Result<(), Self::Error>;
     async fn remove(&self, id: &str) -> Result<(), Self::Error>;
 
-    /// Linear scan for the first record matching `pred`. Default: not supported.
-    async fn find_if<F>(&self, pred: F) -> Result<Option<(String, R)>, Self::Error>
-    where
-        F: Fn(&R) -> bool + Send,
-    {
-        let _ = pred;
-        Ok(None)
-    }
+    /// Linear scan for the first record matching `pred`.
+    ///
+    /// Implementors that do not support scans should return `Ok(None)`.
+    async fn find_if(
+        &self,
+        pred: impl Fn(&R) -> bool + Send,
+    ) -> Result<Option<(String, R)>, Self::Error>;
 }

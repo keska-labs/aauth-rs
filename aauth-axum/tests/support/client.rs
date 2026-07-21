@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use aauth::KeyMaterialProvider;
+use aauth::DynKeyMaterialProvider;
+use aauth::DynMetadataFetcher;
 use aauth::TestKeys;
 use aauth_reqwest::{
     AgentMiddleware, AgentOptions, ClarificationCallback, ClientBuilder, InteractionCallback,
@@ -21,7 +22,7 @@ pub struct AgentClientBuilder {
     agent_ps_claim: Option<String>,
     on_interaction: Option<InteractionCallback>,
     on_clarification: Option<ClarificationCallback>,
-    provider: Option<Arc<dyn KeyMaterialProvider>>,
+    provider: Option<Arc<DynKeyMaterialProvider<'static>>>,
 }
 
 impl AgentClientBuilder {
@@ -70,7 +71,7 @@ impl AgentClientBuilder {
         self
     }
 
-    pub fn provider(mut self, provider: Arc<dyn KeyMaterialProvider>) -> Self {
+    pub fn provider(mut self, provider: Arc<DynKeyMaterialProvider<'static>>) -> Self {
         self.provider = Some(provider);
         self
     }
@@ -84,7 +85,7 @@ impl AgentClientBuilder {
 
         let mut builder = AgentOptions::builder(provider)
             .max_poll_duration_secs(TEST_POLL_MAX_SECS)
-            .metadata_fetcher(self.metadata_fetcher);
+            .metadata_fetcher(DynMetadataFetcher::new_arc(self.metadata_fetcher));
         if let Some(url) = self.person_server_url {
             builder = builder.person_server_url(url);
         }

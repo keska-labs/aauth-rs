@@ -133,14 +133,12 @@ aauth-reqwest = { version = "0.0" }
 ## Quick example
 
 ```rust
-use std::sync::Arc;
-
+use aauth::DynKeyMaterialProvider;
 use aauth::agent::auth::AgentOptions;
 use aauth::agent::keys::KeyMaterialProvider;
 use aauth::protocol::KeyMaterial;
 use aauth_reqwest::{AgentMiddleware, ClientBuilder};
 
-#[async_trait::async_trait]
 impl KeyMaterialProvider for MyProvider {
     async fn key_material(&self) -> aauth::Result<KeyMaterial> {
         // Return ephemeral signing JWK + agent/auth JWT for Signature-Key
@@ -152,7 +150,7 @@ impl KeyMaterialProvider for MyProvider {
 async fn main() -> anyhow::Result<()> {
     let client = ClientBuilder::new(reqwest::Client::new())
         .with(AgentMiddleware::new(
-            AgentOptions::builder(Arc::new(MyProvider))
+            AgentOptions::builder(DynKeyMaterialProvider::new_arc(MyProvider))
                 // person_server_url omitted — resolved from agent JWT `ps` when challenged
                 .build(),
         ))

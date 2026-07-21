@@ -240,7 +240,6 @@ where
 {
     struct Adapter<F>(F);
 
-    #[async_trait::async_trait]
     impl<F, Fut> SignedSend for Adapter<F>
     where
         F: FnMut(Request) -> Fut + Send,

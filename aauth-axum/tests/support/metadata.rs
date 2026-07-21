@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use aauth::TestKeys;
 use aauth::metadata::{MetadataFetcher, StaticMetadataFetcher};
-use async_trait::async_trait;
 
 /// Routes well-known JWKS resolution by document type; optional HTTP for remote issuers.
 #[derive(Clone)]
@@ -111,7 +110,6 @@ impl MultiPartyMetadataFetcherBuilder {
     }
 }
 
-#[async_trait]
 impl MetadataFetcher for MultiPartyMetadataFetcher {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> aauth::Result<String> {
         match dwk {

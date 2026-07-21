@@ -1,18 +1,17 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use jsonwebtoken::jwk::JwkSet;
 
 use crate::error::{MetadataError, Result};
 
-#[async_trait]
-pub trait MetadataFetcher: Send + Sync {
+#[trait_variant::make(MetadataFetcher: Send)]
+#[dynosaur::dynosaur(pub DynMetadataFetcher = dyn(box) MetadataFetcher, bridge(dyn))]
+pub trait LocalMetadataFetcher: Sync {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String>;
     async fn fetch_jwks(&self, jwks_uri: &str) -> Result<JwkSet>;
 }
 
-#[async_trait]
-impl<T: MetadataFetcher + ?Sized> MetadataFetcher for Arc<T> {
+impl<T: MetadataFetcher + Sync> MetadataFetcher for Arc<T> {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String> {
         (**self).resolve_jwks_uri(iss, dwk).await
     }
@@ -22,8 +21,7 @@ impl<T: MetadataFetcher + ?Sized> MetadataFetcher for Arc<T> {
     }
 }
 
-#[async_trait]
-impl<T: MetadataFetcher + ?Sized> MetadataFetcher for &T {
+impl<T: MetadataFetcher + Sync> MetadataFetcher for &T {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> Result<String> {
         (**self).resolve_jwks_uri(iss, dwk).await
     }
@@ -49,7 +47,6 @@ impl StaticMetadataFetcher {
     }
 }
 
-#[async_trait]
 impl MetadataFetcher for StaticMetadataFetcher {
     async fn resolve_jwks_uri(&self, _iss: &str, _dwk: &str) -> Result<String> {
         Ok(self.jwks_uri.clone())

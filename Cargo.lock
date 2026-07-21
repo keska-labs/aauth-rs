@@ -12,6 +12,7 @@ dependencies = [
  "async-trait",
  "base64",
  "bytes",
+ "dynosaur",
  "ed25519-dalek 3.0.0-rc.1",
  "http",
  "http-body-util",
@@ -27,6 +28,7 @@ dependencies = [
  "sfv 0.15.0",
  "thiserror",
  "tokio",
+ "trait-variant",
  "url",
  "uuid",
  "wiremock",
@@ -40,7 +42,6 @@ dependencies = [
  "aauth-policy",
  "aauth-reqwest",
  "anyhow",
- "async-trait",
  "axum",
  "http",
  "jsonwebtoken",
@@ -59,13 +60,14 @@ name = "aauth-policy"
 version = "0.0.3"
 dependencies = [
  "aauth",
- "async-trait",
  "base64",
+ "dynosaur",
  "rand 0.10.1",
  "serde",
  "serde_with",
  "thiserror",
  "tokio",
+ "trait-variant",
  "url",
 ]
 
@@ -77,6 +79,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64",
+ "dynosaur",
  "ed25519-dalek 3.0.0-rc.1",
  "http",
  "jsonwebtoken",
@@ -87,6 +90,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "trait-variant",
  "url",
 ]
 
@@ -589,6 +593,26 @@ name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
+
+[[package]]
+name = "dynosaur"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdb33e6854ea615b65faf9c40d4ea9c4de9e9fa5d6772ad6ce57950a6da3957d"
+dependencies = [
+ "dynosaur_derive",
+]
+
+[[package]]
+name = "dynosaur_derive"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ac0893f103ae7bf50181323d748d505f27b6255777c28b502030bdaf8749f4c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "ecdsa"
@@ -2708,6 +2732,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "trait-variant"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70977707304198400eb4835a78f6a9f928bf41bba420deb8fdb175cd965d77a7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
