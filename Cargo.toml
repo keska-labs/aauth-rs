@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "aauth",
     "aauth-axum",
+    "aauth-hardware-keys",
     "aauth-policy",
     "aauth-reqwest",
     "httpsig-key",
@@ -18,6 +19,7 @@ repository = "https://github.com/keska-labs/aauth-rs"
 [workspace.dependencies]
 aauth = { path = "aauth", default-features = false }
 aauth-axum = { path = "aauth-axum", default-features = false }
+aauth-hardware-keys = { path = "aauth-hardware-keys", default-features = false }
 aauth-policy = { path = "aauth-policy", default-features = false }
 aauth-reqwest = { path = "aauth-reqwest", default-features = false }
 async-trait = "0.1"
