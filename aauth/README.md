@@ -67,11 +67,11 @@ Primary integration surface for servers: implement the `*Service` traits with yo
 [`agent::auth::AgentAuth`] is a transport-agnostic state machine over status codes and headers. Pair it with [`aauth-reqwest::AgentMiddleware`](https://docs.rs/aauth-reqwest/latest/aauth_reqwest/struct.AgentMiddleware.html) for a full client.
 
 ```rust
-#![cfg(feature = "agent")]
+# #![cfg(feature = "agent")]
 use aauth::TestKeys;
 use aauth::agent::auth::AgentOptions;
 
-fn main() {
+# fn main() {
 let keys = TestKeys::generate();
 let issuer = "https://example.com";
 let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
@@ -81,7 +81,7 @@ let options = AgentOptions::builder(keys.key_provider(agent_jwt))
     // person_server_url omitted → resolved from agent JWT `ps` when challenged
     .build();
 let _ = options;
-}
+# }
 ```
 
 Omit `person_server_url` to resolve the Person Server from the agent token’s `ps` claim via [`resolve_person_server_url`].

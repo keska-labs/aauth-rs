@@ -62,13 +62,13 @@ Ready-made policies for examples and tests (feature-gated per role):
 ## Building a service
 
 ```rust
-#![cfg(feature = "person-server")]
+# #![cfg(feature = "person-server")]
 use aauth::{AbsentAccessServerClient, DEFAULT_PENDING_TTL_SECS, PersonServerConfig, TestKeys};
 use aauth_policy::{
     AlwaysGrantPersonPolicy, InMemoryPersonPendingStore, PolicyPersonTokenService,
 };
 
-fn main() {
+# fn main() {
 let keys = TestKeys::generate();
 let person_server_url = "http://ps.example";
 let config = PersonServerConfig {
@@ -92,7 +92,7 @@ let service = PolicyPersonTokenService::new(
     config,
 );
 let _ = service;
-}
+# }
 ```
 
 Wire that service into HTTP with [`aauth-axum`](https://docs.rs/aauth-axum) (`PersonServerState::from_policy`, `person_router`).

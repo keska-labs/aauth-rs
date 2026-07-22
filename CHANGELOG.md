@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- README examples are copy-pasteable programs with `#[tokio::main]` (workspace README doctested via `aauth-axum` with `--features full`; agent whoami calls are `no_run`). Crate READMEs keep rustdoc `#` wrappers for docs.rs.
 - `aauth` / `aauth-reqwest` `RequestSigningExt` no longer take `SignOptions`; signing infers covered extras (`authorization`, `aauth-mission`) from request headers via `aauth_sign_options`.
 - `PersonServerConfig.http_client: reqwest::Client` replaced by `access_server: C` where `C: AccessServerClient` (default `AbsentAccessServerClient`).
 - `PolicyPersonTokenService` and `PersonServerState` / `person_router` take an `AccessServerClient` type parameter.

@@ -61,27 +61,43 @@ aauth = { version = "0.0", default-features = false, features = ["agent"] }
 aauth-reqwest = { version = "0.0" }
 ```
 
-```rust
+```rust,no_run
 #![cfg(feature = "full")]
 use aauth::TestKeys;
 use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder};
 
-fn main() {
-let keys = TestKeys::generate();
-let issuer = "https://example.com";
-let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let keys = TestKeys::generate();
+    let issuer = "https://example.com";
+    let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
 
-let client = ClientBuilder::new(reqwest::Client::new())
-    .with(AgentMiddleware::new(
-        AgentOptions::builder(keys.key_provider(agent_jwt))
-            .metadata_fetcher(keys.agent_metadata_fetcher(issuer))
-            // person_server_url omitted → resolved from agent JWT `ps` when challenged
-            .build(),
-    ))
-    .build();
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(AgentMiddleware::new(
+            AgentOptions::builder(keys.key_provider(agent_jwt))
+                .metadata_fetcher(keys.agent_metadata_fetcher(issuer))
+                // person_server_url omitted → resolved from agent JWT `ps` when challenged
+                .build(),
+        ))
+        .build();
 
-// Ready to call a protected resource (signing + challenge handling are automatic).
-let _ = client;
+    // Signing + challenge handling are automatic.
+    let identity = client
+        .get("https://whoami.aauth.dev")
+        .send()
+        .await?
+        .text()
+        .await?;
+    println!("{identity}");
+
+    let scoped = client
+        .get("https://whoami.aauth.dev?scope=openid+profile")
+        .send()
+        .await?
+        .text()
+        .await?;
+    println!("{scoped}");
+    Ok(())
 }
 ```
 
@@ -108,42 +124,42 @@ use tower::ServiceExt;
 
 #[tokio::main]
 async fn main() {
-let keys = TestKeys::generate();
-let issuer = "https://example.com";
+    let keys = TestKeys::generate();
+    let issuer = "https://example.com";
 
-let layer = ResourceAuthLayer::new(
-    keys.agent_metadata_fetcher(issuer),
-    "http://resource.example",
-    ResourceAccessMode::<NoResourceAccessService>::IdentityBased,
-    Arc::new(keys.resource_token_signer()),
-);
+    let layer = ResourceAuthLayer::new(
+        keys.agent_metadata_fetcher(issuer),
+        "http://resource.example",
+        ResourceAccessMode::<NoResourceAccessService>::IdentityBased,
+        Arc::new(keys.resource_token_signer()),
+    );
 
-let app = Router::new()
-    .route(
-        "/api/data",
-        get(|_token: VerifiedAAuthToken| async move { Json(serde_json::json!({ "ok": true })) }),
-    )
-    .route_layer(layer);
+    let app = Router::new()
+        .route(
+            "/api/data",
+            get(|_token: VerifiedAAuthToken| async move { Json(serde_json::json!({ "ok": true })) }),
+        )
+        .route_layer(layer);
 
-let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
-let signing = SigningMaterial {
-    signing_jwk: keys.agent_ephemeral.signing_jwk(),
-    signature_key: SignatureKey::Jwt(SignatureKeyJwt { jwt: agent_jwt }),
-};
+    let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
+    let signing = SigningMaterial {
+        signing_jwk: keys.agent_ephemeral.signing_jwk(),
+        signature_key: SignatureKey::Jwt(SignatureKeyJwt { jwt: agent_jwt }),
+    };
 
-let authority = "resource.example";
-let path = "/api/data";
-let req = Request::builder()
-    .method("GET")
-    .uri(path)
-    .header(HOST, HeaderValue::from_static(authority))
-    .body(Body::empty())
-    .unwrap()
-    .signed(&signing)
-    .unwrap();
+    let authority = "resource.example";
+    let path = "/api/data";
+    let req = Request::builder()
+        .method("GET")
+        .uri(path)
+        .header(HOST, HeaderValue::from_static(authority))
+        .body(Body::empty())
+        .unwrap()
+        .signed(&signing)
+        .unwrap();
 
-let res = app.oneshot(req).await.unwrap();
-assert_eq!(res.status(), StatusCode::OK);
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
 }
 ```
 
@@ -193,43 +209,43 @@ impl FromRef<AppState> for PersonState {
 
 #[tokio::main]
 async fn main() {
-let keys = TestKeys::generate();
-let person_server_url = "http://ps.example";
-let resource_url = "http://resource.example";
+    let keys = TestKeys::generate();
+    let person_server_url = "http://ps.example";
+    let resource_url = "http://resource.example";
 
-let person = PersonServerState::from_policy(
-    AlwaysGrantPersonPolicy::new("user-123"),
-    InMemoryPersonPendingStore::new(),
-    keys.person_auth_jwt_minter(),
-    PersonServerConfig {
-        keys: keys.clone(),
-        person_server_url: person_server_url.into(),
-        resource_url: resource_url.into(),
-        person_jwks_uri: format!("{person_server_url}/auth/jwks"),
-        interaction_url: format!("{person_server_url}/interact"),
-        pending_base_url: person_server_url.into(),
-        pending_path: "/pending".into(),
-        pending_ttl_secs: DEFAULT_PENDING_TTL_SECS,
-        fetcher: keys.person_metadata_fetcher(person_server_url),
-        access_server: AbsentAccessServerClient,
-        federation_poll_max_secs: None,
-    },
-);
+    let person = PersonServerState::from_policy(
+        AlwaysGrantPersonPolicy::new("user-123"),
+        InMemoryPersonPendingStore::new(),
+        keys.person_auth_jwt_minter(),
+        PersonServerConfig {
+            keys: keys.clone(),
+            person_server_url: person_server_url.into(),
+            resource_url: resource_url.into(),
+            person_jwks_uri: format!("{person_server_url}/auth/jwks"),
+            interaction_url: format!("{person_server_url}/interact"),
+            pending_base_url: person_server_url.into(),
+            pending_path: "/pending".into(),
+            pending_ttl_secs: DEFAULT_PENDING_TTL_SECS,
+            fetcher: keys.person_metadata_fetcher(person_server_url),
+            access_server: AbsentAccessServerClient,
+            federation_poll_max_secs: None,
+        },
+    );
 
-let app = Router::new()
-    .merge(person_router::<AppState, _, _, _>())
-    .with_state(AppState { person });
+    let app = Router::new()
+        .merge(person_router::<AppState, _, _, _>())
+        .with_state(AppState { person });
 
-let res = app
-    .oneshot(
-        Request::builder()
-            .uri("/.well-known/aauth-person.json")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await
-    .unwrap();
-assert_eq!(res.status(), StatusCode::OK);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .uri("/.well-known/aauth-person.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
 }
 ```
 
@@ -277,42 +293,42 @@ impl FromRef<AppState> for AccessState {
 
 #[tokio::main]
 async fn main() {
-let keys = TestKeys::generate();
-let access_server_url = "http://as.example";
-let person_server_url = "http://ps.example";
-let resource_url = "http://resource.example";
+    let keys = TestKeys::generate();
+    let access_server_url = "http://as.example";
+    let person_server_url = "http://ps.example";
+    let resource_url = "http://resource.example";
 
-let access = AccessServerState::from_policy(
-    AlwaysGrantAccessPolicy::new("user-federated"),
-    InMemoryAccessPendingStore::new(),
-    keys.access_auth_jwt_minter(),
-    AccessServerConfig {
-        keys: keys.clone(),
-        access_server_url: access_server_url.into(),
-        resource_url: resource_url.into(),
-        person_server_url: person_server_url.into(),
-        access_jwks_uri: format!("{access_server_url}/access/jwks"),
-        pending_base_url: access_server_url.into(),
-        pending_path: "/access/pending".into(),
-        pending_ttl_secs: DEFAULT_PENDING_TTL_SECS,
-        fetcher: keys.access_metadata_fetcher(access_server_url),
-    },
-);
+    let access = AccessServerState::from_policy(
+        AlwaysGrantAccessPolicy::new("user-federated"),
+        InMemoryAccessPendingStore::new(),
+        keys.access_auth_jwt_minter(),
+        AccessServerConfig {
+            keys: keys.clone(),
+            access_server_url: access_server_url.into(),
+            resource_url: resource_url.into(),
+            person_server_url: person_server_url.into(),
+            access_jwks_uri: format!("{access_server_url}/access/jwks"),
+            pending_base_url: access_server_url.into(),
+            pending_path: "/access/pending".into(),
+            pending_ttl_secs: DEFAULT_PENDING_TTL_SECS,
+            fetcher: keys.access_metadata_fetcher(access_server_url),
+        },
+    );
 
-let app = Router::new()
-    .merge(access_router::<AppState, _, _>())
-    .with_state(AppState { access });
+    let app = Router::new()
+        .merge(access_router::<AppState, _, _>())
+        .with_state(AppState { access });
 
-let res = app
-    .oneshot(
-        Request::builder()
-            .uri("/.well-known/aauth-access.json")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await
-    .unwrap();
-assert_eq!(res.status(), StatusCode::OK);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .uri("/.well-known/aauth-access.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
 }
 ```
 

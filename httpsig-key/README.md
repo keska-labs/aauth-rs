@@ -38,7 +38,7 @@ use httpsig_key::protocol::{
 };
 use httpsig_key::{SignOptions, VerifyOptions, sign, verify};
 
-fn main() {
+# fn main() {
 let d = "XzLUZwwyJPTWtTaw_UNv-OdZF3UduhBrfXd3E419l0E";
 let x = "qH0G403t91bvnfDz5vEkqb2Dt3daphQFV3pF7650Wfc";
 let signing_jwk = SigningJwk {
@@ -81,7 +81,7 @@ let verified = verify(
 )
 .unwrap();
 assert!(matches!(verified.signature_key, SignatureKey::Jwt(_)));
-}
+# }
 ```
 
 [`VerifyOptions`] controls freshness (`max_age_secs`, `clock_skew_secs`), optional `Authorization` coverage, and signature label.

@@ -25,11 +25,12 @@ For the agent path, challenge verification always runs before token exchange; au
 
 Use [`TestKeys`](https://docs.rs/aauth/latest/aauth/keys/struct.TestKeys.html) in development, or implement [`KeyMaterialProvider`](https://docs.rs/aauth/latest/aauth/agent/keys/trait.KeyMaterialProvider.html) for production key material:
 
-```rust
+```rust,no_run
 use aauth::TestKeys;
 use aauth_reqwest::{AgentMiddleware, AgentOptions, ClientBuilder};
 
-fn main() {
+# #[tokio::main]
+# async fn main() -> Result<(), Box<dyn std::error::Error>> {
 let keys = TestKeys::generate();
 let issuer = "https://example.com";
 let agent_jwt = keys.mint_agent_jwt(issuer, "aauth:test@example.com", None);
@@ -43,9 +44,24 @@ let client = ClientBuilder::new(reqwest::Client::new())
     ))
     .build();
 
-// Ready to call a protected resource (signing + challenge handling are automatic).
-let _ = client;
-}
+// Signing + challenge handling are automatic.
+let identity = client
+    .get("https://whoami.aauth.dev")
+    .send()
+    .await?
+    .text()
+    .await?;
+println!("{identity}");
+
+let scoped = client
+    .get("https://whoami.aauth.dev?scope=openid+profile")
+    .send()
+    .await?
+    .text()
+    .await?;
+println!("{scoped}");
+# Ok(())
+# }
 ```
 
 ## What the middleware does

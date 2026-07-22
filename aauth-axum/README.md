@@ -26,7 +26,7 @@ aauth-axum = { version = "0.0", default-features = false, features = ["person-se
 | `access-server` | [`AccessServerState`], [`access_router`], token / pending handlers |
 | `resource` | [`ResourceAuthLayer`], [`resource_router`], [`VerifiedAAuthToken`], pending poll |
 | `policy` | `from_policy` constructors via [`aauth-policy`](https://docs.rs/aauth-policy) |
-| `full` | All of the above (+ `aauth-reqwest` for workspace README doctests) |
+| `full` | All of the above (+ `aauth-reqwest` for workspace README doctests and federation examples) |
 
 Default features enable the three role features (not `policy`).
 
@@ -35,7 +35,7 @@ Default features enable the three role features (not `policy`).
 Apply [`ResourceAuthLayer`] to protected routes. After the layer succeeds, handlers extract [`VerifiedAAuthToken`]:
 
 ```rust
-#![cfg(feature = "resource")]
+# #![cfg(feature = "resource")]
 use std::sync::Arc;
 
 use aauth::protocol::{SignatureKey, SignatureKeyJwt, SigningMaterial};
@@ -46,8 +46,8 @@ use axum::http::{HeaderValue, Request, StatusCode, header::HOST};
 use axum::{Json, Router, routing::get};
 use tower::ServiceExt;
 
-#[tokio::main]
-async fn main() {
+# #[tokio::main]
+# async fn main() {
 let keys = TestKeys::generate();
 let issuer = "https://example.com";
 
@@ -84,7 +84,7 @@ let req = Request::builder()
 
 let res = app.oneshot(req).await.unwrap();
 assert_eq!(res.status(), StatusCode::OK);
-}
+# }
 ```
 
 ### Access modes
@@ -109,7 +109,7 @@ App state must implement [`FromRef`](https://docs.rs/axum/latest/axum/extract/tr
 ### Person Server
 
 ```rust
-#![cfg(all(feature = "person-server", feature = "policy"))]
+# #![cfg(all(feature = "person-server", feature = "policy"))]
 use aauth::{AbsentAccessServerClient, DEFAULT_PENDING_TTL_SECS, PersonServerConfig, TestKeys};
 use aauth_axum::{PersonServerState, person_router};
 use aauth_policy::{AlwaysGrantPersonPolicy, InMemoryPersonPendingStore};
@@ -142,8 +142,8 @@ impl FromRef<AppState> for PersonState {
     }
 }
 
-#[tokio::main]
-async fn main() {
+# #[tokio::main]
+# async fn main() {
 let keys = TestKeys::generate();
 let person_server_url = "http://ps.example";
 let resource_url = "http://resource.example";
@@ -181,13 +181,13 @@ let res = app
     .await
     .unwrap();
 assert_eq!(res.status(), StatusCode::OK);
-}
+# }
 ```
 
 ### Access Server
 
 ```rust
-#![cfg(all(feature = "access-server", feature = "policy"))]
+# #![cfg(all(feature = "access-server", feature = "policy"))]
 use aauth::{AccessServerConfig, DEFAULT_PENDING_TTL_SECS, TestKeys};
 use aauth_axum::{AccessServerState, access_router};
 use aauth_policy::{AlwaysGrantAccessPolicy, InMemoryAccessPendingStore};
@@ -218,8 +218,8 @@ impl FromRef<AppState> for AccessState {
     }
 }
 
-#[tokio::main]
-async fn main() {
+# #[tokio::main]
+# async fn main() {
 let keys = TestKeys::generate();
 let access_server_url = "http://as.example";
 let person_server_url = "http://ps.example";
@@ -256,7 +256,7 @@ let res = app
     .await
     .unwrap();
 assert_eq!(res.status(), StatusCode::OK);
-}
+# }
 ```
 
 Implement [`PersonTokenService`](https://docs.rs/aauth/latest/aauth/person_server/trait.PersonTokenService.html) or [`AccessTokenService`](https://docs.rs/aauth/latest/aauth/access_server/trait.AccessTokenService.html) (or the resource counterpart) directly if you do not want `aauth-policy`.
