@@ -4,7 +4,7 @@ import Security
 
 // AAuth Secure Enclave Helper (in-process)
 // Port of packages-js local-keys/se-helper/main.swift — CryptoKit + keychain.
-// Linked into aauth-hardware-keys; Rust calls via @_cdecl instead of a CLI subprocess.
+// Linked into aauth-macos-se-ffi; Rust calls via @_cdecl instead of a CLI subprocess.
 //
 // Original CLI usage (for reference):
 //   se-helper generate <label>        — create key, print JSON with public JWK
@@ -237,7 +237,7 @@ enum SEError: Error, CustomStringConvertible {
     }
 }
 
-// MARK: - C ABI bridge (Rust / aauth-hardware-keys)
+// MARK: - C ABI bridge (Rust / aauth-macos-se-ffi)
 
 private func setError(_ out: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?, _ message: String) {
     guard let out = out else { return }

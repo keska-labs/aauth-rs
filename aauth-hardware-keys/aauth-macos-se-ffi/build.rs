@@ -17,7 +17,14 @@ fn main() {
         .join("swift/SecureEnclaveBridge.swift");
 
     let status = Command::new("swiftc")
-        .args(["-emit-library", "-static", "-module-name", "AauthSeBridge", "-O", "-o"])
+        .args([
+            "-emit-library",
+            "-static",
+            "-module-name",
+            "AauthSeBridge",
+            "-O",
+            "-o",
+        ])
         .arg(&lib_path)
         .arg(&swift_src)
         .status()

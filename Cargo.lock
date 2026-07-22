@@ -58,6 +58,7 @@ dependencies = [
 name = "aauth-hardware-keys"
 version = "0.1.0"
 dependencies = [
+ "aauth-macos-se-ffi",
  "base64",
  "der 0.7.10",
  "yubikey",
@@ -88,6 +89,10 @@ dependencies = [
  "uuid",
  "wiremock",
 ]
+
+[[package]]
+name = "aauth-macos-se-ffi"
+version = "0.1.0"
 
 [[package]]
 name = "aauth-policy"

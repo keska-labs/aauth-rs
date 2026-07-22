@@ -4,6 +4,7 @@ members = [
     "aauth",
     "aauth-axum",
     "aauth-hardware-keys",
+    "aauth-hardware-keys/aauth-macos-se-ffi",
     "aauth-local-keys",
     "aauth-policy",
     "aauth-reqwest",
@@ -21,6 +22,7 @@ repository = "https://github.com/keska-labs/aauth-rs"
 aauth = { path = "aauth", default-features = false }
 aauth-axum = { path = "aauth-axum", default-features = false }
 aauth-hardware-keys = { path = "aauth-hardware-keys", default-features = false }
+aauth-macos-se-ffi = { path = "aauth-hardware-keys/aauth-macos-se-ffi", default-features = false }
 aauth-local-keys = { path = "aauth-local-keys", default-features = false }
 aauth-policy = { path = "aauth-policy", default-features = false }
 aauth-reqwest = { path = "aauth-reqwest", default-features = false }

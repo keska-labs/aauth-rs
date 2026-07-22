@@ -1,4 +1,4 @@
-/// Thin Rust bridge to in-process se-helper (`swift/SecureEnclaveBridge.swift`).
+/// Thin Rust facade over in-process se-helper ([`aauth_macos_se_ffi`]).
 ///
 /// Mirrors how `@aauth/local-keys` `backends/secure-enclave.ts` shells out to
 /// `se-helper` (`generate` / `sign` with hex hash / `list` / `public-key`).
@@ -6,32 +6,14 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
 
+use aauth_macos_se_ffi::{
+    aauth_se_free, aauth_se_generate, aauth_se_is_available, aauth_se_list, aauth_se_public_key,
+    aauth_se_sign_hash,
+};
+
 use crate::{Error, GeneratedKey, HardwareKeyInfo, Result, SignatureResult};
 
 const AAUTH_KEY_LABEL_PREFIX: &str = "com.aauth.agent.";
-
-unsafe extern "C" {
-    fn aauth_se_is_available() -> bool;
-    fn aauth_se_free(ptr: *mut std::ffi::c_void);
-    fn aauth_se_generate(
-        label: *const c_char,
-        out_jwk_json: *mut *mut c_char,
-        error_out: *mut *mut c_char,
-    ) -> bool;
-    fn aauth_se_sign_hash(
-        label: *const c_char,
-        hex_hash: *const c_char,
-        out_sig: *mut *mut u8,
-        out_sig_len: *mut usize,
-        error_out: *mut *mut c_char,
-    ) -> bool;
-    fn aauth_se_public_key(
-        label: *const c_char,
-        out_jwk_json: *mut *mut c_char,
-        error_out: *mut *mut c_char,
-    ) -> bool;
-    fn aauth_se_list(out_labels: *mut *mut c_char, error_out: *mut *mut c_char) -> bool;
-}
 
 fn take_c_string(ptr: *mut c_char) -> String {
     if ptr.is_null() {

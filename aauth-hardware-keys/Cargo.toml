@@ -11,3 +11,6 @@ crate-type = ["rlib"]
 yubikey = { version = "0.8", features = ["untested"] }
 der = "0.7"
 base64 = "0.22"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+aauth-macos-se-ffi = { workspace = true }

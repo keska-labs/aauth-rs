@@ -63,8 +63,8 @@ Same fallback chain as the JS package (hardware preferred):
 
 SE matches `@aauth/bootstrap` / se-helper: CryptoKit blobs in keychain
 `service=com.aauth.secure-enclave`, implemented in-process in
-`aauth-hardware-keys` (Swift bridge; needs `swiftc`). Enrollment stays with
-bootstrap.
+`aauth-hardware-keys` via nested `aauth-macos-se-ffi` (Swift bridge; needs
+`swiftc`). Enrollment stays with bootstrap.
 
 ## License
 
