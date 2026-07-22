@@ -1,21 +1,72 @@
 import Foundation
 import CryptoKit
-import Security
 
-// AAuth Secure Enclave Helper (in-process)
-// Port of packages-js local-keys/se-helper/main.swift — CryptoKit + keychain.
-// Linked into aauth-macos-se-ffi; Rust calls via @_cdecl instead of a CLI subprocess.
+// AAuth Secure Enclave Helper
+// A codesigned CLI that manages persistent Secure Enclave keys.
+// Built by aauth-macos-se-ffi (Cargo) and spawned by aauth-hardware-keys.
+// Protocol matches packages-js local-keys/se-helper (also used from Node).
 //
-// Original CLI usage (for reference):
+// Usage:
 //   se-helper generate <label>        — create key, print JSON with public JWK
 //   se-helper sign <label> <hex-hash> — sign SHA-256 hash, print JSON with base64url signature
 //   se-helper list                    — list all aauth keys, print JSON array
 //   se-helper delete <label>          — delete a key
 //   se-helper public-key <label>      — get public key for existing key
 
+let args = CommandLine.arguments
+
+guard args.count >= 2 else {
+    printError("Usage: se-helper <generate|sign|list|delete|public-key> [args...]")
+    exit(1)
+}
+
+let command = args[1]
+
+do {
+    switch command {
+    case "generate":
+        guard args.count >= 3 else {
+            printError("Usage: se-helper generate <label>")
+            exit(1)
+        }
+        try generateKey(label: args[2])
+
+    case "sign":
+        guard args.count >= 4 else {
+            printError("Usage: se-helper sign <label> <hex-hash>")
+            exit(1)
+        }
+        try signHash(label: args[2], hexHash: args[3])
+
+    case "list":
+        try listKeys()
+
+    case "delete":
+        guard args.count >= 3 else {
+            printError("Usage: se-helper delete <label>")
+            exit(1)
+        }
+        try deleteKey(label: args[2])
+
+    case "public-key":
+        guard args.count >= 3 else {
+            printError("Usage: se-helper public-key <label>")
+            exit(1)
+        }
+        try getPublicKey(label: args[2])
+
+    default:
+        printError("Unknown command: \(command)")
+        exit(1)
+    }
+} catch {
+    printError("\(error)")
+    exit(1)
+}
+
 // MARK: - Commands
 
-func generateKey(label: String) throws -> P256.Signing.PublicKey {
+func generateKey(label: String) throws {
     guard SecureEnclave.isAvailable else {
         throw SEError.notAvailable
     }
@@ -47,10 +98,16 @@ func generateKey(label: String) throws -> P256.Signing.PublicKey {
         throw SEError.keychainError("SecItemAdd failed: \(status)")
     }
 
-    return key.publicKey
+    let jwk = publicKeyToJWK(key.publicKey)
+    let result: [String: Any] = [
+        "label": label,
+        "algorithm": "ES256",
+        "publicJwk": jwk,
+    ]
+    printJSON(result)
 }
 
-func signHash(label: String, hexHash: String) throws -> Data {
+func signHash(label: String, hexHash: String) throws {
     let key = try loadKey(label: label)
     let hashData = try hexToData(hexHash)
 
@@ -61,10 +118,18 @@ func signHash(label: String, hexHash: String) throws -> Data {
     // Sign the pre-computed hash using the SE key
     let signature = try key.signature(for: RawDigest(hashData))
 
-    return signature.rawRepresentation
+    let rawSig = signature.rawRepresentation
+    let sigB64 = base64url(rawSig)
+
+    let result: [String: Any] = [
+        "algorithm": "ES256",
+        "signature": sigB64,
+        "signatureLength": rawSig.count,
+    ]
+    printJSON(result)
 }
 
-func listKeys() throws -> [[String: Any]] {
+func listKeys() throws {
     let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: "com.aauth.secure-enclave",
@@ -89,7 +154,7 @@ func listKeys() throws -> [[String: Any]] {
         }
     }
 
-    return keys
+    printJSON(keys)
 }
 
 func deleteKey(label: String) throws {
@@ -103,11 +168,18 @@ func deleteKey(label: String) throws {
     guard status == errSecSuccess || status == errSecItemNotFound else {
         throw SEError.keychainError("SecItemDelete failed: \(status)")
     }
+
+    printJSON(["deleted": label])
 }
 
-func getPublicKey(label: String) throws -> [String: String] {
+func getPublicKey(label: String) throws {
     let key = try loadKey(label: label)
-    return publicKeyToJWK(key.publicKey)
+    let jwk = publicKeyToJWK(key.publicKey)
+    printJSON([
+        "label": label,
+        "algorithm": "ES256",
+        "publicJwk": jwk,
+    ])
 }
 
 // MARK: - Key Loading
@@ -207,12 +279,15 @@ func hexToData(_ hex: String) throws -> Data {
     return data
 }
 
-func jwkToJSONString(_ jwk: [String: String]) throws -> String {
-    let data = try JSONSerialization.data(withJSONObject: jwk, options: [.sortedKeys])
-    guard let str = String(data: data, encoding: .utf8) else {
-        throw SEError.keychainError("failed to encode JWK JSON")
+func printJSON(_ value: Any) {
+    if let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+       let str = String(data: data, encoding: .utf8) {
+        print(str)
     }
-    return str
+}
+
+func printError(_ message: String) {
+    FileHandle.standardError.write(Data("error: \(message)\n".utf8))
 }
 
 // MARK: - Errors
@@ -223,7 +298,6 @@ enum SEError: Error, CustomStringConvertible {
     case keyNotFound(String)
     case keychainError(String)
     case invalidHash(String)
-    case invalidLabel
 
     var description: String {
         switch self {
@@ -232,152 +306,6 @@ enum SEError: Error, CustomStringConvertible {
         case .keyNotFound(let l): return "Key not found: \(l)"
         case .keychainError(let m): return "Keychain error: \(m)"
         case .invalidHash(let m): return "Invalid hash: \(m)"
-        case .invalidLabel: return "invalid label"
         }
-    }
-}
-
-// MARK: - C ABI bridge (Rust / aauth-macos-se-ffi)
-
-private func setError(_ out: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?, _ message: String) {
-    guard let out = out else { return }
-    message.withCString { cstr in
-        out.pointee = strdup(cstr)
-    }
-}
-
-private func writeBytes(
-    _ data: Data,
-    _ out: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?,
-    _ outLen: UnsafeMutablePointer<Int>?
-) {
-    guard let out = out, let outLen = outLen else { return }
-    let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: data.count)
-    data.copyBytes(to: buf, count: data.count)
-    out.pointee = buf
-    outLen.pointee = data.count
-}
-
-private func writeCString(
-    _ string: String,
-    _ out: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-) {
-    guard let out = out else { return }
-    string.withCString { cstr in
-        out.pointee = strdup(cstr)
-    }
-}
-
-private func labelString(_ label: UnsafePointer<CChar>?) -> String? {
-    guard let label = label else { return nil }
-    let s = String(cString: label)
-    return s.isEmpty ? nil : s
-}
-
-@_cdecl("aauth_se_free")
-public func aauth_se_free(_ ptr: UnsafeMutableRawPointer?) {
-    free(ptr)
-}
-
-@_cdecl("aauth_se_is_available")
-public func aauth_se_is_available() -> Bool {
-    SecureEnclave.isAvailable
-}
-
-@_cdecl("aauth_se_generate")
-public func aauth_se_generate(
-    _ label: UnsafePointer<CChar>?,
-    _ outJwkJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
-    _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-) -> Bool {
-    guard let label = labelString(label) else {
-        setError(errorOut, SEError.invalidLabel.description)
-        return false
-    }
-    do {
-        let publicKey = try generateKey(label: label)
-        let json = try jwkToJSONString(publicKeyToJWK(publicKey))
-        writeCString(json, outJwkJson)
-        return true
-    } catch {
-        setError(errorOut, "\(error)")
-        return false
-    }
-}
-
-@_cdecl("aauth_se_sign_hash")
-public func aauth_se_sign_hash(
-    _ label: UnsafePointer<CChar>?,
-    _ hexHash: UnsafePointer<CChar>?,
-    _ outSig: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?,
-    _ outSigLen: UnsafeMutablePointer<Int>?,
-    _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-) -> Bool {
-    guard let label = labelString(label), let hexHash = labelString(hexHash) else {
-        setError(errorOut, "invalid label or hash")
-        return false
-    }
-    do {
-        let rawSig = try signHash(label: label, hexHash: hexHash)
-        writeBytes(rawSig, outSig, outSigLen)
-        return true
-    } catch {
-        setError(errorOut, "\(error)")
-        return false
-    }
-}
-
-@_cdecl("aauth_se_public_key")
-public func aauth_se_public_key(
-    _ label: UnsafePointer<CChar>?,
-    _ outJwkJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
-    _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-) -> Bool {
-    guard let label = labelString(label) else {
-        setError(errorOut, SEError.invalidLabel.description)
-        return false
-    }
-    do {
-        let json = try jwkToJSONString(getPublicKey(label: label))
-        writeCString(json, outJwkJson)
-        return true
-    } catch {
-        setError(errorOut, "\(error)")
-        return false
-    }
-}
-
-/// Returns newline-separated labels (from listKeys accounts); caller frees with `aauth_se_free`.
-@_cdecl("aauth_se_list")
-public func aauth_se_list(
-    _ outLabels: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
-    _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-) -> Bool {
-    do {
-        let keys = try listKeys()
-        let labels = keys.compactMap { $0["label"] as? String }
-        writeCString(labels.joined(separator: "\n"), outLabels)
-        return true
-    } catch {
-        setError(errorOut, "\(error)")
-        return false
-    }
-}
-
-@_cdecl("aauth_se_delete")
-public func aauth_se_delete(
-    _ label: UnsafePointer<CChar>?,
-    _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-) -> Bool {
-    guard let label = labelString(label) else {
-        setError(errorOut, SEError.invalidLabel.description)
-        return false
-    }
-    do {
-        try deleteKey(label: label)
-        return true
-    } catch {
-        setError(errorOut, "\(error)")
-        return false
     }
 }

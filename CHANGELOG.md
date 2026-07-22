@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Nested subcrate `aauth-hardware-keys/aauth-macos-se-ffi`: builds the Secure Enclave Swift bridge and exposes the raw `unsafe` C ABI (`aauth_se_*`, including `aauth_se_delete`).
+- Nested subcrate `aauth-hardware-keys/aauth-macos-se-ffi`: builds and adhoc-codesigns the `se-helper` CLI into `target/{debug,release}/se-helper` (packages-js protocol); exposes `helper_path()`.
 - Workspace crate `aauth-local-keys`: load agent keys from `~/.aauth` / `AAUTH_DIR`, OS keychain, and hardware backends (`create_agent_token`, `resolve_key`, `LocalKeysProvider` implementing `KeyMaterialProvider`). Parity with `@aauth/local-keys`.
-- Workspace crate `aauth-hardware-keys`: YubiKey PIV and macOS Secure Enclave as a Rust `rlib` (from packages-js/hardware-keys). SE is se-helper-compatible CryptoKit (keychain `com.aauth.secure-enclave`) via nested `aauth-macos-se-ffi` — no `se-helper` subprocess; not the unused stock SecKey path.
+- Workspace crate `aauth-hardware-keys`: YubiKey PIV and macOS Secure Enclave as a Rust `rlib` (from packages-js/hardware-keys). SE uses a Cargo-built codesigned `se-helper` subprocess (keychain `com.aauth.secure-enclave`) — not in-process Swift FFI; not the unused stock SecKey path.
 - `AgentAuthError::KeyMaterial` for agent key-loading failures (used by `aauth-local-keys`).
 - `RequestSigningExt` on `http::Request` (`aauth::http_util` / crate root) with `.sign` / `.signed` / auth-token variants; `aauth_sign_options` auto-covers `authorization` / `aauth-mission` from request headers; `signature_parts` for `@method` / `@authority` / `@path`; `SignatureError::MissingAuthority` when Host/URI authority is absent.
 - Runnable README doctests for agent, Person/Access/Resource servers, and `httpsig-key` sign/verify (workspace README exercised via `aauth-axum` with `--features full`).

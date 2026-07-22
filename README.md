@@ -48,7 +48,7 @@ aauth-rs/
 ├── aauth/           # core protocol + role traits
 ├── aauth-local-keys/# agent keys from ~/.aauth, keychain, hardware
 ├── aauth-hardware-keys/ # YubiKey + Secure Enclave (from packages-js)
-│   └── aauth-macos-se-ffi/ # Swift SE bridge + unsafe C ABI
+│   └── aauth-macos-se-ffi/ # builds codesigned se-helper CLI
 ├── aauth-reqwest/   # reqwest agent transport
 ├── aauth-axum/      # axum server adapters + examples
 ├── aauth-policy/    # policy + pending-store services

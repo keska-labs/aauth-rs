@@ -54,7 +54,7 @@ aauth-rs/
 │   └── tests/                  # protocol / agent integration tests
 ├── aauth-policy/           # high-level Policy* + PendingStore + Policy*Service
 ├── aauth-hardware-keys/ # YubiKey PIV + Secure Enclave (from packages-js, patched)
-│   └── aauth-macos-se-ffi/ # Swift SE bridge + unsafe C ABI (macOS)
+│   └── aauth-macos-se-ffi/ # builds codesigned se-helper CLI (macOS)
 ├── aauth-local-keys/       # agent keys from ~/.aauth, keychain, hardware (`LocalKeysProvider`)
 ├── aauth-reqwest/          # reqwest agent transport + `ReqwestAccessServerClient` (PS federation)
 └── aauth-axum/             # axum HTTP adapters
@@ -68,7 +68,7 @@ aauth-rs/
     └── tests/                  # axum HTTP integration tests
 ```
 
-**Shared protocol primitives** (no role prefix, always on): `protocol`, `jwt`, `metadata`, `interaction_code`. HTTP Signature Keys live in workspace crate `httpsig-key`. Hardware backends live in `aauth-hardware-keys` (SE Swift/FFI in nested `aauth-macos-se-ffi`); agent key loading is `aauth-local-keys` (`LocalKeysProvider`). These implement wire format and are used by all roles.
+**Shared protocol primitives** (no role prefix, always on): `protocol`, `jwt`, `metadata`, `interaction_code`. HTTP Signature Keys live in workspace crate `httpsig-key`. Hardware backends live in `aauth-hardware-keys` (SE via Cargo-built `se-helper` from nested `aauth-macos-se-ffi`); agent key loading is `aauth-local-keys` (`LocalKeysProvider`). These implement wire format and are used by all roles.
 
 **Cargo features (`aauth`):** per-role `person-server`, `access-server`, `resource`; agent `agent`; meta `server`, `full`. Protocol modules need no feature flag.
 

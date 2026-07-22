@@ -6,8 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Unsafe C ABI and Swift build for macOS Secure Enclave (aauth-hardware-keys)"
-keywords = ["aauth", "secure-enclave", "ffi", "macos"]
+description = "Build and locate the codesigned se-helper CLI for macOS Secure Enclave"
+keywords = ["aauth", "secure-enclave", "macos"]
 categories = ["cryptography", "os::macos-apis"]
 
 [lib]

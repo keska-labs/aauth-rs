@@ -61,6 +61,7 @@ dependencies = [
  "aauth-macos-se-ffi",
  "base64",
  "der 0.7.10",
+ "serde_json",
  "yubikey",
 ]
 

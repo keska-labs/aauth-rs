@@ -22,8 +22,12 @@ pub fn discover() -> Option<HardwareKeyInfo> {
 
     Some(HardwareKeyInfo {
         backend: "yubikey-piv".to_string(),
-        description: format!("YubiKey {} (serial: {}, firmware: {})",
-            yk.name(), serial, version),
+        description: format!(
+            "YubiKey {} (serial: {}, firmware: {})",
+            yk.name(),
+            serial,
+            version
+        ),
         algorithms,
         device_id: serial,
     })
@@ -37,7 +41,12 @@ pub fn generate_key(algorithm: &str) -> Result<GeneratedKey> {
     let alg_id = match algorithm {
         "ES256" => AlgorithmId::EccP256,
         "RS256" => AlgorithmId::Rsa2048,
-        _ => return Err(Error::from_reason(format!("Unsupported algorithm: {}", algorithm))),
+        _ => {
+            return Err(Error::from_reason(format!(
+                "Unsupported algorithm: {}",
+                algorithm
+            )))
+        }
     };
 
     // Generate key in slot 9e with no PIN policy and no touch policy
@@ -199,8 +208,8 @@ fn der_ecdsa_to_raw(der: &[u8]) -> Result<Vec<u8>> {
 fn pkcs1_v15_pad_sha256(hash: &[u8]) -> Result<Vec<u8>> {
     // DigestInfo for SHA-256
     let digest_info_prefix: &[u8] = &[
-        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
-        0x01, 0x05, 0x00, 0x04, 0x20,
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
+        0x05, 0x00, 0x04, 0x20,
     ];
 
     let t_len = digest_info_prefix.len() + hash.len();

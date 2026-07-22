@@ -1,79 +1,24 @@
-/// Thin Rust facade over in-process se-helper ([`aauth_macos_se_ffi`]).
+/// Secure Enclave backend via the Cargo-built `se-helper` CLI subprocess.
 ///
-/// Mirrors how `@aauth/local-keys` `backends/secure-enclave.ts` shells out to
-/// `se-helper` (`generate` / `sign` with hex hash / `list` / `public-key`).
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-use std::ptr;
+/// Mirrors `@aauth/local-keys` `backends/secure-enclave.ts`: argv commands and
+/// JSON stdout. The helper is built and adhoc-codesigned by `aauth-macos-se-ffi`.
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
-use aauth_macos_se_ffi::{
-    aauth_se_free, aauth_se_generate, aauth_se_is_available, aauth_se_list, aauth_se_public_key,
-    aauth_se_sign_hash,
-};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use serde_json::Value;
 
 use crate::{Error, GeneratedKey, HardwareKeyInfo, Result, SignatureResult};
 
 const AAUTH_KEY_LABEL_PREFIX: &str = "com.aauth.agent.";
+const HELPER_TIMEOUT: Duration = Duration::from_secs(10);
 
-fn take_c_string(ptr: *mut c_char) -> String {
-    if ptr.is_null() {
-        return String::new();
-    }
-    let s = unsafe { CStr::from_ptr(ptr) }
-        .to_string_lossy()
-        .into_owned();
-    unsafe { aauth_se_free(ptr.cast()) };
-    s
-}
-
-fn take_error(ok: bool, err: *mut c_char) -> Result<()> {
-    if ok {
-        if !err.is_null() {
-            unsafe { aauth_se_free(err.cast()) };
-        }
-        Ok(())
-    } else {
-        let msg = if err.is_null() {
-            "unknown Secure Enclave error".into()
-        } else {
-            take_c_string(err)
-        };
-        Err(Error::from_reason(msg))
-    }
-}
-
-fn take_bytes(ok: bool, ptr: *mut u8, len: usize, err: *mut c_char) -> Result<Vec<u8>> {
-    take_error(ok, err)?;
-    let bytes = if ptr.is_null() || len == 0 {
-        Vec::new()
-    } else {
-        unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec()
-    };
-    if !ptr.is_null() {
-        unsafe { aauth_se_free(ptr.cast()) };
-    }
-    Ok(bytes)
-}
-
-fn c_string(s: &str) -> Result<CString> {
-    CString::new(s).map_err(|_| Error::from_reason("CString contains NUL"))
-}
-
-fn bytes_to_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        s.push_str(&format!("{b:02x}"));
-    }
-    s
-}
-
-/// Check if Secure Enclave is available
+/// Check if Secure Enclave is available (helper present and `list` succeeds).
 pub fn discover() -> Option<HardwareKeyInfo> {
     #[cfg(target_arch = "aarch64")]
     {
-        if !unsafe { aauth_se_is_available() } {
-            return None;
-        }
+        aauth_macos_se_ffi::helper_path()?;
+        call_helper(&["list"]).ok()?;
         Some(HardwareKeyInfo {
             backend: "secure-enclave".to_string(),
             description: "macOS Secure Enclave (Apple Silicon)".to_string(),
@@ -96,18 +41,13 @@ pub fn generate_key(algorithm: &str) -> Result<GeneratedKey> {
         ));
     }
 
-    // Same label scheme as @aauth/local-keys secure-enclave.ts
     let label = format!("{}{}_{}", AAUTH_KEY_LABEL_PREFIX, iso_date(), random_hex3());
-    let c_label = c_string(&label)?;
-
-    let mut jwk_ptr = ptr::null_mut();
-    let mut err = ptr::null_mut();
-    let ok = unsafe { aauth_se_generate(c_label.as_ptr(), &mut jwk_ptr, &mut err) };
-    take_error(ok, err)?;
-    let public_jwk = take_c_string(jwk_ptr);
-    if public_jwk.is_empty() {
-        return Err(Error::from_reason("SE generate returned empty JWK"));
-    }
+    let result = call_helper(&["generate", &label])?;
+    let public_jwk = result
+        .get("publicJwk")
+        .ok_or_else(|| Error::from_reason("se-helper generate missing publicJwk"))?;
+    let public_jwk = serde_json::to_string(public_jwk)
+        .map_err(|e| Error::from_reason(format!("serialize publicJwk: {e}")))?;
 
     Ok(GeneratedKey {
         backend: "secure-enclave".to_string(),
@@ -125,42 +65,45 @@ pub fn sign_hash(key_id: &str, hash: &[u8]) -> Result<SignatureResult> {
             hash.len()
         )));
     }
-    // se-helper / secure-enclave.ts pass the digest as hex
     let hex = bytes_to_hex(hash);
-    let c_label = c_string(key_id)?;
-    let c_hex = c_string(&hex)?;
+    let result = call_helper(&["sign", key_id, &hex])?;
+    let sig_b64 = result
+        .get("signature")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::from_reason("se-helper sign missing signature"))?;
+    let signature = URL_SAFE_NO_PAD
+        .decode(sig_b64.as_bytes())
+        .map_err(|e| Error::from_reason(format!("decode signature: {e}")))?;
 
-    let mut sig_ptr = ptr::null_mut();
-    let mut sig_len = 0usize;
-    let mut err = ptr::null_mut();
-    let ok = unsafe {
-        aauth_se_sign_hash(
-            c_label.as_ptr(),
-            c_hex.as_ptr(),
-            &mut sig_ptr,
-            &mut sig_len,
-            &mut err,
-        )
-    };
-    let signature = take_bytes(ok, sig_ptr, sig_len, err)?;
     Ok(SignatureResult {
         signature,
         algorithm: "ES256".to_string(),
     })
 }
 
-/// List keys stored in the Secure Enclave with our label prefix
+/// List keys stored in the Secure Enclave
 pub fn list_keys() -> Result<Vec<GeneratedKey>> {
-    let labels = list_labels()?;
+    let result = call_helper(&["list"])?;
+    let items = result
+        .as_array()
+        .ok_or_else(|| Error::from_reason("se-helper list did not return an array"))?;
+
     let mut keys = Vec::new();
-    for label in labels {
-        let public_jwk = match public_jwk_for_label(&label) {
-            Ok(jwk) => jwk,
-            Err(_) => "{}".to_string(),
+    for item in items {
+        let label = item
+            .get("label")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::from_reason("se-helper list item missing label"))?;
+        let public_jwk = match call_helper(&["public-key", label]) {
+            Ok(pk) => pk
+                .get("publicJwk")
+                .map(|j| serde_json::to_string(j).unwrap_or_else(|_| "{}".into()))
+                .unwrap_or_else(|| "{}".into()),
+            Err(_) => "{}".into(),
         };
         keys.push(GeneratedKey {
             backend: "secure-enclave".to_string(),
-            key_id: label,
+            key_id: label.to_string(),
             algorithm: "ES256".to_string(),
             public_jwk,
         });
@@ -168,29 +111,76 @@ pub fn list_keys() -> Result<Vec<GeneratedKey>> {
     Ok(keys)
 }
 
-fn public_jwk_for_label(label: &str) -> Result<String> {
-    let c_label = c_string(label)?;
-    let mut jwk_ptr = ptr::null_mut();
-    let mut err = ptr::null_mut();
-    let ok = unsafe { aauth_se_public_key(c_label.as_ptr(), &mut jwk_ptr, &mut err) };
-    take_error(ok, err)?;
-    let json = take_c_string(jwk_ptr);
-    if json.is_empty() {
-        return Err(Error::from_reason("SE public-key returned empty JWK"));
+fn call_helper(args: &[&str]) -> Result<Value> {
+    let helper = aauth_macos_se_ffi::helper_path().ok_or_else(|| {
+        Error::from_reason(
+            "se-helper binary not found (build aauth-macos-se-ffi on macOS aarch64, or set AAUTH_SE_HELPER)",
+        )
+    })?;
+
+    // Soft 10s wall clock: poll try_wait then read pipes (same budget as packages-js).
+    let mut child = Command::new(&helper)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| Error::from_reason(format!("spawn se-helper: {e}")))?;
+
+    let deadline = Instant::now() + HELPER_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(Error::from_reason("se-helper timed out after 10s"));
+            }
+            Err(e) => return Err(Error::from_reason(format!("wait se-helper: {e}"))),
+        }
+    };
+
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    if let Some(mut out) = child.stdout.take() {
+        use std::io::Read;
+        out.read_to_end(&mut stdout)
+            .map_err(|e| Error::from_reason(format!("read se-helper stdout: {e}")))?;
     }
-    Ok(json)
+    if let Some(mut err) = child.stderr.take() {
+        use std::io::Read;
+        err.read_to_end(&mut stderr)
+            .map_err(|e| Error::from_reason(format!("read se-helper stderr: {e}")))?;
+    }
+
+    if !status.success() {
+        let stderr = String::from_utf8_lossy(&stderr);
+        let msg = stderr.trim();
+        return Err(Error::from_reason(if msg.is_empty() {
+            format!("se-helper exited with {status}")
+        } else {
+            msg.to_string()
+        }));
+    }
+
+    let stdout = String::from_utf8_lossy(&stdout);
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        return Err(Error::from_reason("se-helper returned empty stdout"));
+    }
+    serde_json::from_str(trimmed)
+        .map_err(|e| Error::from_reason(format!("parse se-helper JSON: {e}: {trimmed}")))
 }
 
-fn list_labels() -> Result<Vec<String>> {
-    let mut labels_ptr = ptr::null_mut();
-    let mut err = ptr::null_mut();
-    let ok = unsafe { aauth_se_list(&mut labels_ptr, &mut err) };
-    take_error(ok, err)?;
-    let joined = take_c_string(labels_ptr);
-    if joined.is_empty() {
-        return Ok(Vec::new());
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        s.push_str(&format!("{b:02x}"));
     }
-    Ok(joined.split('\n').map(str::to_string).collect())
+    s
 }
 
 fn iso_date() -> String {
