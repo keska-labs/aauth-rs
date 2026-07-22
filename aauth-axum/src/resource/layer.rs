@@ -201,11 +201,11 @@ where
                     }
                     Ok(Some(opaque_token)) => {
                         let agent_id = agent_sub_from_jwt(&jwt);
-                        if service.validate_opaque(opaque_token, &agent_id) {
-                            if let Ok(ParsedToken::Agent(agent)) = ParsedToken::parse(&jwt) {
-                                req.extensions_mut().insert(ParsedToken::Agent(agent));
-                                return inner.call(req).await;
-                            }
+                        if service.validate_opaque(opaque_token, &agent_id)
+                            && let Ok(ParsedToken::Agent(agent)) = ParsedToken::parse(&jwt)
+                        {
+                            req.extensions_mut().insert(ParsedToken::Agent(agent));
+                            return inner.call(req).await;
                         }
                         return Ok(unauthorized_message("invalid opaque access token"));
                     }
@@ -238,10 +238,10 @@ where
                 }
             };
 
-            if let ParsedToken::Auth(ref auth) = verified {
-                if let Err(e) = verify_auth_token_binding(auth, &resource_url) {
-                    return Ok(unauthorized_err(e));
-                }
+            if let ParsedToken::Auth(ref auth) = verified
+                && let Err(e) = verify_auth_token_binding(auth, &resource_url)
+            {
+                return Ok(unauthorized_err(e));
             }
 
             match (&mode, &verified) {
@@ -401,10 +401,10 @@ fn unauthorized_err(err: impl Into<aauth::AAuthError>) -> Response<Body> {
         }
         .expect("valid response");
 
-    if let Some(sig_err) = signature_error {
-        if let Ok(value) = axum::http::HeaderValue::from_str(&sig_err.to_header()) {
-            builder.headers_mut().insert(SIGNATURE_ERROR, value);
-        }
+    if let Some(sig_err) = signature_error
+        && let Ok(value) = axum::http::HeaderValue::from_str(&sig_err.to_header())
+    {
+        builder.headers_mut().insert(SIGNATURE_ERROR, value);
     }
     builder
 }

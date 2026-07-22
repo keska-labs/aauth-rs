@@ -108,24 +108,24 @@ fn validate_agent_token_claims(agent: &AgentClaims) -> Result<()> {
         .into());
     }
 
-    if let Some(ps) = &agent.ps {
-        if !is_valid_server_identifier(ps) {
-            return Err(VerifyError::Invalid {
-                typ: JwtTyp::Agent,
-                reason: VerifyReason::InvalidPs,
-            }
-            .into());
+    if let Some(ps) = &agent.ps
+        && !is_valid_server_identifier(ps)
+    {
+        return Err(VerifyError::Invalid {
+            typ: JwtTyp::Agent,
+            reason: VerifyReason::InvalidPs,
         }
+        .into());
     }
 
-    if let Some(parent) = &agent.parent_agent {
-        if !is_valid_agent_identifier(parent) {
-            return Err(VerifyError::Invalid {
-                typ: JwtTyp::Agent,
-                reason: VerifyReason::InvalidParentAgent,
-            }
-            .into());
+    if let Some(parent) = &agent.parent_agent
+        && !is_valid_agent_identifier(parent)
+    {
+        return Err(VerifyError::Invalid {
+            typ: JwtTyp::Agent,
+            reason: VerifyReason::InvalidParentAgent,
         }
+        .into());
     }
 
     Ok(())
@@ -176,16 +176,16 @@ pub async fn verify_resource_token<F: MetadataFetcher>(
         .into());
     }
 
-    if let Some(expected) = &options.expected_agent {
-        if &claims.agent != expected {
-            return Err(VerifyError::AgentMismatch.into());
-        }
+    if let Some(expected) = &options.expected_agent
+        && &claims.agent != expected
+    {
+        return Err(VerifyError::AgentMismatch.into());
     }
 
-    if let Some(expected_jkt) = &options.expected_agent_jkt {
-        if &claims.agent_jkt != expected_jkt {
-            return Err(VerifyError::AgentJktMismatch.into());
-        }
+    if let Some(expected_jkt) = &options.expected_agent_jkt
+        && &claims.agent_jkt != expected_jkt
+    {
+        return Err(VerifyError::AgentJktMismatch.into());
     }
 
     let decoding_key =
@@ -252,14 +252,14 @@ fn verify_client_auth_token_claims(
     }
 
     // Step 6: if act is present, act.agent must be a non-empty AAuth agent id.
-    if let Some(act) = &auth.act {
-        if act.agent.is_empty() || !act.agent.starts_with("aauth:") {
-            return Err(VerifyError::token(
-                JwtTyp::Auth.verify_error_code(),
-                "act.agent must be a non-empty aauth: agent identifier",
-            )
-            .into());
-        }
+    if let Some(act) = &auth.act
+        && (act.agent.is_empty() || !act.agent.starts_with("aauth:"))
+    {
+        return Err(VerifyError::token(
+            JwtTyp::Auth.verify_error_code(),
+            "act.agent must be a non-empty aauth: agent identifier",
+        )
+        .into());
     }
 
     Ok(())

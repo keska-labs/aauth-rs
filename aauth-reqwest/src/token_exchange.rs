@@ -312,12 +312,10 @@ pub(crate) async fn exchange_token_with<S: SignedSend>(
             .headers()
             .get(AAUTH_REQUIREMENT)
             .and_then(|v| v.to_str().ok())
-        {
-            if let Ok(AAuthChallenge::Interaction { url, code }) =
+            && let Ok(AAuthChallenge::Interaction { url, code }) =
                 AAuthChallenge::from_header(header)
-            {
-                deferred = deferred.interaction(url, code);
-            }
+        {
+            deferred = deferred.interaction(url, code);
         }
         if let Some(cb) = options.on_interaction {
             deferred = deferred.on_interaction(cb);

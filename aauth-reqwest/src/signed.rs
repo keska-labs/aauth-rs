@@ -22,14 +22,14 @@ pub struct SigningOptions {
 impl SigningOptions {
     /// Set `AAuth-Capabilities` / `AAuth-Mission` on the request when configured.
     pub fn apply_to(&self, request: &mut Request) {
-        if let Some(capabilities) = &self.capabilities {
-            if !capabilities.is_empty() {
-                request.headers_mut().insert(
-                    AAUTH_CAPABILITIES,
-                    HeaderValue::from_str(&Capability::join_header(capabilities))
-                        .expect("valid capabilities header"),
-                );
-            }
+        if let Some(capabilities) = &self.capabilities
+            && !capabilities.is_empty()
+        {
+            request.headers_mut().insert(
+                AAUTH_CAPABILITIES,
+                HeaderValue::from_str(&Capability::join_header(capabilities))
+                    .expect("valid capabilities header"),
+            );
         }
         if let Some(mission) = &self.mission {
             request.headers_mut().insert(

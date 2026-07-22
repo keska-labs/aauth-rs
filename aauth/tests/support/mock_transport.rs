@@ -56,10 +56,7 @@ impl Middleware for MockTransport {
         _extensions: &mut http::Extensions,
         _next: Next<'_>,
     ) -> std::result::Result<Response, Error> {
-        self.inner
-            .handle(req)
-            .await
-            .map_err(|e| Error::Middleware(Box::new(e)))
+        self.inner.handle(req).await.map_err(Error::middleware)
     }
 }
 
@@ -279,7 +276,7 @@ impl MockServerState {
         }
 
         if self.deferred_mode {
-            let id = generate_pending_id(&mut rand::rng());
+            let id = generate_pending_id();
             let interaction_url = format!("{}/interact", self.person_server_url);
             let location = pending_location(&self.person_server_url, "/pending", &id);
             let code = aauth::interaction_code::generate_code();

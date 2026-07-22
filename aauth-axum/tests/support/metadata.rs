@@ -124,10 +124,10 @@ impl MetadataFetcher for MultiPartyMetadataFetcher {
     async fn resolve_jwks_uri(&self, iss: &str, dwk: &str) -> aauth::Result<String> {
         match dwk {
             "aauth-agent.json" => {
-                if let Some(http) = &self.http {
-                    if !same_origin(&self.agent_url, iss) {
-                        return http.resolve_jwks_uri(iss, dwk).await;
-                    }
+                if let Some(http) = &self.http
+                    && !same_origin(&self.agent_url, iss)
+                {
+                    return http.resolve_jwks_uri(iss, dwk).await;
                 }
                 self.agent.resolve_jwks_uri(iss, dwk).await
             }

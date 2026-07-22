@@ -79,16 +79,16 @@ impl CachedMetadataFetcher {
     }
 
     async fn fetch_metadata(&self, metadata_url: &str) -> Result<AgentProviderMetadata> {
-        if let Some(entry) = self.cache.metadata.lock().unwrap().get(metadata_url) {
-            if entry.fetched_at.elapsed() < METADATA_CACHE_TTL {
-                return Ok(AgentProviderMetadata::from_jwks_uri(entry.jwks_uri.clone()));
-            }
+        if let Some(entry) = self.cache.metadata.lock().unwrap().get(metadata_url)
+            && entry.fetched_at.elapsed() < METADATA_CACHE_TTL
+        {
+            return Ok(AgentProviderMetadata::from_jwks_uri(entry.jwks_uri.clone()));
         }
 
-        if !self.cache.can_fetch(metadata_url) {
-            if let Some(entry) = self.cache.metadata.lock().unwrap().get(metadata_url) {
-                return Ok(AgentProviderMetadata::from_jwks_uri(entry.jwks_uri.clone()));
-            }
+        if !self.cache.can_fetch(metadata_url)
+            && let Some(entry) = self.cache.metadata.lock().unwrap().get(metadata_url)
+        {
+            return Ok(AgentProviderMetadata::from_jwks_uri(entry.jwks_uri.clone()));
         }
 
         self.cache.record_fetch(metadata_url);

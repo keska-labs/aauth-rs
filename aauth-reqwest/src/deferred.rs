@@ -156,10 +156,10 @@ pub(crate) async fn poll_deferred_with<S: SignedSend>(
         .unwrap_or(DEFAULT_MAX_POLL_DURATION);
     let deadline = Instant::now() + Duration::from_secs(max_poll_duration);
 
-    if let (Some(url), Some(code)) = (&options.interaction_url, &options.interaction_code) {
-        if let Some(on_interaction) = &options.on_interaction {
-            on_interaction(url.clone(), code.clone());
-        }
+    if let (Some(url), Some(code)) = (&options.interaction_url, &options.interaction_code)
+        && let Some(on_interaction) = &options.on_interaction
+    {
+        on_interaction(url.clone(), code.clone());
     }
 
     let mut backoff_ms = 1000u64;
@@ -196,36 +196,32 @@ pub(crate) async fn poll_deferred_with<S: SignedSend>(
         }
 
         if status == 202 {
-            if let Some(on_clarification) = &options.on_clarification {
-                if is_json {
-                    if let Ok(body) = response.json::<ClarificationChallenge>().await {
-                        let answer = on_clarification(body.clarification).await;
-                        let payload = ClarificationResponse {
-                            clarification_response: answer,
-                        };
-                        let body =
-                            serde_json::to_string(&payload).map_err(DeferredError::Serialize)?;
-                        let http_req = HttpRequest::builder()
-                            .method(Method::POST)
-                            .uri(&poll_url)
-                            .header(CONTENT_TYPE, "application/json")
-                            .body(body.into_bytes())
-                            .expect("valid http request");
-                        let _ = send
-                            .send(Request::try_from(http_req).expect("valid reqwest request"))
-                            .await?;
-                    }
-                }
+            if let Some(on_clarification) = &options.on_clarification
+                && is_json
+                && let Ok(body) = response.json::<ClarificationChallenge>().await
+            {
+                let answer = on_clarification(body.clarification).await;
+                let payload = ClarificationResponse {
+                    clarification_response: answer,
+                };
+                let body = serde_json::to_string(&payload).map_err(DeferredError::Serialize)?;
+                let http_req = HttpRequest::builder()
+                    .method(Method::POST)
+                    .uri(&poll_url)
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(body.into_bytes())
+                    .expect("valid http request");
+                let _ = send
+                    .send(Request::try_from(http_req).expect("valid reqwest request"))
+                    .await?;
             }
 
-            if let Some(header) = requirement_header {
-                if let Ok(AAuthChallenge::Interaction { url, code }) =
+            if let Some(header) = requirement_header
+                && let Ok(AAuthChallenge::Interaction { url, code }) =
                     AAuthChallenge::from_header(&header)
-                {
-                    if let Some(on_interaction) = &options.on_interaction {
-                        on_interaction(url, code);
-                    }
-                }
+                && let Some(on_interaction) = &options.on_interaction
+            {
+                on_interaction(url, code);
             }
 
             let wait_ms = retry_delay_from_secs(retry_after, backoff_ms);
