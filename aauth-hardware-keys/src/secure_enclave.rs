@@ -1,24 +1,18 @@
-/// Secure Enclave backend via the Cargo-built `se-helper` CLI subprocess.
+/// Secure Enclave backend via [`aauth_macos_se_helper`].
 ///
-/// Mirrors `@aauth/local-keys` `backends/secure-enclave.ts`: argv commands and
-/// JSON stdout. The helper is built and adhoc-codesigned by `aauth-macos-se-ffi`.
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
-
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use serde_json::Value;
-
+/// Label scheme and mapping to [`GeneratedKey`] / [`HardwareKeyInfo`] live here;
+/// subprocess I/O is in the helper crate.
 use crate::{Error, GeneratedKey, HardwareKeyInfo, Result, SignatureResult};
 
 const AAUTH_KEY_LABEL_PREFIX: &str = "com.aauth.agent.";
-const HELPER_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Check if Secure Enclave is available (helper present and `list` succeeds).
 pub fn discover() -> Option<HardwareKeyInfo> {
     #[cfg(target_arch = "aarch64")]
     {
-        aauth_macos_se_ffi::helper_path()?;
-        call_helper(&["list"]).ok()?;
+        if !aauth_macos_se_helper::is_available() {
+            return None;
+        }
         Some(HardwareKeyInfo {
             backend: "secure-enclave".to_string(),
             description: "macOS Secure Enclave (Apple Silicon)".to_string(),
@@ -42,39 +36,19 @@ pub fn generate_key(algorithm: &str) -> Result<GeneratedKey> {
     }
 
     let label = format!("{}{}_{}", AAUTH_KEY_LABEL_PREFIX, iso_date(), random_hex3());
-    let result = call_helper(&["generate", &label])?;
-    let public_jwk = result
-        .get("publicJwk")
-        .ok_or_else(|| Error::from_reason("se-helper generate missing publicJwk"))?;
-    let public_jwk = serde_json::to_string(public_jwk)
-        .map_err(|e| Error::from_reason(format!("serialize publicJwk: {e}")))?;
+    let out = aauth_macos_se_helper::generate(&label).map_err(map_err)?;
 
     Ok(GeneratedKey {
         backend: "secure-enclave".to_string(),
-        key_id: label,
-        algorithm: "ES256".to_string(),
-        public_jwk,
+        key_id: out.label,
+        algorithm: out.algorithm,
+        public_jwk: out.public_jwk,
     })
 }
 
 /// Sign a SHA-256 hash with a Secure Enclave key
 pub fn sign_hash(key_id: &str, hash: &[u8]) -> Result<SignatureResult> {
-    if hash.len() != 32 {
-        return Err(Error::from_reason(format!(
-            "Expected 32-byte SHA-256 digest, got {}",
-            hash.len()
-        )));
-    }
-    let hex = bytes_to_hex(hash);
-    let result = call_helper(&["sign", key_id, &hex])?;
-    let sig_b64 = result
-        .get("signature")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::from_reason("se-helper sign missing signature"))?;
-    let signature = URL_SAFE_NO_PAD
-        .decode(sig_b64.as_bytes())
-        .map_err(|e| Error::from_reason(format!("decode signature: {e}")))?;
-
+    let signature = aauth_macos_se_helper::sign_hash(key_id, hash).map_err(map_err)?;
     Ok(SignatureResult {
         signature,
         algorithm: "ES256".to_string(),
@@ -83,104 +57,27 @@ pub fn sign_hash(key_id: &str, hash: &[u8]) -> Result<SignatureResult> {
 
 /// List keys stored in the Secure Enclave
 pub fn list_keys() -> Result<Vec<GeneratedKey>> {
-    let result = call_helper(&["list"])?;
-    let items = result
-        .as_array()
-        .ok_or_else(|| Error::from_reason("se-helper list did not return an array"))?;
-
+    let items = aauth_macos_se_helper::list().map_err(map_err)?;
     let mut keys = Vec::new();
     for item in items {
-        let label = item
-            .get("label")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::from_reason("se-helper list item missing label"))?;
-        let public_jwk = match call_helper(&["public-key", label]) {
-            Ok(pk) => pk
-                .get("publicJwk")
-                .map(|j| serde_json::to_string(j).unwrap_or_else(|_| "{}".into()))
-                .unwrap_or_else(|| "{}".into()),
-            Err(_) => "{}".into(),
-        };
+        let public_jwk =
+            aauth_macos_se_helper::public_key(&item.label).unwrap_or_else(|_| "{}".into());
         keys.push(GeneratedKey {
             backend: "secure-enclave".to_string(),
-            key_id: label.to_string(),
-            algorithm: "ES256".to_string(),
+            key_id: item.label,
+            algorithm: if item.algorithm.is_empty() {
+                "ES256".to_string()
+            } else {
+                item.algorithm
+            },
             public_jwk,
         });
     }
     Ok(keys)
 }
 
-fn call_helper(args: &[&str]) -> Result<Value> {
-    let helper = aauth_macos_se_ffi::helper_path().ok_or_else(|| {
-        Error::from_reason(
-            "se-helper binary not found (build aauth-macos-se-ffi on macOS aarch64, or set AAUTH_SE_HELPER)",
-        )
-    })?;
-
-    // Soft 10s wall clock: poll try_wait then read pipes (same budget as packages-js).
-    let mut child = Command::new(&helper)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| Error::from_reason(format!("spawn se-helper: {e}")))?;
-
-    let deadline = Instant::now() + HELPER_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(Error::from_reason("se-helper timed out after 10s"));
-            }
-            Err(e) => return Err(Error::from_reason(format!("wait se-helper: {e}"))),
-        }
-    };
-
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-    if let Some(mut out) = child.stdout.take() {
-        use std::io::Read;
-        out.read_to_end(&mut stdout)
-            .map_err(|e| Error::from_reason(format!("read se-helper stdout: {e}")))?;
-    }
-    if let Some(mut err) = child.stderr.take() {
-        use std::io::Read;
-        err.read_to_end(&mut stderr)
-            .map_err(|e| Error::from_reason(format!("read se-helper stderr: {e}")))?;
-    }
-
-    if !status.success() {
-        let stderr = String::from_utf8_lossy(&stderr);
-        let msg = stderr.trim();
-        return Err(Error::from_reason(if msg.is_empty() {
-            format!("se-helper exited with {status}")
-        } else {
-            msg.to_string()
-        }));
-    }
-
-    let stdout = String::from_utf8_lossy(&stdout);
-    let trimmed = stdout.trim();
-    if trimmed.is_empty() {
-        return Err(Error::from_reason("se-helper returned empty stdout"));
-    }
-    serde_json::from_str(trimmed)
-        .map_err(|e| Error::from_reason(format!("parse se-helper JSON: {e}: {trimmed}")))
-}
-
-fn bytes_to_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        s.push_str(&format!("{b:02x}"));
-    }
-    s
+fn map_err(e: aauth_macos_se_helper::Error) -> Error {
+    Error::from_reason(e.to_string())
 }
 
 fn iso_date() -> String {

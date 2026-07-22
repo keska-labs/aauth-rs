@@ -3,7 +3,7 @@ import CryptoKit
 
 // AAuth Secure Enclave Helper
 // A codesigned CLI that manages persistent Secure Enclave keys.
-// Built by aauth-macos-se-ffi (Cargo) and spawned by aauth-hardware-keys.
+// Built by aauth-macos-se-helper (Cargo) and invoked via its typed Rust client.
 // Protocol matches packages-js local-keys/se-helper (also used from Node).
 //
 // Usage:

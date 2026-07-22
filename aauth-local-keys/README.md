@@ -63,7 +63,7 @@ Same fallback chain as the JS package (hardware preferred):
 
 SE matches `@aauth/bootstrap` / se-helper: CryptoKit blobs in keychain
 `service=com.aauth.secure-enclave`, via a Cargo-built adhoc-codesigned
-`se-helper` subprocess (`aauth-macos-se-ffi` → `target/{debug,release}/se-helper`;
+`se-helper` subprocess (`aauth-macos-se-helper` → `target/{debug,release}/se-helper`;
 override with `AAUTH_SE_HELPER`). Enrollment stays with bootstrap.
 
 ## License

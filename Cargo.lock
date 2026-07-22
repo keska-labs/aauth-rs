@@ -58,10 +58,9 @@ dependencies = [
 name = "aauth-hardware-keys"
 version = "0.1.0"
 dependencies = [
- "aauth-macos-se-ffi",
+ "aauth-macos-se-helper",
  "base64",
  "der 0.7.10",
- "serde_json",
  "yubikey",
 ]
 
@@ -92,8 +91,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "aauth-macos-se-ffi"
+name = "aauth-macos-se-helper"
 version = "0.1.0"
+dependencies = [
+ "base64",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "aauth-policy"
