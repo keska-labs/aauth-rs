@@ -23,7 +23,7 @@ For the agent path, challenge verification always runs before token exchange; au
 
 ## Quick start
 
-Use [`TestKeys`](https://docs.rs/aauth/latest/aauth/keys/struct.TestKeys.html) in development, or implement [`KeyMaterialProvider`](https://docs.rs/aauth/latest/aauth/agent/keys/trait.KeyMaterialProvider.html) for production key material:
+Use [`TestKeys`](https://docs.rs/aauth/latest/aauth/keys/struct.TestKeys.html) in development, [`aauth-local-keys::LocalKeysProvider`](../aauth-local-keys) for keys from `~/.aauth` / hardware (same as `@aauth/local-keys`), or implement [`KeyMaterialProvider`](https://docs.rs/aauth/latest/aauth/agent/keys/trait.KeyMaterialProvider.html) yourself:
 
 ```rust,no_run
 use aauth::TestKeys;

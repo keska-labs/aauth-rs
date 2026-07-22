@@ -439,6 +439,9 @@ pub enum AgentAuthError {
 
     #[error("hwk signature key cannot supply agent JWT")]
     HwkUnsupported,
+
+    #[error("key material: {0}")]
+    KeyMaterial(String),
 }
 
 #[derive(Debug, Error)]
