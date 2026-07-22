@@ -125,6 +125,9 @@ pub enum SignatureError {
     #[error("hwk signature key not supported")]
     HwkUnsupported,
 
+    #[error("request missing Host / URI authority for signing")]
+    MissingAuthority,
+
     #[error("invalid header value")]
     InvalidHeaderValue(#[source] http::header::InvalidHeaderValue),
 
@@ -176,6 +179,7 @@ impl SignatureError {
             | Self::InvalidEncoding(_)
             | Self::VerificationFailed
             | Self::InvalidHeaderValue(_)
+            | Self::MissingAuthority
             | Self::HttpsigKey(_) => "invalid_signature",
         }
     }

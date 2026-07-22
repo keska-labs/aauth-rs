@@ -99,12 +99,11 @@ aauth-axum = { version = "0.0", default-features = false, features = ["resource"
 use std::sync::Arc;
 
 use aauth::protocol::{SignatureKey, SignatureKeyJwt, SigningMaterial};
-use aauth::{NoResourceAccessService, ResourceAccessMode, TestKeys};
+use aauth::{NoResourceAccessService, RequestSigningExt, ResourceAccessMode, TestKeys};
 use aauth_axum::{ResourceAuthLayer, VerifiedAAuthToken};
 use axum::body::Body;
-use axum::http::{Request, StatusCode, header::HOST};
+use axum::http::{HeaderValue, Request, StatusCode, header::HOST};
 use axum::{Json, Router, routing::get};
-use httpsig_key::{SignOptions, sign};
 use tower::ServiceExt;
 
 #[tokio::main]
@@ -134,24 +133,14 @@ let signing = SigningMaterial {
 
 let authority = "resource.example";
 let path = "/api/data";
-let mut headers = axum::http::HeaderMap::new();
-headers.insert(HOST, authority.parse().unwrap());
-sign(
-    &mut headers,
-    "GET",
-    authority,
-    path,
-    &signing,
-    &SignOptions::default(),
-)
-.unwrap();
-
-let mut req = Request::builder()
+let req = Request::builder()
     .method("GET")
     .uri(path)
+    .header(HOST, HeaderValue::from_static(authority))
     .body(Body::empty())
+    .unwrap()
+    .signed(&signing)
     .unwrap();
-*req.headers_mut() = headers;
 
 let res = app.oneshot(req).await.unwrap();
 assert_eq!(res.status(), StatusCode::OK);

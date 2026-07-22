@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `RequestSigningExt` on `http::Request` (`aauth::http_util` / crate root) with `.sign` / `.signed` / auth-token variants; `aauth_sign_options` auto-covers `authorization` / `aauth-mission` from request headers; `signature_parts` for `@method` / `@authority` / `@path`; `SignatureError::MissingAuthority` when Host/URI authority is absent.
 - Runnable README doctests for agent, Person/Access/Resource servers, and `httpsig-key` sign/verify (workspace README exercised via `aauth-axum` with `--features full`).
 - `aauth-axum` depends on `tokio` and `reqwest`; feature `full` also enables optional `aauth-reqwest` (with `person-server`) for workspace README doctests and federation examples.
 - `AccessServerClient` / `AbsentAccessServerClient` / `AccessServerExchangeOutcome` for Person Server → Access Server federation (HTTP-free in `aauth`).
@@ -63,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `aauth` / `aauth-reqwest` `RequestSigningExt` no longer take `SignOptions`; signing infers covered extras (`authorization`, `aauth-mission`) from request headers via `aauth_sign_options`.
 - `PersonServerConfig.http_client: reqwest::Client` replaced by `access_server: C` where `C: AccessServerClient` (default `AbsentAccessServerClient`).
 - `PolicyPersonTokenService` and `PersonServerState` / `person_router` take an `AccessServerClient` type parameter.
 - Call sites sign/verify with `httpsig_key::sign` / `httpsig_key::verify` directly using `SigningMaterial`.

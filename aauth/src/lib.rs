@@ -35,6 +35,7 @@ pub use error::{
     AAuthError, AgentAuthError, DeferredError, HeaderError, IntoAauthProtocol, JwtError,
     MetadataError, ResourceTokenError, Result, SignatureError, VerifyError, VerifyReason,
 };
+pub use http_util::{RequestSigningExt, aauth_sign_options};
 pub use httpsig_key::SignatureErrorHeader;
 pub use interaction_code::{canonicalize_code, generate_code};
 pub use jwt::{

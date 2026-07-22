@@ -1,7 +1,8 @@
 use aauth::SignatureError;
+use aauth::http_util::aauth_sign_options;
 use aauth::protocol::{AAUTH_CAPABILITIES, AAUTH_MISSION, Capability, Mission};
 use http::header::{AUTHORIZATION, HeaderValue};
-use httpsig_key::{SignOptions, SignatureKey, SignatureKeyJwt, SigningMaterial, sign};
+use httpsig_key::{SignatureKey, SignatureKeyJwt, SigningMaterial, sign};
 use reqwest::{Request, Response};
 
 use crate::error::Result;
@@ -47,6 +48,9 @@ pub(crate) fn apply_opaque_token(request: &mut Request, token: &str) {
 }
 
 /// Extension trait: sign a `reqwest::Request` with [`SigningMaterial`].
+///
+/// Covers the AAuth base components plus request-state extras via
+/// [`aauth::http_util::aauth_sign_options`].
 pub trait RequestSigningExt: Sized {
     fn sign(&mut self, key_material: &SigningMaterial) -> Result<()>;
 
@@ -80,23 +84,11 @@ impl RequestSigningExt for Request {
             }
         }
 
-        let authorization = self
-            .headers()
-            .get(AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .filter(|v| v.starts_with("AAuth "))
-            .map(str::to_string);
-
         let method = self.method().as_str().to_string();
         let authority = self.url().authority().to_string();
         let path = self.url().path().to_string();
 
-        let mut options = SignOptions::default();
-        if let Some(auth) = authorization {
-            options
-                .extras
-                .push((AUTHORIZATION.as_str().to_string(), auth));
-        }
+        let options = aauth_sign_options(self.headers());
         sign(
             self.headers_mut(),
             &method,

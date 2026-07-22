@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use axum::body::Body;
-use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, HOST};
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{Request, Response, StatusCode};
 use axum::response::IntoResponse;
 use tower::{Layer, Service};
@@ -362,23 +362,7 @@ fn extract_aauth_access(headers: &axum::http::HeaderMap) -> aauth::Result<Option
 }
 
 fn request_signature_parts<B>(req: &Request<B>) -> (String, String, String) {
-    let method = req.method().as_str().to_string();
-    let uri = req.uri();
-    let authority = req
-        .headers()
-        .get(HOST)
-        .and_then(|h| h.to_str().ok())
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            uri.host()
-                .map(|host| match uri.port_u16() {
-                    Some(port) => format!("{host}:{port}"),
-                    None => host.to_string(),
-                })
-                .unwrap_or_default()
-        });
-    let path = uri.path().to_string();
-    (method, authority, path)
+    aauth::http_util::signature_parts(req)
 }
 
 /// Spec: `#requirement-agent-token`
