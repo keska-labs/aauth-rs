@@ -26,6 +26,9 @@ pub enum AgentError {
     #[error(transparent)]
     Aauth(#[from] AAuthError),
 
+    #[error("middleware error")]
+    Middleware(Box<dyn std::error::Error + Send + Sync>),
+
     #[error("request body is not cloneable")]
     BodyNotCloneable,
 }
@@ -42,16 +45,7 @@ pub type Result<T> = std::result::Result<T, AgentError>;
 /// middleware layer wrapped an [`AgentError`] in `anyhow`.
 pub(crate) fn from_middleware_error(err: reqwest_middleware::Error) -> AgentError {
     match err {
-        reqwest_middleware::Error::Middleware(e) => e
-            .downcast::<AgentError>()
-            .map(|b| *b)
-            .unwrap_or_else(|source| {
-                MetadataError::Request {
-                    url: "request".into(),
-                    source,
-                }
-                .into()
-            }),
+        reqwest_middleware::Error::Middleware(e) => AgentError::Middleware(e),
         reqwest_middleware::Error::Reqwest(e) => MetadataError::Request {
             url: "request".into(),
             source: Box::new(e),
