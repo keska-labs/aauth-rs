@@ -29,7 +29,9 @@ full = [
 [dependencies]
 aauth = { workspace = true, default-features = false, features = ["deferred"] }
 aauth-policy = { workspace = true, optional = true, default-features = false }
-aauth-reqwest = { workspace = true, optional = true, features = ["person-server"] }
+aauth-reqwest = { workspace = true, optional = true, features = [
+    "person-server",
+] }
 axum.workspace = true
 http.workspace = true
 httpsig-key.workspace = true

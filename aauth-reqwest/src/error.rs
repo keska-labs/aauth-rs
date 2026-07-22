@@ -43,7 +43,7 @@ pub type Result<T> = std::result::Result<T, AgentError>;
 pub(crate) fn from_middleware_error(err: reqwest_middleware::Error) -> AgentError {
     match err {
         reqwest_middleware::Error::Middleware(e) => {
-            e.downcast::<AgentError>().unwrap_or_else(|e| {
+            e.downcast::<AgentError>().map(|b| *b).unwrap_or_else(|e| {
                 MetadataError::Request {
                     url: "request".into(),
                     source: e.into(),

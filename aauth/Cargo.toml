@@ -13,12 +13,7 @@ keywords = ["aauth", "oauth", "authentication", "http-signatures"]
 categories = ["authentication", "web-programming"]
 
 [features]
-default = [
-    "agent",
-    "person-server",
-    "access-server",
-    "resource",
-]
+default = ["agent", "person-server", "access-server", "resource"]
 
 # --- Agent ---
 # Pulls in resource-verify: agents MUST verify resource-token challenges (spec).
@@ -31,38 +26,38 @@ deferred = []
 resource-verify = []
 
 # --- Protocol roles ---
-person-server = [
-    "deferred",
-    "resource-verify",
-]
+person-server = ["deferred", "resource-verify"]
 access-server = ["deferred"]
 resource = ["deferred", "resource-verify"]
 
 # --- Convenience meta-features ---
 server = ["person-server", "access-server", "resource"]
-full = [
-    "agent",
-    "server",
-]
+full = ["agent", "server"]
 
 [dependencies]
-base64.workspace = true
-bytes.workspace = true
-dynosaur.workspace = true
-ed25519-dalek.workspace = true
-http.workspace = true
-httpsig-key.workspace = true
-jsonwebtoken.workspace = true
-rand.workspace = true
-anyhow.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-serde_with.workspace = true
-sfv.workspace = true
-thiserror.workspace = true
-trait-variant.workspace = true
+# Basic
 url.workspace = true
 uuid.workspace = true
+base64.workspace = true
+http.workspace = true
+
+# Crypto
+ed25519-dalek.workspace = true
+httpsig-key.workspace = true
+rand.workspace = true
+
+# Async traits
+dynosaur.workspace = true
+trait-variant.workspace = true
+
+# Data handling
+jsonwebtoken.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with = { workspace = true, features = ["macros"] }
+
+# Utilities
+thiserror.workspace = true
 
 [dev-dependencies]
 aauth-policy = { workspace = true, features = ["person-server"] }
@@ -78,6 +73,7 @@ serde_json.workspace = true
 rstest.workspace = true
 jsonwebtoken.workspace = true
 base64.workspace = true
+rand.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true

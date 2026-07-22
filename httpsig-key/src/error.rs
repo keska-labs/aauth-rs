@@ -79,9 +79,6 @@ pub enum Error {
 
     #[error("JSON error")]
     Json(#[from] serde_json::Error),
-
-    #[error("SFV parse error: {0}")]
-    Sfv(String),
 }
 
 impl From<httpsig::prelude::HttpSigError> for Error {

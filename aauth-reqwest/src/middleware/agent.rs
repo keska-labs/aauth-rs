@@ -214,7 +214,7 @@ where
     ) -> MiddlewareResult<Response> {
         self.handle_inner(req, extensions, next)
             .await
-            .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))
+            .map_err(|e| reqwest_middleware::Error::Middleware(Box::new(e)))
     }
 }
 

@@ -27,25 +27,26 @@ impl<P: KeyMaterialProvider + Clone> SigningMiddleware<P> {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
-        let material = self.provider.key_material().await.map_err(|e| {
-            reqwest_middleware::Error::Middleware(anyhow::Error::from(AgentError::from(e)))
-        })?;
+        let material =
+            self.provider.key_material().await.map_err(|e| {
+                reqwest_middleware::Error::Middleware(Box::new(AgentError::from(e)))
+            })?;
 
         self.options.apply_to(&mut req);
 
         match &attempt {
             AgentAuthAttempt::AuthToken(token) => {
                 req.sign_with_auth_token(&material, token)
-                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
+                    .map_err(|e| reqwest_middleware::Error::Middleware(Box::new(e)))?;
             }
             AgentAuthAttempt::OpaqueToken(token) => {
                 apply_opaque_token(&mut req, token);
                 req.sign(&material)
-                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
+                    .map_err(|e| reqwest_middleware::Error::Middleware(Box::new(e)))?;
             }
             AgentAuthAttempt::AgentSigned => {
                 req.sign(&material)
-                    .map_err(|e| reqwest_middleware::Error::Middleware(anyhow::Error::from(e)))?;
+                    .map_err(|e| reqwest_middleware::Error::Middleware(Box::new(e)))?;
             }
         }
 
