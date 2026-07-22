@@ -1,5 +1,26 @@
-use napi::bindgen_prelude::*;
-use napi_derive::napi;
+// Error::from_reason mirrors napi so backend modules stay stock-shaped.
+#[derive(Debug)]
+pub struct Error {
+    reason: String,
+}
+
+impl Error {
+    pub fn from_reason(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.reason)
+    }
+}
+
+impl std::error::Error for Error {}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 mod yubikey_piv;
 
@@ -7,7 +28,6 @@ mod yubikey_piv;
 mod secure_enclave;
 
 /// Discovered hardware key backend
-#[napi(object)]
 pub struct HardwareKeyInfo {
     /// "yubikey-piv" or "secure-enclave"
     pub backend: String,
@@ -20,7 +40,6 @@ pub struct HardwareKeyInfo {
 }
 
 /// Result of key generation
-#[napi(object)]
 pub struct GeneratedKey {
     /// Backend that holds the key
     pub backend: String,
@@ -33,16 +52,14 @@ pub struct GeneratedKey {
 }
 
 /// Result of a signing operation
-#[napi(object)]
 pub struct SignatureResult {
     /// Raw signature bytes (r||s for ECDSA, raw for RSA)
-    pub signature: Buffer,
+    pub signature: Vec<u8>,
     /// Algorithm used
     pub algorithm: String,
 }
 
 /// Discover available hardware key backends
-#[napi]
 pub fn discover() -> Vec<HardwareKeyInfo> {
     let mut backends = Vec::new();
 
@@ -61,7 +78,6 @@ pub fn discover() -> Vec<HardwareKeyInfo> {
 }
 
 /// Generate a key on the specified backend
-#[napi]
 pub fn generate_key(backend: String, algorithm: String) -> Result<GeneratedKey> {
     match backend.as_str() {
         "yubikey-piv" => yubikey_piv::generate_key(&algorithm),
@@ -73,18 +89,16 @@ pub fn generate_key(backend: String, algorithm: String) -> Result<GeneratedKey> 
 
 /// Sign a hash with a hardware key
 /// For JWT: pass the SHA-256 hash of the header.payload string
-#[napi]
-pub fn sign_hash(backend: String, key_id: String, hash: Buffer) -> Result<SignatureResult> {
+pub fn sign_hash(backend: String, key_id: String, hash: &[u8]) -> Result<SignatureResult> {
     match backend.as_str() {
-        "yubikey-piv" => yubikey_piv::sign_hash(&key_id, &hash),
+        "yubikey-piv" => yubikey_piv::sign_hash(&key_id, hash),
         #[cfg(target_os = "macos")]
-        "secure-enclave" => secure_enclave::sign_hash(&key_id, &hash),
+        "secure-enclave" => secure_enclave::sign_hash(&key_id, hash),
         _ => Err(Error::from_reason(format!("Unknown backend: {}", backend))),
     }
 }
 
 /// List existing keys on a backend
-#[napi]
 pub fn list_keys(backend: String) -> Result<Vec<GeneratedKey>> {
     match backend.as_str() {
         "yubikey-piv" => yubikey_piv::list_keys(),

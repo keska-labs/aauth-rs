@@ -1,10 +1,9 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use der::Encode;
-use napi::bindgen_prelude::*;
 use yubikey::piv::{self, AlgorithmId, SlotId};
 use yubikey::YubiKey;
 
-use crate::{GeneratedKey, HardwareKeyInfo, SignatureResult};
+use crate::{Error, GeneratedKey, HardwareKeyInfo, Result, SignatureResult};
 
 /// Slot 9e = Card Authentication, no PIN required
 const DEFAULT_SLOT: SlotId = SlotId::CardAuthentication;
@@ -94,7 +93,7 @@ pub fn sign_hash(key_id: &str, hash: &[u8]) -> Result<SignatureResult> {
     };
 
     Ok(SignatureResult {
-        signature: sig_bytes.into(),
+        signature: sig_bytes,
         algorithm,
     })
 }

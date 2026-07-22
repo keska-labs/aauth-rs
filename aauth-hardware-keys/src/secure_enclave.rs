@@ -1,44 +1,97 @@
-/// macOS Secure Enclave backend for P-256/ES256 key operations
+/// Thin Rust bridge to in-process se-helper (`swift/SecureEnclaveBridge.swift`).
 ///
-/// Uses Security.framework via the security-framework crate.
-/// Keys are created in the Secure Enclave with no biometric/password requirement,
-/// making them accessible programmatically from CLI tools.
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use core_foundation::base::TCFType;
-use core_foundation::boolean::CFBoolean;
-use core_foundation::data::CFData;
-use core_foundation::dictionary::CFDictionary;
-use core_foundation::number::CFNumber;
-use core_foundation::string::CFString;
-use napi::bindgen_prelude::*;
-use security_framework::key::{Algorithm, SecKey};
-use security_framework_sys::item::{
-    kSecAttrIsPermanent, kSecAttrKeySizeInBits, kSecAttrKeyType,
-    kSecAttrKeyTypeECSECPrimeRandom, kSecAttrTokenID, kSecAttrTokenIDSecureEnclave, kSecClass,
-    kSecClassKey, kSecPrivateKeyAttrs, kSecReturnRef,
-};
-use security_framework_sys::key::SecKeyCreateRandomKey;
-use std::collections::HashMap;
-use std::sync::Mutex;
+/// Mirrors how `@aauth/local-keys` `backends/secure-enclave.ts` shells out to
+/// `se-helper` (`generate` / `sign` with hex hash / `list` / `public-key`).
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+use std::ptr;
 
-use crate::{GeneratedKey, HardwareKeyInfo, SignatureResult};
+use crate::{Error, GeneratedKey, HardwareKeyInfo, Result, SignatureResult};
 
 const AAUTH_KEY_LABEL_PREFIX: &str = "com.aauth.agent.";
 
-// kSecAttrApplicationTag is not exported by security-framework-sys,
-// so we use kSecAttrApplicationLabel instead for key lookup
-extern "C" {
-    static kSecAttrApplicationLabel: core_foundation_sys::string::CFStringRef;
+unsafe extern "C" {
+    fn aauth_se_is_available() -> bool;
+    fn aauth_se_free(ptr: *mut std::ffi::c_void);
+    fn aauth_se_generate(
+        label: *const c_char,
+        out_jwk_json: *mut *mut c_char,
+        error_out: *mut *mut c_char,
+    ) -> bool;
+    fn aauth_se_sign_hash(
+        label: *const c_char,
+        hex_hash: *const c_char,
+        out_sig: *mut *mut u8,
+        out_sig_len: *mut usize,
+        error_out: *mut *mut c_char,
+    ) -> bool;
+    fn aauth_se_public_key(
+        label: *const c_char,
+        out_jwk_json: *mut *mut c_char,
+        error_out: *mut *mut c_char,
+    ) -> bool;
+    fn aauth_se_list(out_labels: *mut *mut c_char, error_out: *mut *mut c_char) -> bool;
 }
 
-// In-process cache of SE key handles (since ephemeral keys can't be re-queried from keychain)
-static SE_KEYS: std::sync::LazyLock<Mutex<HashMap<String, SecKey>>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+fn take_c_string(ptr: *mut c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    let s = unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { aauth_se_free(ptr.cast()) };
+    s
+}
+
+fn take_error(ok: bool, err: *mut c_char) -> Result<()> {
+    if ok {
+        if !err.is_null() {
+            unsafe { aauth_se_free(err.cast()) };
+        }
+        Ok(())
+    } else {
+        let msg = if err.is_null() {
+            "unknown Secure Enclave error".into()
+        } else {
+            take_c_string(err)
+        };
+        Err(Error::from_reason(msg))
+    }
+}
+
+fn take_bytes(ok: bool, ptr: *mut u8, len: usize, err: *mut c_char) -> Result<Vec<u8>> {
+    take_error(ok, err)?;
+    let bytes = if ptr.is_null() || len == 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec()
+    };
+    if !ptr.is_null() {
+        unsafe { aauth_se_free(ptr.cast()) };
+    }
+    Ok(bytes)
+}
+
+fn c_string(s: &str) -> Result<CString> {
+    CString::new(s).map_err(|_| Error::from_reason("CString contains NUL"))
+}
+
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
 
 /// Check if Secure Enclave is available
 pub fn discover() -> Option<HardwareKeyInfo> {
     #[cfg(target_arch = "aarch64")]
     {
+        if !unsafe { aauth_se_is_available() } {
+            return None;
+        }
         Some(HardwareKeyInfo {
             backend: "secure-enclave".to_string(),
             description: "macOS Secure Enclave (Apple Silicon)".to_string(),
@@ -61,21 +114,18 @@ pub fn generate_key(algorithm: &str) -> Result<GeneratedKey> {
         ));
     }
 
-    let label = format!("{}{}", AAUTH_KEY_LABEL_PREFIX, simple_date());
+    // Same label scheme as @aauth/local-keys secure-enclave.ts
+    let label = format!("{}{}_{}", AAUTH_KEY_LABEL_PREFIX, iso_date(), random_hex3());
+    let c_label = c_string(&label)?;
 
-    let private_key = create_se_key(&label)?;
-
-    let public_key = private_key
-        .public_key()
-        .ok_or_else(|| Error::from_reason("Failed to extract public key"))?;
-
-    let public_jwk = se_pubkey_to_jwk(&public_key)?;
-
-    // Cache the key handle for later signing
-    SE_KEYS
-        .lock()
-        .map_err(|e| Error::from_reason(format!("Lock error: {}", e)))?
-        .insert(label.clone(), private_key);
+    let mut jwk_ptr = ptr::null_mut();
+    let mut err = ptr::null_mut();
+    let ok = unsafe { aauth_se_generate(c_label.as_ptr(), &mut jwk_ptr, &mut err) };
+    take_error(ok, err)?;
+    let public_jwk = take_c_string(jwk_ptr);
+    if public_jwk.is_empty() {
+        return Err(Error::from_reason("SE generate returned empty JWK"));
+    }
 
     Ok(GeneratedKey {
         backend: "secure-enclave".to_string(),
@@ -87,216 +137,116 @@ pub fn generate_key(algorithm: &str) -> Result<GeneratedKey> {
 
 /// Sign a SHA-256 hash with a Secure Enclave key
 pub fn sign_hash(key_id: &str, hash: &[u8]) -> Result<SignatureResult> {
-    // First check in-process cache, then try keychain
-    let keys = SE_KEYS
-        .lock()
-        .map_err(|e| Error::from_reason(format!("Lock error: {}", e)))?;
-    let private_key_ref = keys.get(key_id);
-    let loaded_key;
-    let private_key = if let Some(k) = private_key_ref {
-        k
-    } else {
-        drop(keys); // release lock before keychain query
-        loaded_key = load_se_key(key_id)?;
-        &loaded_key
+    if hash.len() != 32 {
+        return Err(Error::from_reason(format!(
+            "Expected 32-byte SHA-256 digest, got {}",
+            hash.len()
+        )));
+    }
+    // se-helper / secure-enclave.ts pass the digest as hex
+    let hex = bytes_to_hex(hash);
+    let c_label = c_string(key_id)?;
+    let c_hex = c_string(&hex)?;
+
+    let mut sig_ptr = ptr::null_mut();
+    let mut sig_len = 0usize;
+    let mut err = ptr::null_mut();
+    let ok = unsafe {
+        aauth_se_sign_hash(
+            c_label.as_ptr(),
+            c_hex.as_ptr(),
+            &mut sig_ptr,
+            &mut sig_len,
+            &mut err,
+        )
     };
-
-    // ECDSASignatureDigestX962SHA256 expects a pre-computed SHA-256 hash
-    let signature_der = private_key
-        .create_signature(Algorithm::ECDSASignatureDigestX962SHA256, hash)
-        .map_err(|e| Error::from_reason(format!("Secure Enclave sign failed: {}", e)))?;
-
-    let raw_sig = der_ecdsa_to_raw(&signature_der)?;
-
+    let signature = take_bytes(ok, sig_ptr, sig_len, err)?;
     Ok(SignatureResult {
-        signature: raw_sig.into(),
+        signature,
         algorithm: "ES256".to_string(),
     })
 }
 
 /// List keys stored in the Secure Enclave with our label prefix
 pub fn list_keys() -> Result<Vec<GeneratedKey>> {
-    // TODO: query keychain for keys with our label prefix
-    Ok(Vec::new())
-}
-
-/// Create a P-256 key in the Secure Enclave via Security.framework
-fn create_se_key(label: &str) -> Result<SecKey> {
-    let label_data = CFData::from_buffer(label.as_bytes());
-
-    // Private key attributes
-    // Note: kSecAttrIsPermanent = false for non-codesigned binaries (like node)
-    // because errSecMissingEntitlement (-34018) prevents keychain persistence.
-    // The key lives only for the process lifetime. For persistent SE keys,
-    // the binary must be codesigned with keychain-access-groups entitlement.
-    let private_key_attrs = CFDictionary::from_CFType_pairs(&[
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecAttrIsPermanent) },
-            CFBoolean::false_value().as_CFType(),
-        ),
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecAttrApplicationLabel) },
-            label_data.as_CFType(),
-        ),
-    ]);
-
-    // Key generation parameters
-    let params = CFDictionary::from_CFType_pairs(&[
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecAttrKeyType) },
-            unsafe { CFString::wrap_under_get_rule(kSecAttrKeyTypeECSECPrimeRandom).as_CFType() },
-        ),
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecAttrKeySizeInBits) },
-            CFNumber::from(256i32).as_CFType(),
-        ),
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecAttrTokenID) },
-            unsafe { CFString::wrap_under_get_rule(kSecAttrTokenIDSecureEnclave).as_CFType() },
-        ),
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecPrivateKeyAttrs) },
-            private_key_attrs.as_CFType(),
-        ),
-    ]);
-
-    let mut error: core_foundation_sys::error::CFErrorRef = std::ptr::null_mut();
-    let key = unsafe { SecKeyCreateRandomKey(params.as_concrete_TypeRef(), &mut error) };
-
-    if key.is_null() {
-        let err_msg = if !error.is_null() {
-            let cf_error = unsafe { core_foundation::error::CFError::wrap_under_create_rule(error) };
-            format!("Secure Enclave key creation failed: {}", cf_error.description())
-        } else {
-            "Failed to create Secure Enclave key (unknown error)".to_string()
+    let labels = list_labels()?;
+    let mut keys = Vec::new();
+    for label in labels {
+        let public_jwk = match public_jwk_for_label(&label) {
+            Ok(jwk) => jwk,
+            Err(_) => "{}".to_string(),
         };
-        return Err(Error::from_reason(err_msg));
+        keys.push(GeneratedKey {
+            backend: "secure-enclave".to_string(),
+            key_id: label,
+            algorithm: "ES256".to_string(),
+            public_jwk,
+        });
     }
-
-    Ok(unsafe { SecKey::wrap_under_create_rule(key) })
+    Ok(keys)
 }
 
-/// Load an existing Secure Enclave key by label
-fn load_se_key(label: &str) -> Result<SecKey> {
-    let label_data = CFData::from_buffer(label.as_bytes());
-
-    let query = CFDictionary::from_CFType_pairs(&[
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecClass) },
-            unsafe { CFString::wrap_under_get_rule(kSecClassKey).as_CFType() },
-        ),
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecAttrApplicationLabel) },
-            label_data.as_CFType(),
-        ),
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecAttrKeyType) },
-            unsafe {
-                CFString::wrap_under_get_rule(kSecAttrKeyTypeECSECPrimeRandom).as_CFType()
-            },
-        ),
-        (
-            unsafe { CFString::wrap_under_get_rule(kSecReturnRef) },
-            CFBoolean::true_value().as_CFType(),
-        ),
-    ]);
-
-    let mut result: core_foundation::base::CFTypeRef = std::ptr::null_mut();
-    let status = unsafe {
-        security_framework_sys::keychain_item::SecItemCopyMatching(
-            query.as_concrete_TypeRef(),
-            &mut result,
-        )
-    };
-
-    if status != 0 || result.is_null() {
-        return Err(Error::from_reason(format!(
-            "Secure Enclave key not found for label: {} (status: {})",
-            label, status
-        )));
+fn public_jwk_for_label(label: &str) -> Result<String> {
+    let c_label = c_string(label)?;
+    let mut jwk_ptr = ptr::null_mut();
+    let mut err = ptr::null_mut();
+    let ok = unsafe { aauth_se_public_key(c_label.as_ptr(), &mut jwk_ptr, &mut err) };
+    take_error(ok, err)?;
+    let json = take_c_string(jwk_ptr);
+    if json.is_empty() {
+        return Err(Error::from_reason("SE public-key returned empty JWK"));
     }
-
-    Ok(unsafe { SecKey::wrap_under_create_rule(result as *mut _) })
+    Ok(json)
 }
 
-/// Convert SecKey public key to JWK
-fn se_pubkey_to_jwk(public_key: &SecKey) -> Result<String> {
-    let external_rep = public_key
-        .external_representation()
-        .ok_or_else(|| Error::from_reason("Failed to export public key"))?;
-
-    let bytes = external_rep.to_vec();
-
-    // External representation for EC P-256: 04 || x (32 bytes) || y (32 bytes)
-    if bytes.len() != 65 || bytes[0] != 0x04 {
-        return Err(Error::from_reason(format!(
-            "Unexpected public key format: {} bytes",
-            bytes.len()
-        )));
+fn list_labels() -> Result<Vec<String>> {
+    let mut labels_ptr = ptr::null_mut();
+    let mut err = ptr::null_mut();
+    let ok = unsafe { aauth_se_list(&mut labels_ptr, &mut err) };
+    take_error(ok, err)?;
+    let joined = take_c_string(labels_ptr);
+    if joined.is_empty() {
+        return Ok(Vec::new());
     }
-
-    let x = &bytes[1..33];
-    let y = &bytes[33..65];
-
-    let x_b64 = URL_SAFE_NO_PAD.encode(x);
-    let y_b64 = URL_SAFE_NO_PAD.encode(y);
-
-    Ok(format!(
-        r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}","alg":"ES256","use":"sig"}}"#,
-        x_b64, y_b64
-    ))
+    Ok(joined.split('\n').map(str::to_string).collect())
 }
 
-/// Convert DER-encoded ECDSA signature to raw r||s format (64 bytes)
-fn der_ecdsa_to_raw(der: &[u8]) -> Result<Vec<u8>> {
-    if der.len() < 8 || der[0] != 0x30 {
-        return Err(Error::from_reason("Invalid DER ECDSA signature"));
-    }
-
-    let mut pos = 2;
-
-    if der[pos] != 0x02 {
-        return Err(Error::from_reason("Expected INTEGER tag for r"));
-    }
-    pos += 1;
-    let r_len = der[pos] as usize;
-    pos += 1;
-    let r_bytes = &der[pos..pos + r_len];
-    pos += r_len;
-
-    if der[pos] != 0x02 {
-        return Err(Error::from_reason("Expected INTEGER tag for s"));
-    }
-    pos += 1;
-    let s_len = der[pos] as usize;
-    pos += 1;
-    let s_bytes = &der[pos..pos + s_len];
-
-    let mut result = vec![0u8; 64];
-    let r_trimmed = if r_bytes.len() > 32 && r_bytes[0] == 0 {
-        &r_bytes[1..]
-    } else {
-        r_bytes
-    };
-    let s_trimmed = if s_bytes.len() > 32 && s_bytes[0] == 0 {
-        &s_bytes[1..]
-    } else {
-        s_bytes
-    };
-
-    result[32 - r_trimmed.len()..32].copy_from_slice(r_trimmed);
-    result[64 - s_trimmed.len()..64].copy_from_slice(s_trimmed);
-
-    Ok(result)
+fn iso_date() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let days = secs / 86400;
+    let (y, m, d) = civil_from_days(days as i64);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
-fn simple_date() -> String {
-    use std::process::Command;
-    Command::new("date")
-        .arg("+%Y-%m-%d")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
+/// Howard Hinnant civil_from_days (proleptic Gregorian).
+fn civil_from_days(z: i64) -> (i32, u32, u32) {
+    let z = z + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe as i64) + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32, m as u32, d as u32)
+}
+
+fn random_hex3() -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let mut h = DefaultHasher::new();
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+        .hash(&mut h);
+    std::process::id().hash(&mut h);
+    format!("{:03x}", h.finish() & 0xfff)
 }

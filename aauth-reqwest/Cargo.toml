@@ -38,6 +38,7 @@ aauth = { workspace = true, default-features = false, features = [
     "agent",
     "person-server",
 ] }
+aauth-local-keys = { workspace = true, features = ["hardware"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio.workspace = true

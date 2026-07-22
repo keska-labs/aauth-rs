@@ -53,6 +53,8 @@ aauth-rs/
 │   │   └── …                   # JWT helpers, metadata cache, protocol types
 │   └── tests/                  # protocol / agent integration tests
 ├── aauth-policy/           # high-level Policy* + PendingStore + Policy*Service
+├── aauth-hardware-keys/ # YubiKey PIV + Secure Enclave (from packages-js, patched)
+├── aauth-local-keys/       # agent keys from ~/.aauth, keychain, hardware (`LocalKeysProvider`)
 ├── aauth-reqwest/          # reqwest agent transport + `ReqwestAccessServerClient` (PS federation)
 └── aauth-axum/             # axum HTTP adapters
     ├── src/
@@ -65,9 +67,11 @@ aauth-rs/
     └── tests/                  # axum HTTP integration tests
 ```
 
-**Shared protocol primitives** (no role prefix, always on): `protocol`, `jwt`, `metadata`, `interaction_code`. HTTP Signature Keys live in workspace crate `httpsig-key`. These implement wire format and are used by all roles.
+**Shared protocol primitives** (no role prefix, always on): `protocol`, `jwt`, `metadata`, `interaction_code`. HTTP Signature Keys live in workspace crate `httpsig-key`. Hardware backends live in `aauth-hardware-keys`; agent key loading is `aauth-local-keys` (`LocalKeysProvider`). These implement wire format and are used by all roles.
 
 **Cargo features (`aauth`):** per-role `person-server`, `access-server`, `resource`; agent `agent`; meta `server`, `full`. Protocol modules need no feature flag.
+
+**Cargo features (`aauth-local-keys`):** default `hardware` enables YubiKey / Secure Enclave via `aauth-hardware-keys`.
 
 **Cargo features (`aauth-policy`):** `person-server`, `access-server`, `resource`, `full` — each enables the matching `aauth` role feature.
 
@@ -181,6 +185,8 @@ cargo check -p aauth --no-default-features --features access-server
 cargo check -p aauth --no-default-features --features resource
 cargo check -p aauth --no-default-features --features agent
 cargo check -p aauth-reqwest --all-features
+cargo check -p aauth-local-keys --all-features
+cargo check -p aauth-hardware-keys --all-features
 cargo check -p aauth-policy --all-features
 cargo check -p aauth-axum --all-features
 ```
