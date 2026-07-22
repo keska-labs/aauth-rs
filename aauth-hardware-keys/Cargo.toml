@@ -7,10 +7,15 @@ license = "MIT"
 [lib]
 crate-type = ["rlib"]
 
+[features]
+default = []
+yubikey = ["dep:yubikey"]
+secure-enclave = ["dep:aauth-macos-se-helper"]
+
 [dependencies]
-yubikey = { version = "0.8", features = ["untested"] }
+yubikey = { version = "0.8", features = ["untested"], optional = true }
 der = "0.7"
 base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-aauth-macos-se-helper = { workspace = true }
+aauth-macos-se-helper = { workspace = true, optional = true }

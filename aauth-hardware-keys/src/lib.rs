@@ -1,3 +1,11 @@
+#![allow(unused)]
+
+#[cfg(feature = "yubikey")]
+mod yubikey_piv;
+
+#[cfg(all(target_os = "macos", feature = "secure-enclave"))]
+mod secure_enclave;
+
 // Error::from_reason mirrors napi so backend modules stay stock-shaped.
 #[derive(Debug)]
 pub struct Error {
@@ -21,11 +29,6 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 pub type Result<T> = std::result::Result<T, Error>;
-
-mod yubikey_piv;
-
-#[cfg(target_os = "macos")]
-mod secure_enclave;
 
 /// Discovered hardware key backend
 pub struct HardwareKeyInfo {
@@ -64,12 +67,13 @@ pub fn discover() -> Vec<HardwareKeyInfo> {
     let mut backends = Vec::new();
 
     // Check for YubiKey
+    #[cfg(feature = "yubikey")]
     if let Some(info) = yubikey_piv::discover() {
         backends.push(info);
     }
 
     // Check for Secure Enclave (macOS only)
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "secure-enclave"))]
     if let Some(info) = secure_enclave::discover() {
         backends.push(info);
     }
@@ -80,8 +84,9 @@ pub fn discover() -> Vec<HardwareKeyInfo> {
 /// Generate a key on the specified backend
 pub fn generate_key(backend: String, algorithm: String) -> Result<GeneratedKey> {
     match backend.as_str() {
+        #[cfg(feature = "yubikey")]
         "yubikey-piv" => yubikey_piv::generate_key(&algorithm),
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", feature = "secure-enclave"))]
         "secure-enclave" => secure_enclave::generate_key(&algorithm),
         _ => Err(Error::from_reason(format!("Unknown backend: {}", backend))),
     }
@@ -91,8 +96,9 @@ pub fn generate_key(backend: String, algorithm: String) -> Result<GeneratedKey> 
 /// For JWT: pass the SHA-256 hash of the header.payload string
 pub fn sign_hash(backend: String, key_id: String, hash: &[u8]) -> Result<SignatureResult> {
     match backend.as_str() {
+        #[cfg(feature = "yubikey")]
         "yubikey-piv" => yubikey_piv::sign_hash(&key_id, hash),
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", feature = "secure-enclave"))]
         "secure-enclave" => secure_enclave::sign_hash(&key_id, hash),
         _ => Err(Error::from_reason(format!("Unknown backend: {}", backend))),
     }
@@ -101,8 +107,9 @@ pub fn sign_hash(backend: String, key_id: String, hash: &[u8]) -> Result<Signatu
 /// List existing keys on a backend
 pub fn list_keys(backend: String) -> Result<Vec<GeneratedKey>> {
     match backend.as_str() {
+        #[cfg(feature = "yubikey")]
         "yubikey-piv" => yubikey_piv::list_keys(),
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", feature = "secure-enclave"))]
         "secure-enclave" => secure_enclave::list_keys(),
         _ => Err(Error::from_reason(format!("Unknown backend: {}", backend))),
     }
