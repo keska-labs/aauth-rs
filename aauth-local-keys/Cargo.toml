@@ -1,0 +1,42 @@
+[package]
+name = "aauth-local-keys"
+version = "0.0.3"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Load AAuth agent signing keys from ~/.aauth, OS keychain, and hardware backends"
+readme = "README.md"
+keywords = ["aauth", "keys", "secure-enclave", "yubikey"]
+categories = ["authentication", "cryptography"]
+
+[features]
+default = ["hardware"]
+# YubiKey PIV + macOS Secure Enclave via aauth-hardware-keys.
+hardware = ["dep:aauth-hardware-keys"]
+
+[dependencies]
+aauth = { workspace = true, features = ["agent"] }
+aauth-hardware-keys = { workspace = true, optional = true }
+httpsig-key = { workspace = true }
+base64 = { workspace = true }
+ed25519-dalek = { workspace = true }
+p256 = { workspace = true }
+jsonwebtoken = { workspace = true }
+keyring = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+dirs = "6"
+url = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
+wiremock = { workspace = true }

@@ -3,6 +3,9 @@ resolver = "3"
 members = [
     "aauth",
     "aauth-axum",
+    "aauth-hardware-keys",
+    "aauth-hardware-keys/aauth-macos-se-helper",
+    "aauth-local-keys",
     "aauth-policy",
     "aauth-reqwest",
     "httpsig-key",
@@ -18,8 +21,12 @@ repository = "https://github.com/keska-labs/aauth-rs"
 [workspace.dependencies]
 aauth = { path = "aauth", default-features = false }
 aauth-axum = { path = "aauth-axum", default-features = false }
+aauth-hardware-keys = { path = "aauth-hardware-keys", default-features = false }
+aauth-macos-se-helper = { path = "aauth-hardware-keys/aauth-macos-se-helper", default-features = false }
+aauth-local-keys = { path = "aauth-local-keys", default-features = false }
 aauth-policy = { path = "aauth-policy", default-features = false }
 aauth-reqwest = { path = "aauth-reqwest", default-features = false }
+keyring = "3"
 async-trait = "0.1"
 dynosaur = "0.3"
 base64 = "0.22"

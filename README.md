@@ -27,6 +27,7 @@ Canonical spec: [`docs/specs/draft-hardt-oauth-aauth-protocol.md`](./docs/specs/
 | Crate | Role | docs.rs |
 |-------|------|---------|
 | [`aauth`](./aauth/) | Protocol types, JWT/signature helpers, role service traits, agent state machine | [docs.rs/aauth](https://docs.rs/aauth) |
+| [`aauth-local-keys`](./aauth-local-keys/) | Load agent keys from `~/.aauth`, OS keychain, YubiKey / Secure Enclave | — |
 | [`aauth-reqwest`](./aauth-reqwest/) | Agent HTTP client (`AgentMiddleware` on reqwest) | [docs.rs/aauth-reqwest](https://docs.rs/aauth-reqwest) |
 | [`aauth-axum`](./aauth-axum/) | Server HTTP adapters (routers, `ResourceAuthLayer`) | [docs.rs/aauth-axum](https://docs.rs/aauth-axum) |
 | [`aauth-policy`](./aauth-policy/) | Opinionated policy traits, pending stores, and `Policy*Service` helpers | [docs.rs/aauth-policy](https://docs.rs/aauth-policy) |
@@ -34,7 +35,7 @@ Canonical spec: [`docs/specs/draft-hardt-oauth-aauth-protocol.md`](./docs/specs/
 
 Pick crates by what you implement:
 
-- **Agent client** → `aauth` (`agent`) + `aauth-reqwest`
+- **Agent client** → `aauth` (`agent`) + `aauth-reqwest`; use `aauth-local-keys` for production key loading
 - **Person / Access / Resource server** → `aauth` (role feature) + `aauth-axum` (matching feature); optionally `aauth-policy` for a batteries-included service
 - **Wire / crypto only** → `aauth` protocol modules, or `httpsig-key` alone
 
@@ -45,6 +46,9 @@ Each crate’s README is the rustdoc crate page (`#![doc = include_str!(…)]`).
 ```text
 aauth-rs/
 ├── aauth/           # core protocol + role traits
+├── aauth-local-keys/# agent keys from ~/.aauth, keychain, hardware
+├── aauth-hardware-keys/ # YubiKey + Secure Enclave (from packages-js)
+│   └── aauth-macos-se-helper/ # codesigned se-helper CLI + typed client
 ├── aauth-reqwest/   # reqwest agent transport
 ├── aauth-axum/      # axum server adapters + examples
 ├── aauth-policy/    # policy + pending-store services
